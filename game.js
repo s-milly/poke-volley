@@ -2239,20 +2239,101 @@ function renderClubPick() {
   }
 }
 renderClubPick();
-// Title screen: team size and a one-glance summary; the rest lives on the Match settings screen.
+// Title screen: team size, a match ticket (clubs and rules) and the stage; the rest lives on the Match settings screen.
 function setsLabel() {
   return settings.sets === 1 ? `1 set to ${settings.target}` : `Best of ${settings.sets}, sets to ${settings.target}`;
 }
 function renderSummary() {
   const v = VENUES[settings.venue[settings.mode]];
-  const rival = settings.club[1] === 'random' ? 'a random rival' : CLUBS[settings.club[1]].name;
+  const team = id => {
+    const c = id === 'random' ? null : CLUBS[id];
+    return `<div class="tt" style="--cc:${c ? c.color : '#5b6a92'}">${crestImg(id, 56)}<b>${c ? c.name : 'Random rival'}</b><span>${c ? c.abbr : 'Any club'}</span></div>`;
+  };
+  $('#ticket-teams').innerHTML = team(settings.club[0]) + '<span class="tt-vs">VS</span>' + team(settings.club[1]);
   const rows = [
-    ['Teams', `${crestImg(settings.club[0], 18)} ${CLUBS[settings.club[0]].name} vs ${crestImg(settings.club[1], 18)} ${rival}`],
     ['Venue', v.name + (settings.mode === 2 ? `, ${TIMES[settings.time].toLowerCase()}` : '')],
-    ['Rules', `${cap(settings.diff)} · ${setsLabel()}`],
+    ['Level', cap(settings.diff)],
+    ['Format', setsLabel()],
   ];
   $('#setup-summary').innerHTML = rows.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join('');
+  renderScene();
 }
+
+// ---- Title scene: the chosen venue's sky over a court, a net and two teams of Pokémon in a rally. ----
+// Drawn at 2x: a 560x220 canvas behind a 440 px tall stage, with the sprites, net and ball laid over it in CSS px.
+const SCENE_W = 560, SCENE_H = 220, SCENE_SKY = 110, SCENE_COURT = 150;
+const SCENE_BALL = [
+  '....oooo....', '..oowwyyoo..', '.owwwwyyyyo.', '.owwwwwyyyo.', 'owbbwwwwyyyo', 'obbbbwwwwyyo',
+  'obbbbbwwwwwo', 'owbbbbwwwwwo', '.owbbbwwwwo.', '.owwbbwwwwo.', '..oowwwwoo..', '....oooo....'];
+// x offsets from the centre in CSS px; the first near and the last far Pokémon trade the ball.
+const SCENE_LAYOUT = { 2: { far: [110, -100], near: [-230, 230] }, 6: { far: [110, -210, -50], near: [-230, -420, 260] } };
+const scenePicks = (() => { // a fresh cast each visit: six of yours from behind, six rivals facing you
+  const ids = DEX.map(m => m.id).sort(() => Math.random() - 0.5);
+  return { near: ids.slice(0, 3), far: ids.slice(3, 6) };
+})();
+const sceneCache = {};
+function sceneBackdrop() {
+  const vid = settings.venue[settings.mode], key = vid + (settings.mode === 2 ? settings.time : '');
+  if (sceneCache[key]) return sceneCache[key];
+  const V = VENUES[vid], bd = backdropFor(), hy = Math.round(horizonY() * US), ox = (SCENE_W - UW) / 2;
+  const c = document.createElement('canvas'); c.width = SCENE_W; c.height = SCENE_H; const g = c.getContext('2d');
+  g.imageSmoothingEnabled = false;
+  const [r, gg, b] = bd.getContext('2d').getImageData(1, 0, 1, 1).data; // carry the top sky band upward
+  g.fillStyle = `rgb(${r},${gg},${b})`; g.fillRect(0, 0, SCENE_W, SCENE_SKY - hy + 1);
+  g.drawImage(bd, 0, 0, UW, SCENE_H - SCENE_SKY + hy, ox, SCENE_SKY - hy, UW, SCENE_H - SCENE_SKY + hy);
+  const mid = document.createElement('canvas'); mid.width = SCENE_W; mid.height = SCENE_H; mid.getContext('2d').drawImage(c, 0, 0);
+  g.save(); g.scale(-1, 1); // mirror the backdrop's edges to fill the wider stage
+  g.drawImage(mid, ox, 0, ox, SCENE_H, -ox, 0, ox, SCENE_H);
+  g.drawImage(mid, UW, 0, ox, SCENE_H, -(2 * ox + UW), 0, ox, SCENE_H);
+  g.restore();
+  // the court in perspective: narrow at the net, wide at your feet
+  const sand = V.court === 'sand', line = sand ? '#2f6bd6' : '#f4f1e8', cx = SCENE_W / 2;
+  for (let y = SCENE_COURT; y < SCENE_H; y++) {
+    const t = (y - SCENE_COURT) / (SCENE_H - SCENE_COURT), hw = Math.round(120 + 130 * t);
+    if (!sand) { g.fillStyle = y % 3 ? V.court : shade(V.court, -0.06); g.fillRect(cx - hw, y, hw * 2, 1); }
+    g.fillStyle = line; g.fillRect(cx - hw - 1, y, 2, 1); g.fillRect(cx + hw - 1, y, 2, 1);
+  }
+  g.fillStyle = line; g.fillRect(cx - 120, SCENE_COURT, 240, 1); g.fillRect(cx - 136, SCENE_COURT + 32, 272, 1); // end line, attack line
+  return (sceneCache[key] = c.toDataURL());
+}
+let sceneBallUrl = null;
+function sceneBall() {
+  if (sceneBallUrl) return sceneBallUrl;
+  const c = document.createElement('canvas'); c.width = c.height = 12; const g = c.getContext('2d');
+  const col = { o: '#10141f', w: '#fbfcff', y: '#ffcf33', b: '#3fa7ff' };
+  SCENE_BALL.forEach((row, y) => [...row].forEach((ch, x) => { if (col[ch]) { g.fillStyle = col[ch]; g.fillRect(x, y, 1, 1); } }));
+  return (sceneBallUrl = c.toDataURL());
+}
+function sceneMon(id, x, back) {
+  const b = SPRITE_BOX[id], s = back ? 2 : 1, [vx, vy, vw, vh] = back ? b.slice(4) : b.slice(0, 4);
+  const m = el('span', 'mon');
+  m.style.left = `calc(50% + ${x - (vx + vw / 2) * s}px)`;
+  m.style.setProperty('--gap', `${(96 - vy - vh) * s}px`);
+  const img = new Image(); img.src = `sprites/${back ? 'back' : 'front'}/${id}.png`; img.alt = ''; img.decoding = 'async';
+  img.width = img.height = 96 * s; m.appendChild(img);
+  return m;
+}
+function renderScene() {
+  const scene = $('#scene'), base = SCENE_LAYOUT[settings.mode];
+  const k = Math.min(1, (Math.min(innerWidth, 1120) - 40) / 600); // pull the players in on narrow screens
+  const L = { far: base.far.map(x => Math.round(x * k)), near: base.near.map(x => Math.round(x * k)) };
+  $('#title-hero').style.backgroundImage = `url(${sceneBackdrop()})`;
+  scene.style.setProperty('--ball', `url(${sceneBall()})`);
+  for (const side of ['far', 'near']) {
+    const box = $(`#scene-${side}`); box.innerHTML = '';
+    L[side].forEach((x, i) => {
+      const m = sceneMon(scenePicks[side][i], x, side === 'near');
+      if (i === 0) m.classList.add('hitter');
+      box.appendChild(m);
+    });
+  }
+  scene.style.setProperty('--ax', `${L.near[0] + 14}px`);
+  scene.style.setProperty('--bx', `${L.far[0]}px`);
+}
+let sceneW = innerWidth;
+addEventListener('resize', () => { if (Math.abs(innerWidth - sceneW) > 40 && !$('#scr-title').hidden) { sceneW = innerWidth; renderScene(); } });
+$('#scr-title').classList.add('intro');
+setTimeout(() => $('#scr-title').classList.remove('intro'), 1200);
 $('#opt-mode').addEventListener('click', renderSummary);
 $('#btn-settings').addEventListener('click', () => {
   renderVenuePick(); renderClubPick();

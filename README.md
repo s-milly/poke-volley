@@ -28,7 +28,7 @@ Phones get an on-screen pad.
 
 ## Draft
 
-The title screen only asks for team size (2 v 2 or 6 v 6) and shows the current match settings in a short summary. Teams, venue, time of day, difficulty, points and sets are on the Match settings screen, and all of them have defaults.
+The title screen opens on a pixel stage: the sky of the venue you chose, a court and net, and random Pokémon in a rally (still under reduced motion). Below it you pick team size (2 v 2 or 6 v 6), and a match ticket shows both club crests, the venue, the level and the format. Teams, venue, time of day, difficulty, points and sets are on the Match settings screen (Edit settings), and all of them have defaults.
 
 
 1. Choose your position, then pick the Pokémon you control from three random offers suited to that position (you can ask for new offers twice). As captain it gets +14 to every rating.
@@ -56,7 +56,7 @@ You pick your position before the draft, and the three Pokémon offered to you a
 
 ## Venues
 
-Pick a venue on the title screen. The stands are drawn in 3D with the court, and the crowd jumps up and raises its arms after every point.
+Pick a venue on the Match settings screen. The stands are drawn in 3D with the court, and the crowd jumps up and raises its arms after every point.
 
 **6 v 6 (indoor):**
 - **Classic arena:** stands on three sides, LED boards around an orange court.
