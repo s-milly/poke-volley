@@ -181,7 +181,7 @@ const ROLE_DESC = {
   OPP: 'Hits from the right side, blocks the other team\'s outside hitter, and sets if the setter has to dig.',
   B: 'Takes the net on defense: block the other team\'s hitter.',
   D: 'Stays back on defense to dig spikes and chase tips.',
-  L: 'Back-row defensive specialist: passes serves, digs and serves in zone 1. Always replaces the middle blocker who is in the back row, so you sit out while your middle is in the front row. A libero cannot block or attack a ball above the net.',
+  L: 'Back-row defensive specialist: passes serves, digs and serves in zone 1. Always plays in place of whichever middle blocker is in the back row, so you stay on court the whole match. A libero cannot block or attack a ball above the net.',
 };
 const ROSTER_6 = ['S', 'OH', 'MB', 'OPP', 'OH', 'MB'];   // who starts in zones 1 to 6
 const ZONE_X = [0.62, 0.62, 0, -0.62, -0.62, 0];          // zones 1 to 6, as a share of the half width; your right is +
@@ -332,15 +332,64 @@ function overlaps(s) {
 
 // The libero always replaces the middle blocker who is in the back row (zones 1, 5 and 6).
 // Swaps happen between rallies. The benched player waits at the sideline.
-function applyLibero(s) {
+// Both teams' benches are on the same sideline as the scorer's table (world x < 0), each on its own half.
+const benchSpot = s => [-(HW + 1.6), -0.3 * HL * toward(s)];
+const subZone = s => [-(HW + 0.5), -(attackLine() + 1.5) * toward(s)]; // where substitutions happen, on that team's half
+
+// The libero always replaces the middle blocker who is in the back row (zones 1, 5 and 6). There is always
+// exactly one back-row middle, so the libero stays on and the two middles take turns on the bench.
+const backMiddle = s => G.rot[s].find((p, i) => p.role === 'MB' && (i === 0 || i === 4 || i === 5)) || null;
+function applyLibero(s) { // instant version, for the first serve of a match
   const L = G.libero[s];
   if (!L) { G.sides[s] = G.rot[s].slice(); G.bench[s] = []; return; }
-  const mb = G.rot[s].find((p, i) => p.role === 'MB' && (i === 0 || i === 4 || i === 5)) || null;
+  const mb = backMiddle(s);
   G.libSub[s] = mb;
   G.sides[s] = G.rot[s].map(p => (p === mb ? L : p));
-  G.bench[s] = [mb ? mb : L];
-  const m = toward(s);
-  G.bench[s].forEach(p => { p.x = -(HW + 1.6) * m; p.z = -0.3 * HL * m; p.y = 0; p.vx = p.vz = p.vy = 0; p.onGround = true; });
+  G.bench[s] = mb ? [mb] : [];
+  const [bx, bz] = benchSpot(s);
+  G.bench[s].forEach(p => { p.x = bx; p.z = bz; p.y = 0; p.vx = p.vz = p.vy = 0; p.onGround = true; });
+}
+
+// After a side out, put the court back in zone order and, if the back-row middle changed, start a substitution:
+// the player coming off and the player coming on both walk to the sub zone, pause, swap, then go to their spots.
+function planSubs(s) {
+  const L = G.libero[s];
+  if (!L) { G.sides[s] = G.rot[s].slice(); return; }
+  G.sides[s] = G.rot[s].map(p => (p === G.libSub[s] ? L : p)); // the new rotation, before any swap
+  const mb = backMiddle(s);
+  if (mb === G.libSub[s]) return;
+  const out = mb, inn = G.libSub[s]; // the middle now in the back row comes off; the one rotating to the front comes on
+  G.subs.push({ s, out, inn, stage: 'walk', t: 0 });
+  out.subbing = inn.subbing = true;
+}
+function runSubs(dt) {
+  for (const job of G.subs) {
+    const { s, out, inn } = job, [zx, zz] = subZone(s);
+    job.t += dt;
+    if (job.stage === 'walk') { // both head for the sub zone: one from the court, one from the bench
+      moveToward(out, zx + 0.7, zz, 0.75); moveToward(inn, zx - 0.7, zz, 0.75);
+      const there = Math.hypot(out.x - zx - 0.7, out.z - zz) < 0.2 && Math.hypot(inn.x - zx + 0.7, inn.z - zz) < 0.2;
+      if (there || job.t > 3) {
+        job.stage = 'pause'; job.t = 0; out.vx = out.vz = inn.vx = inn.vz = 0;
+        out.face = 1; inn.face = -1;
+        floatText('SUB', zx, 2.6, zz, '#ffcf33', 1.0, 30); Sfx.tone(660, 0.12, 'square', 0.04); Sfx.tone(880, 0.12, 'square', 0.04, 0, 0.12);
+      }
+    } else if (job.stage === 'pause') {
+      if (job.t > 0.7) { // swap
+        job.stage = 'leave'; job.t = 0;
+        const i = G.sides[s].indexOf(out);
+        G.sides[s][i] = inn; G.bench[s] = [out]; G.libSub[s] = out;
+        G.players = [...G.sides[0], ...G.sides[1]];
+      }
+    } else if (job.stage === 'leave') { // off to the bench, on to the court
+      const [bx, bz] = benchSpot(s);
+      moveToward(out, bx, bz, 0.75); moveToward(inn, inn.homeX, inn.homeZ, 0.75);
+      const done = Math.hypot(out.x - bx, out.z - bz) < 0.2 && Math.hypot(inn.x - inn.homeX, inn.z - inn.homeZ) < 0.3;
+      if (done || job.t > 3) { job.stage = 'done'; out.subbing = inn.subbing = false; }
+    }
+    for (const p of [out, inn]) stepPlayer(p, dt); // the main loop skips players who are subbing
+  }
+  G.subs = G.subs.filter(j => j.stage !== 'done');
 }
 
 function spots2(s, ph) {
@@ -384,7 +433,7 @@ function newMatch() {
     sides, players: [...sides[0], ...sides[1]], rot, all, libero, libSub: [null, null], bench: [[], []],
     ball: { x: 0, y: 1, z: 0, vx: 0, vy: 0, vz: 0, spin: 0, trail: [], special: null, noHit: 0 },
     score: [0, 0], touches: [0, 0], lastSide: -1, lastToucher: null, intended: [null, null], lastAttack: null,
-    setterNow: [null, null], blockers: [[], []], play: [null, null],
+    setterNow: [null, null], blockers: [[], []], play: [null, null], subs: [], started: false,
     serving: 0, server: null, phase: 'serve', timer: 0, time: 0,
     meter: [0, 0], armed: [false, false], react: [0, 0], aiErr: [[0, 0], [0, 0]], leave: [false, false],
     particles: [], texts: [], shake: 0, netWobble: 0, paused: false, shown: false, rally: 0, longestRally: 0,
@@ -395,7 +444,13 @@ function newMatch() {
 
 function startServe() {
   const s = G.serving;
-  for (let k = 0; k < 2; k++) applyLibero(k);
+  if (!G.started) { for (let k = 0; k < 2; k++) applyLibero(k); G.started = true; }
+  else for (const job of G.subs) { // never start a serve mid-swap
+    if (job.stage !== 'leave') { const i = G.sides[job.s].indexOf(job.out); if (i >= 0) G.sides[job.s][i] = job.inn; G.bench[job.s] = [job.out]; G.libSub[job.s] = job.out; }
+    job.out.subbing = job.inn.subbing = false;
+    const [bx, bz] = benchSpot(job.s); job.out.x = bx; job.out.z = bz;
+  }
+  G.subs = [];
   G.players = [...G.sides[0], ...G.sides[1]];
   G.server = G.sides[s][0];
   Object.assign(G.ball, { vx: 0, vy: 0, vz: 0, gs: 1, trail: [], special: null, noHit: 0 });
@@ -828,6 +883,7 @@ function awardPoint(w, label, sub, credit, key) {
   G.longestRally = Math.max(G.longestRally, G.rally);
   if (w !== G.serving) { // side out: the team that won the serve back rotates one zone clockwise
     G.serving = w; G.rot[w].push(G.rot[w].shift());
+    planSubs(w); G.players = [...G.sides[0], ...G.sides[1]];
     floatText('ROTATE', 0, 2.6, -toward(w) * HL * 0.5, TEAM_COLORS[w], 1.4, 30);
   }
   G.texts.push({ big: true, text: label, sub, color: TEAM_COLORS[w], t: 0, life: 1.6 });
@@ -959,12 +1015,14 @@ function update(dt) {
     }
   } else {
     G.timer -= dt;
+    if (G.subs.length) runSubs(dt);
     for (const p of G.players) {
+      if (p.subbing) continue;
       if (!aiControlled(p)) humanControl(p); else moveToward(p, p.homeX, p.homeZ, 0.5);
       stepPlayer(p, dt);
     }
     if (G.timer <= 0) {
-      if (G.phase === 'point') startServe();
+      if (G.phase === 'point') { if (!G.subs.length) startServe(); }
       else if (!G.shown) { G.shown = true; showResult(); }
     }
   }
@@ -1938,8 +1996,6 @@ function drawHud() {
     const where = settings.mode === 6 ? `  ZONE ${zoneOf(me)} ${isFront(me) ? 'FRONT' : 'BACK'} ROW` : '';
     pxText(ROLES[me.role].name.toUpperCase() + where, cx, UH - 12, '#c9d4ee', 8);
     if (G.phase === 'serve' && me !== G.server && overlaps(0).includes(me) && Math.floor(G.time * 4) % 2 === 0) pxText('OVERLAP! GET TO YOUR SPOT', cx, 76, '#ff8a8a', 8);
-  } else if (!AUTO && G.bench[0].some(p => p.human)) {
-    pxText('LIBERO ON THE BENCH: YOUR MIDDLE IS IN THE FRONT ROW', cx, UH - 12, '#c9d4ee', 8);
   }
   if (G.phase === 'serve' && !aiControlled(G.server) && Math.floor(G.time * 2.5) % 2 === 0) {
     pxText('PRESS J TO SERVE', cx, 52, '#ffffff', 8);
