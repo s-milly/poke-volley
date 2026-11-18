@@ -334,7 +334,7 @@ function overlaps(s) {
 // Swaps happen between rallies. The benched player waits at the sideline.
 // Both teams' benches are on the same sideline as the scorer's table (world x < 0), each on its own half.
 const benchSpot = s => [-(HW + 1.6), -0.3 * HL * toward(s)];
-const subZone = s => [-(HW + 0.5), -(attackLine() + 1.5) * toward(s)]; // where substitutions happen, on that team's half
+const subZone = s => [-(HW + 0.5), -attackLine() * 0.5 * toward(s)]; // the sub zone: on the sideline between the 10 foot (attack) line and the net, on that team's half
 
 // The libero always replaces the middle blocker who is in the back row (zones 1, 5 and 6). There is always
 // exactly one back-row middle, so the libero stays on and the two middles take turns on the bench.
