@@ -2145,6 +2145,7 @@ function show(id) {
   $('#stage').hidden = id !== 'stage';
   $('#menu').hidden = id === 'stage';
   Rally.run(id === 'scr-title'); // the demo rally plays only on the title screen
+  document.body.classList.toggle('on-title', id === 'scr-title');
   window.scrollTo(0, 0);
   const first = id === 'stage' ? null : document.querySelector(`#${id} [data-autofocus]`);
   if (first) first.focus({ preventScroll: true });
@@ -2321,9 +2322,11 @@ const scenePicks = (() => { // a fresh cast each visit: six of yours from behind
 })();
 const sceneCache = {};
 function sceneBackdrop() {
-  const vid = settings.venue[settings.mode], key = vid + (settings.mode === 2 ? settings.time : '');
+  const vid = settings.venue[settings.mode], key = vid; // the title stage is always in daylight, whatever time the match is set for
   if (sceneCache[key]) return sceneCache[key];
-  const V = VENUES[vid], bd = backdropFor(), hy = Math.round(horizonY() * US), ox = (SCENE_W - UW) / 2;
+  const time = settings.time; settings.time = 'day';
+  const bd = backdropFor(); settings.time = time;
+  const V = VENUES[vid], hy = Math.round(horizonY() * US), ox = (SCENE_W - UW) / 2;
   const c = document.createElement('canvas'); c.width = SCENE_W; c.height = SCENE_H; const g = c.getContext('2d');
   g.imageSmoothingEnabled = false;
   const [r, gg, b] = bd.getContext('2d').getImageData(1, 0, 1, 1).data; // carry the top sky band upward
@@ -2361,11 +2364,30 @@ function sceneMon(id, x, back) {
   img.width = img.height = 96 * s; m.appendChild(img);
   return m;
 }
+// Hand the venue's sky and floor colours to the page, so the title screen's background matches the stage.
+const tintCache = {};
+function sceneTint(url) {
+  const set = t => { for (const k in t) document.body.style.setProperty(k, t[k]); };
+  if (tintCache[url]) return set(tintCache[url]);
+  const img = new Image();
+  img.onload = () => {
+    const c = document.createElement('canvas'); c.width = SCENE_W; c.height = SCENE_H;
+    const g = c.getContext('2d'); g.drawImage(img, 0, 0);
+    const px = (x, y) => { const [r, gg, b] = g.getImageData(x, y, 1, 1).data; return `rgb(${r},${gg},${b})`; };
+    const strip = document.createElement('canvas'); strip.width = 2; strip.height = SCENE_H; // the stage's two edge columns,
+    const sg = strip.getContext('2d');                                                     // stretched to fill the page sides
+    sg.drawImage(c, 0, 0, 1, SCENE_H, 0, 0, 1, SCENE_H); sg.drawImage(c, SCENE_W - 1, 0, 1, SCENE_H, 1, 0, 1, SCENE_H);
+    set(tintCache[url] = { '--v-sky': px(2, 2), '--v-floor': px(4, SCENE_H - 3), '--v-edge': `url(${strip.toDataURL()})` });
+  };
+  img.src = url;
+}
 function renderScene() {
   const scene = $('#scene'), base = SCENE_LAYOUT[settings.mode];
   const k = Math.min(1, (Math.min(innerWidth, 1120) - 40) / 600); // pull the players in on narrow screens
   const L = { k, far: base.far.map(x => Math.round(x * k)), near: base.near.map(x => Math.round(x * k)) };
-  $('#title-hero').style.backgroundImage = `url(${sceneBackdrop()})`;
+  const bd = sceneBackdrop();
+  $('#title-hero').style.backgroundImage = `url(${bd}), var(--v-edge, none)`;
+  sceneTint(bd);
   scene.style.setProperty('--ball', `url(${sceneBall()})`);
   $('#bug-logo').src = scoreLogo().toDataURL();
   for (const side of ['far', 'near']) {
