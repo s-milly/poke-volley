@@ -44,10 +44,16 @@ The overall rating (OVR) is a weighted average of the five. Body size comes from
 
 - `index.html`, `style.css`: menus, draft and result screens.
 - `game.js`: ratings, draft, 3D physics, computer players and the canvas renderer.
+- `sprites/`, `sprites.js`: front and back sprites and their visible areas.
+- `fonts/`: the two pixel fonts and their licenses.
 - `data.js`: the 151 Pokémon (stats, types, height, weight, Pokédex color), generated from the PokeAPI data files.
 
 ## Testing
 
 `index.html?auto=1&fast=6&mode=2` lets the computer draft and play both sides at 6x speed. `mode` can be 2 or 6, `diff` can be easy, normal or hard.
 
-Fan project. Not affiliated with Nintendo, Game Freak or The Pokémon Company. The characters are simple drawn shapes, not official art.
+## Art
+
+The game is drawn at 480 x 270 and scaled up with hard pixel edges. The Pokémon are the FireRed/LeafGreen sprites from the [PokeAPI sprites collection](https://github.com/PokeAPI/sprites): front sprites for the other team, back sprites for yours (`sprites/`, with each sprite's visible area in `sprites.js`). Fonts are Press Start 2P and VT323, both under the SIL Open Font License (`fonts/`).
+
+Fan project. Not affiliated with Nintendo, Game Freak or The Pokémon Company. Pokémon and its sprites belong to them.
