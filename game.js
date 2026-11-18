@@ -1368,7 +1368,7 @@ function buildArenaBig() { // mega bowl: roof trusses and big light rigs above
   g.fillStyle = '#2a5592'; for (let y = hy + 2; y < UH; y += 4) g.fillRect(0, y, UW, 1);
   return c;
 }
-function buildNight() { // championship night: dark roof, spotlight rigs
+function buildNight() { // championship night: dark roof and light rigs
   const c = document.createElement('canvas'); c.width = UW; c.height = UH; const g = c.getContext('2d');
   const hy = Math.round(horizonY() * US);
   g.fillStyle = '#05070d'; g.fillRect(0, 0, UW, hy);
@@ -1419,7 +1419,7 @@ const VENUES = {
       { tiers: 10, endTiers: 10, rise: 0.6, depth: 0.9, gap: 3.4, base: 0, fill: 0.93, ...ARENA_SEATS },
       { tiers: 12, endTiers: 12, rise: 0.85, depth: 1.0, gap: 3.4 + 9 + 2.2, base: 6 + 2.0, fill: 0.9, riser: ['#1a2036', '#20273f'], seat: ['#3a2f6a', '#32285c'], ribbon: true },
     ] },
-  night: { mode: 6, name: 'Championship night', backdrop: buildNight, court: '#d9874a', shirts: 'arena', extras: ['led', 'spotlights', 'phones', 'lasers'], teamSides: true,
+  night: { mode: 6, name: 'Championship night', backdrop: buildNight, court: '#d9874a', shirts: 'arena', extras: ['led', 'phones', 'lasers', 'dark'], teamSides: true,
     decks: [{ tiers: 14, endTiers: 13, rise: 0.72, depth: 0.95, gap: 3.4, base: 0, fill: 0.95, riser: ['#141a2c', '#181f34'], seat: ['#222a44', '#1d243b'] }] },
 };
 const VENUE_DESC = {
@@ -1428,7 +1428,7 @@ const VENUE_DESC = {
   boardwalk: 'No stands: fans stand three deep behind a rope line, with umbrellas, a lifeguard tower and string lights.',
   arena: 'A busy indoor gym with stands on three sides and LED boards around the court.',
   bowl: 'A huge two-deck arena: a lower bowl, a concourse with an LED ribbon board, and a steep upper deck rising to the roof.',
-  night: 'House lights down: spotlights sweep the court, the crowd is split into blue and red halves, phone lights twinkle and lasers fly overhead.',
+  night: 'A dark, packed bowl: the crowd is split into blue and red halves, phone lights twinkle and lasers fly overhead.',
 };
 const venue = () => VENUES[settings.venue[settings.mode]];
 const TIMES = { day: 'Day', sunset: 'Sunset', night: 'Night' };
@@ -1491,8 +1491,8 @@ function buildCrowd() {
   if (V.mode === 2) {
     const d = V.decks[0], back = d ? HW + d.gap + d.depth * d.tiers + 2 : HW + (V.standing ? V.standing.gap : 3) + 5.5;
     const endZ = d ? HL + d.gap + d.depth * d.endTiers + 2.5 : HL + 9;
-    for (let i = 0; i < 4; i++) for (const sd of [-1, 1]) palms.push({ x: sd * (back + rnd() * 2), z: -HL + i * (2 * HL / 3) + rnd() * 2, h: 5 + rnd() * 2.5 });
-    for (let i = 0; i < 5; i++) palms.push({ x: -HW - 4 + i * (2 * HW + 8) / 4 + rnd(), z: endZ + rnd() * 2, h: 6 + rnd() * 2.5 });
+    for (let i = 0; i < 4; i++) for (const sd of [-1, 1]) palms.push({ x: sd * (back + rnd() * 2), z: -HL + i * (2 * HL / 3) + rnd() * 2, h: 7 + rnd() * 3, v: Math.floor(rnd() * 3), flip: sd > 0 });
+    for (let i = 0; i < 5; i++) palms.push({ x: -HW - 4 + i * (2 * HW + 8) / 4 + rnd(), z: endZ + rnd() * 2, h: 8 + rnd() * 3, v: Math.floor(rnd() * 3), flip: rnd() < 0.5 });
     palms.sort((a, b) => b.z - a.z);
   }
   return { V, people, tiers, byKey, um, palms };
@@ -1598,16 +1598,58 @@ function drawStands() {
 }
 // Props around the court, in world coordinates: referee stand, benches and table indoors, palms and beach gear outside.
 function seatedPerson(x, y, z, shirt) { drawFan({ x, y, z, shirt, skin: '#e0b48a', ph: x * 3 + z, rate: 2, standing: false }); }
-function drawPalm(x, z, h) {
-  const base = proj(x, 0, z), top = proj(x + 0.6, h, z);
-  ctx.strokeStyle = TIME_DARK() ? '#2a2030' : '#8a5a35'; ctx.lineWidth = Math.max(3, 0.3 * base.k);
-  ctx.beginPath(); ctx.moveTo(base.x, base.y); ctx.quadraticCurveTo(base.x + 0.4 * base.k, (base.y + top.y) / 2, top.x, top.y); ctx.stroke();
-  ctx.strokeStyle = TIME_DARK() ? '#1d2a24' : '#3f9b4a'; ctx.lineWidth = Math.max(3, 0.22 * top.k);
-  for (let i = 0; i < 7; i++) {
-    const a = -Math.PI / 2 + (i - 3) * 0.5, L = 2.4;
-    const m = proj(x + 0.6 + Math.cos(a) * L * 0.6, h + 0.5, z + Math.sin(a) * 0.4), e = proj(x + 0.6 + Math.cos(a) * L, h - 0.6, z + Math.sin(a) * 0.6);
-    ctx.beginPath(); ctx.moveTo(top.x, top.y); ctx.quadraticCurveTo(m.x, m.y, e.x, e.y); ctx.stroke();
+// Pixel-art palm trees: three shapes, painted once per time of day, then drawn in perspective like the sprites.
+const PALM_W = 72, PALM_H = 104, PALM_BASE = 30; // sprite size and where the trunk meets the sand
+const PALM_COLORS = {
+  day:    { bark: '#8a5a35', ring: '#6e4428', lit: '#b07a4f', rib: '#2c6e34', leaf: '#3f9b4a', tip: '#6cc04a', nut: '#5a3a1e' },
+  sunset: { bark: '#6e3f34', ring: '#552e2a', lit: '#9a5a44', rib: '#2a4a32', leaf: '#3b6a3c', tip: '#6f8f46', nut: '#3e2622' },
+  night:  { bark: '#2c2a3a', ring: '#222030', lit: '#3d3a52', rib: '#142228', leaf: '#1d3036', tip: '#2c4a4c', nut: '#1a1824' },
+};
+let palmCache = null;
+function buildPalms() {
+  const out = {};
+  for (const [tod, C] of Object.entries(PALM_COLORS)) {
+    out[tod] = [0, 1, 2].map(v => {
+      const c = document.createElement('canvas'); c.width = PALM_W; c.height = PALM_H; const g = c.getContext('2d');
+      const r = seeded(31 + v * 17), lean = [10, 16, 6][v], topY = [26, 22, 30][v];
+      const px = (x, y, col) => { g.fillStyle = col; g.fillRect(Math.round(x), Math.round(y), 1, 1); };
+      // trunk: curved, tapering, with ring bands and a lit edge
+      let cx = PALM_BASE, cy = PALM_H - 1;
+      const steps = PALM_H - 1 - topY;
+      for (let i = 0; i <= steps; i++) {
+        const t = i / steps, x = PALM_BASE + lean * t * t, y = PALM_H - 1 - i, w = Math.round(6 - 2.5 * t);
+        for (let k = 0; k < w; k++) px(x - w / 2 + k, y, i % 5 === 0 ? C.ring : k === 0 ? C.lit : C.bark);
+        cx = x; cy = y;
+      }
+      // fronds: a dark rib with leaflets hanging off both sides, drooping at the ends
+      const angles = [-2.9, -2.45, -1.95, -1.4, -0.95, -0.45, 0.05, -1.65].map(a => a + (r() - 0.5) * 0.25);
+      for (const a of angles) {
+        const L = 22 + r() * 10, dx = Math.cos(a), dy = Math.sin(a);
+        for (let sgm = 0; sgm < L; sgm++) {
+          const fx = cx + dx * sgm, fy = cy + dy * sgm * 0.75 + sgm * sgm * 0.028;
+          px(fx, fy, C.rib); px(fx, fy + 1, C.rib);
+          if (sgm > 3 && sgm % 2 === 0) {
+            const len = Math.max(2, Math.round(5 - sgm / L * 3));
+            for (let q = 1; q <= len; q++) {
+              px(fx - dy * q * 0.5 + q * 0.15, fy + q, q === len ? C.tip : C.leaf);
+              px(fx + dy * q * 0.5 + q * 0.15, fy + q * 0.6 + 1, q === len ? C.tip : C.leaf);
+            }
+          }
+        }
+      }
+      for (const [ox, oy] of [[-2, 2], [1, 3], [3, 1]]) { g.fillStyle = C.nut; g.fillRect(Math.round(cx + ox), Math.round(cy + oy), 3, 3); }
+      return c;
+    });
   }
+  return out;
+}
+function drawPalm(x, z, h, v = 0, flip = false) {
+  const tod = venue().mode === 2 ? settings.time : 'day';
+  const img = (palmCache || (palmCache = buildPalms()))[tod][v % 3];
+  const f = proj(x, 0, z), ph = h * f.k, sc = ph / PALM_H, w = PALM_W * sc;
+  ctx.save(); ctx.translate(f.x, f.y); if (flip) ctx.scale(-1, 1);
+  ctx.drawImage(img, -PALM_BASE * sc, -ph, w, ph);
+  ctx.restore();
 }
 const TIME_DARK = () => venue().mode === 2 && settings.time === 'night';
 function drawRefStand() { // the up referee's tall chair at the right-hand net post
@@ -1633,7 +1675,8 @@ function drawProps() {
     return;
   }
   // beach: palms beyond the stands, and gear at the near corners
-  for (const p of C.palms) drawPalm(p.x, p.z, p.h);
+  for (const p of C.palms) drawPalm(p.x, p.z, p.h, p.v, p.flip);
+  if (settings.time === 'night') drawLightPoles();
   for (const sd of [-1, 1]) {
     const x = sd * (HW + 1.6), z = -HL - 0.8;
     quad([[x - 0.35, 0, z], [x + 0.35, 0, z], [x + 0.35, 0.45, z], [x - 0.35, 0.45, z]], sd < 0 ? '#3fa7ff' : '#ff5d5d'); // cooler
@@ -1648,7 +1691,7 @@ function drawProps() {
 function drawArenaWall() {
   const V = venue(); if (V.mode !== 6 || V.decks.length !== 1) return;
   const d = V.decks[0], z = HL + d.gap + d.depth * d.endTiers + 0.2, top = d.base + d.rise * d.endTiers, X = HW + d.gap + d.depth * d.tiers + 4;
-  const night = (V.extras || []).includes('spotlights');
+  const night = (V.extras || []).includes('dark');
   quad([[-X, 0, z], [X, 0, z], [X, top + 9, z], [-X, top + 9, z]], night ? '#0b0f1c' : '#1a2140');
   quad([[-X, top + 0.6, z - 0.01], [X, top + 0.6, z - 0.01], [X, top + 2.4, z - 0.01], [-X, top + 2.4, z - 0.01]], night ? '#141a2c' : '#262f52');
   for (let x = -X + 0.6, i = 0; x < X - 1; x += 2.2, i++) // suite windows
@@ -1676,50 +1719,33 @@ function drawArenaWall() {
 
 function ribbonColor() { const c = ['#3fa7ff', '#ff5d5d', '#ffcf33', '#c48bff']; return c[Math.floor(G.time / 2.5) % c.length]; }
 
-// Night only: dim the house, light the court, sweep spotlights and lasers. Drawn over the scene, under the HUD.
+// Light poles at the night beach (drawn with the scene, no beams).
+function drawLightPoles() {
+  for (const [x, z] of [[-HW - 2.4, -HL - 2.4], [HW + 2.4, -HL - 2.4], [-HW - 2.4, HL + 2.4], [HW + 2.4, HL + 2.4]]) {
+    const a = proj(x, 0, z), b = proj(x, 9, z);
+    ctx.strokeStyle = '#7d8598'; ctx.lineWidth = Math.max(3, 0.18 * a.k); ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+    ctx.fillStyle = '#3a4152'; ctx.fillRect(b.x - 0.9 * b.k, b.y - 0.45 * b.k, 1.8 * b.k, 0.9 * b.k);
+    ctx.fillStyle = '#fff6d8'; ctx.fillRect(b.x - 0.75 * b.k, b.y - 0.3 * b.k, 1.5 * b.k, 0.6 * b.k);
+  }
+}
+// Whole-scene lighting by time of day. Night is an even tint (no spotlights); sunset is warm golden light.
 function drawVenueLights() {
   const ex = venue().extras || [];
-  if (venue().mode === 2 && settings.time === 'night') { // night at the beach: floodlights on the court, dark all around
-    const c = proj(0, 0, 0);
-    const gr = ctx.createRadialGradient(c.x, c.y, 150, c.x, c.y, 820);
-    gr.addColorStop(0, 'rgba(6,10,28,0.05)'); gr.addColorStop(1, 'rgba(6,10,28,0.62)');
-    ctx.fillStyle = gr; ctx.fillRect(0, 0, W, H);
-    ctx.globalCompositeOperation = 'lighter';
-    for (const [x, z] of [[-HW - 2.4, -HL - 2.4], [HW + 2.4, -HL - 2.4], [-HW - 2.4, HL + 2.4], [HW + 2.4, HL + 2.4]]) {
-      const a = proj(x, 0, z), b = proj(x, 9, z), g0 = proj(x * 0.3, 0, z * 0.3);
-      ctx.strokeStyle = 'rgba(160,170,200,0.6)'; ctx.lineWidth = Math.max(3, 0.18 * a.k); ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
-      ctx.fillStyle = 'rgba(255,250,220,0.9)'; ctx.fillRect(b.x - 0.8 * b.k, b.y - 0.35 * b.k, 1.6 * b.k, 0.7 * b.k);
-      ctx.fillStyle = 'rgba(255,245,210,0.05)'; ctx.beginPath(); ctx.moveTo(b.x - 0.8 * b.k, b.y); ctx.lineTo(b.x + 0.8 * b.k, b.y); ctx.lineTo(g0.x + 160, g0.y); ctx.lineTo(g0.x - 160, g0.y); ctx.closePath(); ctx.fill();
-    }
-    ctx.globalCompositeOperation = 'source-over';
-  }
-  if (venue().mode === 2 && settings.time === 'sunset') { // sunset: warm golden-hour light over everything
+  if (venue().mode === 2 && settings.time === 'night') { ctx.fillStyle = 'rgba(8,12,34,0.30)'; ctx.fillRect(0, 0, W, H); }
+  if (venue().mode === 2 && settings.time === 'sunset') {
     const gr = ctx.createLinearGradient(0, 0, 0, H);
     gr.addColorStop(0, 'rgba(255,120,80,0.20)'); gr.addColorStop(1, 'rgba(255,170,90,0.08)');
     ctx.fillStyle = gr; ctx.fillRect(0, 0, W, H);
   }
-  if (!ex.includes('spotlights')) return;
-  const c = proj(0, 0, 0);
-  const gr = ctx.createRadialGradient(c.x, c.y, 120, c.x, c.y, 760);
-  gr.addColorStop(0, 'rgba(4,6,14,0)'); gr.addColorStop(1, 'rgba(4,6,14,0.62)');
-  ctx.fillStyle = gr; ctx.fillRect(0, 0, W, H);
-  ctx.globalCompositeOperation = 'lighter';
-  for (let i = 0; i < 3; i++) { // spotlight cones from the roof onto the court
-    const tx = Math.sin(G.time * 0.5 + i * 2.1) * HW * 0.7, tz = Math.cos(G.time * 0.37 + i) * HL * 0.6;
-    const g0 = proj(tx, 0, tz), top = { x: [160, 640, 1120][i], y: -20 };
-    ctx.fillStyle = 'rgba(255,240,200,0.07)';
-    ctx.beginPath(); ctx.moveTo(top.x - 8, top.y); ctx.lineTo(top.x + 8, top.y); ctx.lineTo(g0.x + 90, g0.y); ctx.lineTo(g0.x - 90, g0.y); ctx.closePath(); ctx.fill();
-    ctx.beginPath(); ctx.ellipse(g0.x, g0.y, 95, 26, 0, 0, Math.PI * 2); ctx.fill();
-  }
   if (ex.includes('lasers')) {
-    ctx.lineWidth = 3;
+    ctx.globalCompositeOperation = 'lighter'; ctx.lineWidth = 3;
     for (let i = 0; i < 4; i++) {
       const a = G.time * 0.8 + i * 1.6;
       ctx.strokeStyle = ['rgba(63,167,255,0.5)', 'rgba(255,93,93,0.5)', 'rgba(196,139,255,0.5)', 'rgba(107,216,138,0.5)'][i];
       ctx.beginPath(); ctx.moveTo(i % 2 ? W : 0, 30); ctx.lineTo(W / 2 + Math.sin(a) * 700, 250 + Math.cos(a * 1.3) * 60); ctx.stroke();
     }
+    ctx.globalCompositeOperation = 'source-over';
   }
-  ctx.globalCompositeOperation = 'source-over';
 }
 
 function drawCourt() {
@@ -2172,7 +2198,7 @@ function renderMatchup() {
 $('#btn-play').addEventListener('click', startMatch);
 function startMatch() {
   Sfx.init();
-  newMatch(); skyCache = null; crowdCache = null; show('stage'); sizeCanvas();
+  newMatch(); skyCache = null; crowdCache = null; palmCache = null; show('stage'); sizeCanvas();
   for (const p of G.players) spriteImg(p.mon.id, p.side === 0);
   if (document.fonts) document.fonts.load(`8px ${PX_FONT}`);
   for (const k in keys) keys[k] = false;
