@@ -50,7 +50,17 @@ Before each match you pick your position on the matchup screen. Your teammates f
 
 ## Venues
 
-6 v 6 is played in an indoor arena: an orange court on a blue floor, LED boards, and stands full of fans on both sides and behind the far end, under light rigs and banners. 2 v 2 stays on the beach, with wooden bleachers of fans along the sidelines and behind the far end. The stands are drawn in 3D with the court, and the crowd jumps up and raises its arms after every point.
+Pick a venue on the title screen. The stands are drawn in 3D with the court, and the crowd jumps up and raises its arms after every point.
+
+**6 v 6 (indoor):**
+- **Classic arena:** stands on three sides, LED boards around an orange court.
+- **Mega bowl:** a huge two-deck arena, with a lower bowl, a concourse with an LED ribbon board, and a steep upper deck rising to the roof (almost 3,000 fans).
+- **Championship night:** house lights down, spotlights sweeping the court, the crowd split into blue and red halves, phone lights and lasers.
+
+**2 v 2 (beach):**
+- **Beach bleachers:** wooden bleachers along the sand, the sea and palms behind.
+- **Pro tour stadium:** tall grandstands on both sides, sponsor boards and corner flags.
+- **Sunset boardwalk:** golden-hour light, fans standing three deep behind a rope line, umbrellas, a lifeguard tower and string lights.
 
 ## Ratings
 
