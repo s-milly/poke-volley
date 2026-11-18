@@ -824,6 +824,7 @@ function awardPoint(w, label, sub, credit, key) {
   G.score[w]++;
   if (credit && key) credit.stats[key]++;
   G.meter[w] = Math.min(100, G.meter[w] + 10);
+  G.cheer = 1; // the crowd jumps up
   G.longestRally = Math.max(G.longestRally, G.rally);
   if (w !== G.serving) { // side out: the team that won the serve back rotates one zone clockwise
     G.serving = w; G.rot[w].push(G.rot[w].shift());
@@ -920,6 +921,7 @@ function update(dt) {
   if (!G || G.paused) return;
   G.time += dt;
   input.jumpBuf -= dt; input.hitBuf -= dt;
+  G.cheer = Math.max(0, (G.cheer || 0) - dt * 0.6);
   G.shake = Math.max(0, G.shake - dt); G.netWobble = Math.max(0, G.netWobble - dt * 2.5);
   for (const p of G.players) p.squash += (1 - p.squash) * Math.min(1, dt * 12);
   for (const q of G.particles) { q.vy -= 6 * dt; q.x += q.vx * dt; q.y += q.vy * dt; q.z += q.vz * dt; q.life -= dt; }
@@ -1260,8 +1262,126 @@ function buildSky() {
   return c;
 }
 
+// ===================== venues: the arena (6 v 6) and the beach (2 v 2), with crowds =====================
+function seeded(n) { return () => ((n = (n * 1664525 + 1013904223) >>> 0) / 4294967296); }
+
+// Indoor backdrop, drawn once at low resolution: arena walls, light rigs and banners above, the blue floor below.
+function buildArena() {
+  const c = document.createElement('canvas'); c.width = LW; c.height = LH; const g = c.getContext('2d');
+  const hy = Math.round(horizonY() * S);
+  const bands = ['#0f1424', '#141a2e', '#182038', '#1c2642', '#212c4c', '#263256'];
+  const bh = Math.ceil(hy / bands.length);
+  bands.forEach((col, i) => { g.fillStyle = col; g.fillRect(0, i * bh, LW, bh); });
+  // light rigs
+  for (let row = 0; row < 2; row++) {
+    const y = 8 + row * 14;
+    g.fillStyle = '#2d3550'; g.fillRect(0, y + 3, LW, 2);
+    for (let x = 6 + row * 10; x < LW; x += 22) {
+      g.fillStyle = '#fff6d0'; g.fillRect(x, y, 6, 3);
+      g.fillStyle = 'rgba(255,246,208,0.12)'; g.fillRect(x - 3, y + 3, 12, 10);
+    }
+  }
+  // championship banners hanging from the rafters
+  const cols = ['#ff5d5d', '#3fa7ff', '#ffcf33', '#6bd88a', '#c48bff', '#ff9a3c'];
+  for (let i = 0; i < 9; i++) {
+    const x = 20 + i * 52, col = cols[i % cols.length];
+    g.fillStyle = col; g.fillRect(x, 36, 18, 22);
+    g.fillStyle = 'rgba(0,0,0,0.25)'; g.fillRect(x, 54, 18, 4);
+    g.fillStyle = '#ffffff'; g.fillRect(x + 7, 41, 4, 4); g.fillRect(x + 4, 48, 10, 2);
+    g.fillStyle = col; g.fillRect(x, 58, 9, 3);
+  }
+  // upper concourse glow along the wall
+  g.fillStyle = '#323c62'; g.fillRect(0, hy - 34, LW, 3);
+  g.fillStyle = '#3c4772'; g.fillRect(0, hy - 31, LW, 31);
+  g.fillStyle = '#2a3354';
+  for (let x = 0; x < LW; x += 6) g.fillRect(x, hy - 31 + ((x / 6) % 2) * 2, 3, 31);
+  // floor: blue free zone with faint boards
+  g.fillStyle = '#2f5d9e'; g.fillRect(0, hy, LW, LH - hy);
+  g.fillStyle = '#2a5592';
+  for (let y = hy + 2; y < LH; y += 4) g.fillRect(0, y, LW, 1);
+  return c;
+}
+
+// Stands and fans, in world coordinates so they move with the camera. Built once per match.
+let crowdCache = null;
+function buildCrowd() {
+  const arena = settings.mode === 6, rnd = seeded(arena ? 61 : 23);
+  const v = arena
+    ? { tiers: 7, endTiers: 6, rise: 0.55, depth: 0.95, gap: 3.4, fill: 0.92, riser: ['#20283f', '#262f4a'], seat: ['#33406a', '#2b365a'] }
+    : { tiers: 4, endTiers: 3, rise: 0.45, depth: 0.85, gap: 3.0, fill: 0.72, riser: ['#7a5232', '#8a5e3a'], seat: ['#c98d55', '#b97f4a'] };
+  const shirts = arena
+    ? ['#3fa7ff', '#3fa7ff', '#ff5d5d', '#ff5d5d', '#ffffff', '#ffcf33', '#2b2f3f', '#6bd88a', '#c48bff']
+    : ['#ff6b6b', '#ffcf33', '#4fd2ff', '#ffffff', '#ff9a3c', '#6bd88a', '#f49ac0', '#3fa7ff'];
+  const skins = ['#f1c9a0', '#d9a477', '#b07a4f', '#8a5a3a', '#f6dcc0'];
+  const person = (x, y, z, t) => ({
+    x, y, z, t, shirt: shirts[Math.floor(rnd() * shirts.length)], skin: skins[Math.floor(rnd() * skins.length)],
+    hat: !arena && rnd() < 0.25 ? ['#ffffff', '#ffcf33', '#ff6b6b'][Math.floor(rnd() * 3)] : null,
+    sign: rnd() < 0.05 ? TEAM_COLORS[rnd() < 0.5 ? 0 : 1] : null,
+    ph: rnd() * 6.28, rate: 3 + rnd() * 3,
+  });
+  const people = [];
+  const zEnd = HL + v.gap;
+  for (const sd of [-1, 1]) for (let t = 0; t < v.tiers; t++) {
+    const x = sd * (HW + v.gap + v.depth * (t + 0.5)), y = v.rise * (t + 1);
+    for (let z = -HL - 1.5; z <= zEnd - 0.4; z += 0.72) if (rnd() < v.fill) people.push(person(x + (rnd() - 0.5) * 0.25, y, z + (rnd() - 0.5) * 0.3, { kind: 'side', sd, t }));
+  }
+  for (let t = 0; t < v.endTiers; t++) {
+    const z = zEnd + v.depth * (t + 0.5), y = v.rise * (t + 1);
+    for (let x = -(HW + v.gap) + 0.4; x <= HW + v.gap - 0.4; x += 0.72) if (rnd() < v.fill) people.push(person(x + (rnd() - 0.5) * 0.25, y, z + (rnd() - 0.5) * 0.2, { kind: 'end', t }));
+  }
+  return { arena, v, people, zEnd };
+}
+
+function quad(pts, col) {
+  const P = pts.map(([x, y, z]) => proj(x, y, z));
+  ctx.fillStyle = col; ctx.beginPath();
+  P.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)));
+  ctx.closePath(); ctx.fill();
+}
+
+function drawFan(q) {
+  const bob = Math.abs(Math.sin(G.time * q.rate + q.ph)) * (0.03 + G.cheer * 0.22);
+  const f = proj(q.x, q.y + bob, q.z), k = f.k;
+  const w = Math.max(2.7, 0.42 * k), h = Math.max(2.7, 0.5 * k), hd = Math.max(2.7, 0.27 * k);
+  ctx.fillStyle = q.shirt; ctx.fillRect(f.x - w / 2, f.y - h, w, h);
+  ctx.fillStyle = q.skin; ctx.fillRect(f.x - hd / 2, f.y - h - hd, hd, hd);
+  if (q.hat) { ctx.fillStyle = q.hat; ctx.fillRect(f.x - hd * 0.7, f.y - h - hd, hd * 1.4, Math.max(2.7, hd * 0.35)); }
+  if (G.cheer > 0.25 && Math.sin(q.ph * 7) > -0.2) { // arms up after a point
+    ctx.fillStyle = q.skin;
+    ctx.fillRect(f.x - w / 2 - hd * 0.3, f.y - h - hd * 1.3, Math.max(2.7, hd * 0.35), hd * 1.1);
+    ctx.fillRect(f.x + w / 2 - hd * 0.05, f.y - h - hd * 1.3, Math.max(2.7, hd * 0.35), hd * 1.1);
+  }
+  if (q.sign) { ctx.fillStyle = q.sign; ctx.fillRect(f.x - w * 0.9, f.y - h - hd * 2.2, w * 1.8, hd * 1.1); }
+}
+
+// Stands back to front: the far end, then each side from the top tier down, each tier with its fans.
+function drawStands() {
+  const C = crowdCache || (crowdCache = buildCrowd()), v = C.v, zEnd = C.zEnd, z0 = -HL - 2;
+  const byTier = new Map();
+  for (const q of C.people) { const key = q.t.kind + (q.t.sd || '') + q.t.t; if (!byTier.has(key)) byTier.set(key, []); byTier.get(key).push(q); }
+  const X = HW + v.gap;
+  for (let t = v.endTiers - 1; t >= 0; t--) {
+    const zi = zEnd + v.depth * t, zo = zi + v.depth, y0 = v.rise * t, y1 = y0 + v.rise;
+    quad([[-X - v.depth * v.tiers, y1, zo], [X + v.depth * v.tiers, y1, zo], [X + v.depth * v.tiers, y1, zi], [-X - v.depth * v.tiers, y1, zi]], v.seat[t % 2]);
+    quad([[-X - v.depth * v.tiers, y0, zi], [X + v.depth * v.tiers, y0, zi], [X + v.depth * v.tiers, y1, zi], [-X - v.depth * v.tiers, y1, zi]], v.riser[t % 2]);
+    for (const q of byTier.get('end' + t) || []) drawFan(q);
+  }
+  for (const sd of [-1, 1]) for (let t = v.tiers - 1; t >= 0; t--) {
+    const xi = sd * (X + v.depth * t), xo = sd * (X + v.depth * (t + 1)), y0 = v.rise * t, y1 = y0 + v.rise;
+    quad([[xi, y1, z0], [xi, y1, zEnd], [xo, y1, zEnd], [xo, y1, z0]], v.seat[t % 2]);
+    quad([[xi, y0, z0], [xi, y0, zEnd], [xi, y1, zEnd], [xi, y1, z0]], v.riser[t % 2]);
+    for (const q of byTier.get('side' + sd + t) || []) drawFan(q);
+  }
+  if (C.arena) { // LED ad boards around the court
+    const bx = X - 0.5, h = 0.8, cols = ['#ff5d5d', '#3fa7ff', '#ffcf33', '#1b2236'];
+    for (let i = 0, z = z0; z < zEnd - 0.5; z += 2.4, i++) for (const sd of [-1, 1])
+      quad([[sd * bx, 0, z], [sd * bx, 0, z + 2.4], [sd * bx, h, z + 2.4], [sd * bx, h, z]], cols[(i + (sd > 0 ? 2 : 0)) % cols.length]);
+    for (let i = 0, x = -bx; x < bx; x += 2.4, i++) quad([[x, 0, zEnd - 0.5], [x + 2.4, 0, zEnd - 0.5], [x + 2.4, h, zEnd - 0.5], [x, h, zEnd - 0.5]], cols[(i + 1) % cols.length]);
+  }
+}
+
 function drawCourt() {
-  ctx.fillStyle = '#f7e6b8';
+  ctx.fillStyle = settings.mode === 6 ? '#e0904c' : '#f7e6b8'; // orange indoor court, or sand
   groundPoly([[-HW, -HL], [HW, -HL], [HW, HL], [-HW, HL]]); ctx.fill();
   ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 4; ctx.lineJoin = 'miter';
   groundPoly([[-HW, -HL], [HW, -HL], [HW, HL], [-HW, HL]]); ctx.stroke();
@@ -1340,7 +1460,8 @@ function render() {
   ctx.imageSmoothingEnabled = false;
   ctx.save();
   if (G.shake > 0) ctx.translate(Math.round(rand(-1, 1) * 3 * G.shake) / S, Math.round(rand(-1, 1) * 3 * G.shake) / S);
-  ctx.drawImage(skyCache || (skyCache = buildSky()), 0, 0, W, H);
+  ctx.drawImage(skyCache || (skyCache = settings.mode === 6 ? buildArena() : buildSky()), 0, 0, W, H);
+  drawStands();
   drawCourt();
 
   // shadows and rings on the sand
@@ -1688,7 +1809,7 @@ function renderMatchup() {
 $('#btn-play').addEventListener('click', startMatch);
 function startMatch() {
   Sfx.init();
-  newMatch(); skyCache = null; show('stage'); sizeCanvas();
+  newMatch(); skyCache = null; crowdCache = null; show('stage'); sizeCanvas();
   for (const p of G.players) spriteImg(p.mon.id, p.side === 0);
   if (document.fonts) document.fonts.load(`8px ${PX_FONT}`);
   for (const k in keys) keys[k] = false;

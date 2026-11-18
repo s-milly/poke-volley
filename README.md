@@ -48,6 +48,10 @@ Before each match you pick your position on the matchup screen. Your teammates f
 
 **2 v 2** uses beach roles. The **Blocker** takes the net on defense and blocks; the **Defender** stays back to dig. On serve receive both pass side by side, and whoever does not pass the first ball sets it.
 
+## Venues
+
+6 v 6 is played in an indoor arena: an orange court on a blue floor, LED boards, and stands full of fans on both sides and behind the far end, under light rigs and banners. 2 v 2 stays on the beach, with wooden bleachers of fans along the sidelines and behind the far end. The stands are drawn in 3D with the court, and the crowd jumps up and raises its arms after every point.
+
 ## Ratings
 
 Each rating comes from the Pokémon's base stats.
