@@ -57,10 +57,14 @@ Pick a venue on the title screen. The stands are drawn in 3D with the court, and
 - **Mega bowl:** a huge two-deck arena, with a lower bowl, a concourse with an LED ribbon board, and a steep upper deck rising to the roof (almost 3,000 fans).
 - **Championship night:** house lights down, spotlights sweeping the court, the crowd split into blue and red halves, phone lights and lasers.
 
-**2 v 2 (beach):**
-- **Beach bleachers:** wooden bleachers along the sand, the sea and palms behind.
+**2 v 2 (beach):** pick a layout and a time of day (Day, Sunset or Night).
+- **Bleachers:** wooden bleachers along the sand.
 - **Pro tour stadium:** tall grandstands on both sides, sponsor boards and corner flags.
-- **Sunset boardwalk:** golden-hour light, fans standing three deep behind a rope line, umbrellas, a lifeguard tower and string lights.
+- **Boardwalk:** fans standing three deep behind a rope line, umbrellas, a lifeguard tower and string lights.
+
+Day has drifting clouds, sailboats and gulls past an island lighthouse. Sunset has an orange sky and golden light. Night has twinkling stars, a moon over the water, a sweeping lighthouse beam, city lights on the horizon, floodlights on the court and phone lights in the crowd.
+
+Every venue has a referee stand at the net. The arenas also have a far wall with lit suites, exit signs, banners and a video board showing the score, plus a scorer's table and team benches. The beaches have palm trees, coolers and surfboards.
 
 ## Ratings
 

@@ -137,7 +137,7 @@ addEventListener('keyup', e => { const a = KEYMAP[e.code]; if (a) press(a, false
 addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
 
 // ===================== match state =====================
-const settings = { mode: 2, diff: 'normal', target: 15, role: { 2: 'B', 6: 'OH' }, venue: { 2: 'beach', 6: 'arena' } };
+const settings = { mode: 2, diff: 'normal', target: 15, role: { 2: 'B', 6: 'OH' }, venue: { 2: 'beach', 6: 'arena' }, time: 'day' };
 let draft = null;   // { starter, picks: [mon], offers: [mon], rerolls }
 let teams = null;   // [[entry], [entry]], entry 0 of team 0 is you
 let G = null;       // live match
@@ -1227,41 +1227,89 @@ function pixelDisc(g, cx, cy, r, col) {
 }
 
 let skyCache = null;
-function buildSky() {
+// Beach backdrops for each time of day, painted once on the UI grid (UW x UH). Animated bits are in drawSkyFx.
+function paintIsland(g, hy, col, lighthouse) {
+  g.fillStyle = col;
+  for (let x = 180; x < 310; x++) { const h = Math.round(9 * Math.sin((x - 180) / 130 * Math.PI) + 3 * Math.sin(x / 9)); if (h > 0) g.fillRect(x, hy - 12 - h, 1, h); }
+  for (let x = 330; x < 390; x++) { const h = Math.round(5 * Math.sin((x - 330) / 60 * Math.PI)); if (h > 0) g.fillRect(x, hy - 12 - h, 1, h); }
+  if (lighthouse) {
+    const lx = 206, base = hy - 12 - 9;
+    for (let i = 0; i < 14; i++) { g.fillStyle = lighthouse === 'day' ? (Math.floor(i / 3) % 2 ? '#e8453c' : '#ffffff') : '#20263a'; g.fillRect(lx - (i < 2 ? 3 : 2), base - i, i < 2 ? 6 : 4, 1); }
+    g.fillStyle = lighthouse === 'day' ? '#2b2f3f' : '#fff3b0'; g.fillRect(lx - 2, base - 17, 4, 3);
+    g.fillStyle = lighthouse === 'day' ? '#e8453c' : '#3a2a20'; g.fillRect(lx - 3, base - 18, 6, 1);
+  }
+}
+function buildSky() { // day
   const c = document.createElement('canvas'); c.width = UW; c.height = UH; const g = c.getContext('2d');
   const hy = Math.round(horizonY() * US);
   const bands = ['#3c9fe4', '#4aa8e9', '#58b2ed', '#68bcf0', '#7ac6f3', '#8ed0f6', '#a6dbf8', '#bfe6fa'];
   const bh = Math.ceil((hy - 12) / bands.length);
   bands.forEach((col, i) => { g.fillStyle = col; g.fillRect(0, i * bh, UW, bh); });
-  pixelDisc(g, 412, 30, 15, '#fff3b8'); pixelDisc(g, 412, 30, 12, '#fffbe0');
-  for (const [cx, cy, s] of [[70, 34, 1], [190, 22, 0.7], [300, 44, 0.9], [450, 70, 0.55]]) {
+  pixelDisc(g, 412, 14, 11, '#fff3b8'); pixelDisc(g, 412, 14, 8, '#fffbe0');
+  for (const [cx, cy, s] of [[60, 8, 0.8], [180, 4, 0.6], [270, 12, 0.7], [470, 18, 0.5], [340, 2, 0.45]]) { // layered clouds
     for (const [dx, dy, r] of [[0, 4, 10], [12, -2, 11], [25, 3, 9], [36, 6, 7]]) pixelDisc(g, Math.round(cx + dx * s), Math.round(cy + dy * s), Math.round(r * s), '#ffffff');
-    g.fillStyle = '#dceffa'; g.fillRect(Math.round(cx - 9 * s), Math.round(cy + 11 * s), Math.round(52 * s), 2);
+    g.fillStyle = '#dcebf7'; g.fillRect(Math.round(cx - 9 * s), Math.round(cy + 8 * s), Math.round(52 * s), 2);
   }
-  // sea
+  paintIsland(g, hy, '#6f9fbf', 'day');
   g.fillStyle = '#2f86c8'; g.fillRect(0, hy - 12, UW, 6);
   g.fillStyle = '#3a98d6'; g.fillRect(0, hy - 6, UW, 7);
   g.fillStyle = '#56b4e2'; g.fillRect(0, hy + 1, UW, 6);
-  g.fillStyle = '#e8f7ff';
-  for (let i = 0; i < 26; i++) g.fillRect((i * 37) % UW, hy - 10 + (i * 5) % 16, 6, 1);
-  g.fillStyle = '#ffffff'; g.fillRect(0, hy + 7, UW, 1);
-  // sand with a dither
-  g.fillStyle = '#f0dba2'; g.fillRect(0, hy + 8, UW, UH - hy - 8);
-  g.fillStyle = '#e4c98a';
-  for (let y = hy + 10; y < UH; y += 3) for (let x = (y * 7) % 11; x < UW; x += 11) g.fillRect(x, y, 1, 1);
-  // palms
-  for (const [px, sc] of [[24, 1.1], [80, 0.75], [392, 0.8], [456, 1.1]]) {
-    const by = hy + 12, h = Math.round(44 * sc);
-    for (let i = 0; i < h; i++) { g.fillStyle = i % 4 < 2 ? '#8a5a35' : '#74482a'; g.fillRect(px + Math.round(Math.sin(i / h * 1.3) * 5 * sc), by - i, Math.max(2, Math.round(3 * sc)), 1); }
-    const tx = px + Math.round(Math.sin(1.3) * 5 * sc), ty = by - h;
-    for (const a of [-2.8, -2.2, -1.6, -1.0, -0.4, 0.2]) {
-      for (let t = 0; t < 20 * sc; t++) {
-        g.fillStyle = t % 5 === 4 ? '#2f7a3a' : '#3f9b4a';
-        g.fillRect(Math.round(tx + Math.cos(a) * t), Math.round(ty + Math.sin(a) * t * 0.55 + t * t * 0.035), 2, 2);
-      }
-    }
-  }
+  g.fillStyle = '#e8f7ff'; for (let i = 0; i < 26; i++) g.fillRect((i * 37) % UW, hy - 10 + (i * 5) % 16, 6, 1);
+  g.fillStyle = '#ffffff'; for (let x = 0; x < UW; x += 2) g.fillRect(x, hy + 7 + ((x / 2) % 3 === 0 ? 1 : 0), 2, 1); // foam
+  g.fillStyle = '#d9c48c'; g.fillRect(0, hy + 9, UW, 3);                                                        // wet sand
+  g.fillStyle = '#f0dba2'; g.fillRect(0, hy + 12, UW, UH - hy - 12);
+  g.fillStyle = '#e4c98a'; for (let y = hy + 13; y < UH; y += 3) for (let x = (y * 7) % 11; x < UW; x += 11) g.fillRect(x, y, 1, 1);
+  g.fillStyle = '#fff1d6'; for (let i = 0; i < 40; i++) g.fillRect((i * 97) % UW, hy + 14 + (i * 31) % (UH - hy - 14), 2, 1); // shells
   return c;
+}
+function buildBeachNight() {
+  const c = document.createElement('canvas'); c.width = UW; c.height = UH; const g = c.getContext('2d');
+  const hy = Math.round(horizonY() * US);
+  const bands = ['#05081a', '#070c22', '#0a112b', '#0e1634', '#121c3e', '#172348'];
+  const bh = Math.ceil((hy - 12) / bands.length);
+  bands.forEach((col, i) => { g.fillStyle = col; g.fillRect(0, i * bh, UW, bh); });
+  const r = seeded(5); g.fillStyle = '#c9d4ee'; for (let i = 0; i < 90; i++) g.fillRect(Math.floor(r() * UW), Math.floor(r() * (hy - 14)), 1, 1);
+  pixelDisc(g, 430, 12, 12, 'rgba(220,230,255,0.15)'); pixelDisc(g, 430, 12, 8, '#f2f0de');
+  g.fillStyle = '#d6d2bd'; g.fillRect(427, 9, 2, 2); g.fillRect(432, 14, 3, 2); g.fillRect(429, 16, 1, 1);
+  paintIsland(g, hy, '#0b0f1f', 'night');
+  g.fillStyle = '#ffd27a'; for (let i = 0; i < 30; i++) g.fillRect(232 + i * 6 + (i % 3), hy - 13 - (i % 2), 1, 1); // city lights
+  g.fillStyle = '#0c1430'; g.fillRect(0, hy - 12, UW, 13);
+  g.fillStyle = '#111c40'; g.fillRect(0, hy + 1, UW, 6);
+  g.fillStyle = '#cfd8f0'; for (let i = 0; i < 9; i++) g.fillRect(422 + ((i * 5) % 16), hy - 10 + i * 2, 10 - (i % 3) * 2, 1); // moon path
+  g.fillStyle = '#8fa0c8'; for (let x = 0; x < UW; x += 2) g.fillRect(x, hy + 7, 2, 1);
+  g.fillStyle = '#3b3f52'; g.fillRect(0, hy + 9, UW, 3);
+  g.fillStyle = '#56596a'; g.fillRect(0, hy + 12, UW, UH - hy - 12);
+  g.fillStyle = '#4b4e5e'; for (let y = hy + 13; y < UH; y += 3) for (let x = (y * 7) % 11; x < UW; x += 11) g.fillRect(x, y, 1, 1);
+  return c;
+}
+
+// Animated sky and sea details, drawn over the backdrop on the UI grid every frame.
+const STARS = (() => { const r = seeded(9); return Array.from({ length: 40 }, () => [Math.floor(r() * UW), Math.floor(r() * 30), r() * 6.28]); })();
+function drawSkyFx() {
+  if (venue().mode !== 2) return;
+  const tod = settings.time, hy = Math.round(horizonY() * US), t = G.time;
+  ctx.save(); ctx.setTransform(U, 0, 0, U, 0, 0);
+  if (tod === 'night') {
+    for (const [x, y, ph] of STARS) if (y < hy - 14 && Math.sin(t * 2 + ph) > 0.3) { ctx.fillStyle = '#ffffff'; ctx.fillRect(x, y, 1, 1); }
+    const lx = 206, ly = hy - 12 - 9 - 16, a = t * 1.2, reach = Math.cos(a) * 140; // lighthouse beam sweeps around
+    ctx.fillStyle = 'rgba(255,243,176,0.14)'; ctx.beginPath(); ctx.moveTo(lx, ly); ctx.lineTo(lx + reach, ly - 6); ctx.lineTo(lx + reach, ly + 6); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#ffffff'; for (let i = 0; i < 4; i++) if (Math.sin(t * 6 + i * 2) > 0.5) ctx.fillRect(424 + i * 4, hy - 8 + i * 3, 2, 1);
+  } else {
+    const dark = tod === 'sunset';
+    for (let i = 0; i < 5; i++) { // gulls
+      const x = ((t * (8 + i * 2) + i * 97) % (UW + 40)) - 20, y = 6 + ((i * 7) % 18) + Math.sin(t * 1.5 + i) * 2, up = Math.sin(t * 9 + i * 2) > 0;
+      ctx.fillStyle = dark ? '#2a1830' : '#ffffff';
+      ctx.fillRect(x - 3, y + (up ? -1 : 0), 3, 1); ctx.fillRect(x + 1, y + (up ? -1 : 0), 3, 1); ctx.fillRect(x, y, 1, 1);
+    }
+    for (let i = 0; i < 2; i++) { // sailboats
+      const x = ((t * (2 + i) + 180 + i * 170) % (UW + 30)) - 15, y = hy - 9 + i * 3 + Math.round(Math.sin(t * 2 + i));
+      ctx.fillStyle = dark ? '#2a1830' : '#4a3a2a'; ctx.fillRect(x - 4, y, 9, 2);
+      ctx.fillStyle = dark ? '#3a2240' : '#ffffff'; for (let k = 0; k < 6; k++) ctx.fillRect(x, y - 1 - k, Math.max(1, 5 - k), 1);
+    }
+    ctx.fillStyle = dark ? '#ffd27a' : '#ffffff';
+    for (let i = 0; i < 10; i++) if (Math.sin(t * 5 + i * 1.7) > 0.6) ctx.fillRect((i * 53 + 17) % UW, hy - 10 + (i * 3) % 14, 2, 1);
+  }
+  ctx.restore();
 }
 
 // ===================== venues: the arena (6 v 6) and the beach (2 v 2), with crowds =====================
@@ -1358,11 +1406,11 @@ function buildSunset() { // sunset over the water, palms in silhouette, orange s
 // tiers along each sideline and behind the far end; a deck with `base` > 0 is an upper deck.
 const ARENA_SEATS = { riser: ['#20283f', '#262f4a'], seat: ['#33406a', '#2b365a'] };
 const VENUES = {
-  beach: { mode: 2, name: 'Beach bleachers', backdrop: buildSky, court: '#f7e6b8', shirts: 'beach',
+  beach: { mode: 2, name: 'Bleachers', backdrop: 'beach', court: 'sand', shirts: 'beach',
     decks: [{ tiers: 4, endTiers: 3, rise: 0.45, depth: 0.85, gap: 3.0, base: 0, fill: 0.72, riser: ['#7a5232', '#8a5e3a'], seat: ['#c98d55', '#b97f4a'] }] },
-  pro: { mode: 2, name: 'Pro tour stadium', backdrop: buildSky, court: '#f7e6b8', shirts: 'beach', extras: ['sponsors', 'flags'],
+  pro: { mode: 2, name: 'Pro tour stadium', backdrop: 'beach', court: 'sand', shirts: 'beach', extras: ['sponsors', 'flags'],
     decks: [{ tiers: 10, endTiers: 3, rise: 0.62, depth: 0.9, gap: 3.6, base: 0, fill: 0.88, riser: ['#8f98ab', '#7f889b'], seat: ['#3a7bd5', '#2f6bc0'] }] },
-  sunset: { mode: 2, name: 'Sunset boardwalk', backdrop: buildSunset, court: '#efc98f', shirts: 'beach', extras: ['rope', 'umbrellas', 'tower', 'lights'],
+  boardwalk: { mode: 2, name: 'Boardwalk', backdrop: 'beach', court: 'sand', shirts: 'beach', extras: ['rope', 'umbrellas', 'tower', 'lights'],
     decks: [], standing: { rows: 3, gap: 2.8 } },
   arena: { mode: 6, name: 'Classic arena', backdrop: buildArena, court: '#e0904c', shirts: 'arena', extras: ['led'],
     decks: [{ tiers: 7, endTiers: 6, rise: 0.55, depth: 0.95, gap: 3.4, base: 0, fill: 0.92, ...ARENA_SEATS }] },
@@ -1375,14 +1423,20 @@ const VENUES = {
     decks: [{ tiers: 14, endTiers: 13, rise: 0.72, depth: 0.95, gap: 3.4, base: 0, fill: 0.95, riser: ['#141a2c', '#181f34'], seat: ['#222a44', '#1d243b'] }] },
 };
 const VENUE_DESC = {
-  beach: 'Wooden bleachers along the sand, with the sea and palms behind.',
+  beach: 'Wooden bleachers along the sand, with palms, the sea and an island lighthouse behind.',
   pro: 'Tall grandstands on both sides, sponsor boards and corner flags, like a pro beach tour stop.',
-  sunset: 'Sunset over the water. Fans stand three deep behind a rope line, with umbrellas, a lifeguard tower and string lights.',
+  boardwalk: 'No stands: fans stand three deep behind a rope line, with umbrellas, a lifeguard tower and string lights.',
   arena: 'A busy indoor gym with stands on three sides and LED boards around the court.',
   bowl: 'A huge two-deck arena: a lower bowl, a concourse with an LED ribbon board, and a steep upper deck rising to the roof.',
   night: 'House lights down: spotlights sweep the court, the crowd is split into blue and red halves, phone lights twinkle and lasers fly overhead.',
 };
 const venue = () => VENUES[settings.venue[settings.mode]];
+const TIMES = { day: 'Day', sunset: 'Sunset', night: 'Night' };
+function backdropFor() {
+  const V = venue();
+  if (V.backdrop !== 'beach') return V.backdrop();
+  return { day: buildSky, sunset: buildSunset, night: buildBeachNight }[settings.time]();
+}
 
 let crowdCache = null;
 function buildCrowd() {
@@ -1397,7 +1451,7 @@ function buildCrowd() {
     skin: skins[Math.floor(rnd() * skins.length)],
     hat: !arena && rnd() < 0.25 ? ['#ffffff', '#ffcf33', '#ff6b6b'][Math.floor(rnd() * 3)] : null,
     sign: rnd() < 0.05 ? TEAM_COLORS[rnd() < 0.5 ? 0 : 1] : null,
-    phone: V.extras && V.extras.includes('phones') && rnd() < 0.08,
+    phone: ((V.extras && V.extras.includes('phones')) || (V.mode === 2 && settings.time === 'night')) && rnd() < 0.08,
     ph: rnd() * 6.28, rate: 3 + rnd() * 3,
   });
   const people = [], tiers = [];
@@ -1433,7 +1487,15 @@ function buildCrowd() {
       );
     um[um.length - 1].col = ['#ff5d5d', '#ffcf33', '#3fa7ff', '#6bd88a', '#ffffff'][i % 5];
   }
-  return { V, people, tiers, byKey, um };
+  const palms = [];
+  if (V.mode === 2) {
+    const d = V.decks[0], back = d ? HW + d.gap + d.depth * d.tiers + 2 : HW + (V.standing ? V.standing.gap : 3) + 5.5;
+    const endZ = d ? HL + d.gap + d.depth * d.endTiers + 2.5 : HL + 9;
+    for (let i = 0; i < 4; i++) for (const sd of [-1, 1]) palms.push({ x: sd * (back + rnd() * 2), z: -HL + i * (2 * HL / 3) + rnd() * 2, h: 5 + rnd() * 2.5 });
+    for (let i = 0; i < 5; i++) palms.push({ x: -HW - 4 + i * (2 * HW + 8) / 4 + rnd(), z: endZ + rnd() * 2, h: 6 + rnd() * 2.5 });
+    palms.sort((a, b) => b.z - a.z);
+  }
+  return { V, people, tiers, byKey, um, palms };
 }
 
 function quad(pts, col) {
@@ -1534,12 +1596,104 @@ function drawStands() {
     }
   }
 }
+// Props around the court, in world coordinates: referee stand, benches and table indoors, palms and beach gear outside.
+function seatedPerson(x, y, z, shirt) { drawFan({ x, y, z, shirt, skin: '#e0b48a', ph: x * 3 + z, rate: 2, standing: false }); }
+function drawPalm(x, z, h) {
+  const base = proj(x, 0, z), top = proj(x + 0.6, h, z);
+  ctx.strokeStyle = TIME_DARK() ? '#2a2030' : '#8a5a35'; ctx.lineWidth = Math.max(3, 0.3 * base.k);
+  ctx.beginPath(); ctx.moveTo(base.x, base.y); ctx.quadraticCurveTo(base.x + 0.4 * base.k, (base.y + top.y) / 2, top.x, top.y); ctx.stroke();
+  ctx.strokeStyle = TIME_DARK() ? '#1d2a24' : '#3f9b4a'; ctx.lineWidth = Math.max(3, 0.22 * top.k);
+  for (let i = 0; i < 7; i++) {
+    const a = -Math.PI / 2 + (i - 3) * 0.5, L = 2.4;
+    const m = proj(x + 0.6 + Math.cos(a) * L * 0.6, h + 0.5, z + Math.sin(a) * 0.4), e = proj(x + 0.6 + Math.cos(a) * L, h - 0.6, z + Math.sin(a) * 0.6);
+    ctx.beginPath(); ctx.moveTo(top.x, top.y); ctx.quadraticCurveTo(m.x, m.y, e.x, e.y); ctx.stroke();
+  }
+}
+const TIME_DARK = () => venue().mode === 2 && settings.time === 'night';
+function drawRefStand() { // the up referee's tall chair at the right-hand net post
+  const x = HW + 1.4, z = 0;
+  ctx.strokeStyle = '#d9dde6'; ctx.lineWidth = 4;
+  for (const [dx, dz] of [[-0.4, -0.4], [0.4, -0.4], [-0.4, 0.4], [0.4, 0.4]]) { const a = proj(x + dx, 0, z + dz), b = proj(x + dx * 0.6, 1.8, z + dz * 0.6); ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke(); }
+  quad([[x - 0.5, 1.8, z - 0.5], [x + 0.5, 1.8, z - 0.5], [x + 0.5, 1.8, z + 0.5], [x - 0.5, 1.8, z + 0.5]], '#9aa3b5');
+  drawFan({ x, y: 1.8, z, shirt: '#1b1f2a', skin: '#e0b48a', ph: 1, rate: 1, standing: true });
+}
+function drawProps() {
+  const V = venue(), C = crowdCache;
+  drawRefStand();
+  if (V.mode === 6) {
+    const x = -(HW + 1.9); // scorer's table at the net and team benches along the left sideline
+    quad([[x, 0, -1.6], [x, 0, 1.6], [x, 0.8, 1.6], [x, 0.8, -1.6]], '#1b2236');
+    quad([[x, 0.62, -1.6], [x, 0.62, 1.6], [x, 0.8, 1.6], [x, 0.8, -1.6]], '#ffcf33');
+    seatedPerson(x - 0.5, 0.45, -0.7, '#ffffff'); seatedPerson(x - 0.5, 0.45, 0.7, '#ffffff');
+    for (const [z0, z1, col] of [[-HL * 0.6, -3, TEAM_COLORS[0]], [3, HL * 0.6, TEAM_COLORS[1]]]) {
+      quad([[x - 0.3, 0, z0], [x - 0.3, 0, z1], [x - 0.3, 0.45, z1], [x - 0.3, 0.45, z0]], '#3a4466');
+      quad([[x - 0.3, 0.45, z0], [x - 0.3, 0.45, z1], [x - 0.8, 0.45, z1], [x - 0.8, 0.45, z0]], col);
+      quad([[x + 0.1, 0, z1 + 0.3], [x + 0.1, 0, z1 + 0.8], [x + 0.1, 0.7, z1 + 0.8], [x + 0.1, 0.7, z1 + 0.3]], '#4fa3ff'); // water cooler
+    }
+    return;
+  }
+  // beach: palms beyond the stands, and gear at the near corners
+  for (const p of C.palms) drawPalm(p.x, p.z, p.h);
+  for (const sd of [-1, 1]) {
+    const x = sd * (HW + 1.6), z = -HL - 0.8;
+    quad([[x - 0.35, 0, z], [x + 0.35, 0, z], [x + 0.35, 0.45, z], [x - 0.35, 0.45, z]], sd < 0 ? '#3fa7ff' : '#ff5d5d'); // cooler
+    quad([[x - 0.35, 0.45, z], [x + 0.35, 0.45, z], [x + 0.35, 0.5, z + 0.45], [x - 0.35, 0.5, z + 0.45]], '#ffffff');
+    const bx = sd * (HW + 2.3), bz = -HL + 1.2; // surfboard stuck in the sand
+    quad([[bx - 0.22, 0, bz], [bx + 0.22, 0, bz], [bx + 0.15, 2.0, bz], [bx - 0.15, 2.0, bz]], sd < 0 ? '#ffcf33' : '#6bd88a');
+    quad([[bx - 0.04, 0, bz], [bx + 0.04, 0, bz], [bx + 0.04, 2.0, bz], [bx - 0.04, 2.0, bz]], '#ffffff');
+  }
+}
+
+// Indoors: the far wall behind the end stand, with lit suites, exit signs, banners and a video board showing the score.
+function drawArenaWall() {
+  const V = venue(); if (V.mode !== 6 || V.decks.length !== 1) return;
+  const d = V.decks[0], z = HL + d.gap + d.depth * d.endTiers + 0.2, top = d.base + d.rise * d.endTiers, X = HW + d.gap + d.depth * d.tiers + 4;
+  const night = (V.extras || []).includes('spotlights');
+  quad([[-X, 0, z], [X, 0, z], [X, top + 9, z], [-X, top + 9, z]], night ? '#0b0f1c' : '#1a2140');
+  quad([[-X, top + 0.6, z - 0.01], [X, top + 0.6, z - 0.01], [X, top + 2.4, z - 0.01], [-X, top + 2.4, z - 0.01]], night ? '#141a2c' : '#262f52');
+  for (let x = -X + 0.6, i = 0; x < X - 1; x += 2.2, i++) // suite windows
+    quad([[x, top + 0.9, z - 0.02], [x + 1.7, top + 0.9, z - 0.02], [x + 1.7, top + 2.1, z - 0.02], [x, top + 2.1, z - 0.02]], (i * 7) % 5 === 0 ? '#3a4466' : night ? '#ffd27a' : '#fff1b8');
+  for (const sx of [-1, 1]) { // exit signs and banners
+    const ex = sx * (X - 2);
+    quad([[ex - 0.6, top + 3, z - 0.02], [ex + 0.6, top + 3, z - 0.02], [ex + 0.6, top + 3.5, z - 0.02], [ex - 0.6, top + 3.5, z - 0.02]], '#2bd16b');
+    for (let k = 0; k < 2; k++) { const bx = sx * (8 + k * 3.2), col = k ? TEAM_COLORS[sx < 0 ? 0 : 1] : '#ffcf33';
+      quad([[bx - 1, top + 3.2, z - 0.02], [bx + 1, top + 3.2, z - 0.02], [bx + 1, top + 7.5, z - 0.02], [bx - 1, top + 7.5, z - 0.02]], col);
+      quad([[bx - 0.4, top + 5.4, z - 0.03], [bx + 0.4, top + 5.4, z - 0.03], [bx + 0.4, top + 6.4, z - 0.03], [bx - 0.4, top + 6.4, z - 0.03]], '#ffffff'); }
+  }
+  // video board
+  const bw = 5.5, b0 = top + 3.0, b1 = top + 7.6;
+  quad([[-bw - 0.3, b0 - 0.3, z - 0.05], [bw + 0.3, b0 - 0.3, z - 0.05], [bw + 0.3, b1 + 0.3, z - 0.05], [-bw - 0.3, b1 + 0.3, z - 0.05]], '#3a4466');
+  quad([[-bw, b0, z - 0.06], [bw, b0, z - 0.06], [bw, b1, z - 0.06], [-bw, b1, z - 0.06]], '#05070d');
+  const c = proj(0, (b0 + b1) / 2, z), tx = c.x * US, ty = c.y * US;
+  if (ty > 2 && ty < UH) {
+    const msg = G.cheer > 0.4 ? (Math.floor(G.time * 4) % 2 ? 'MAKE SOME NOISE!' : 'POINT!') : 'VOLLEYDEX';
+    ctx.save(); ctx.setTransform(U, 0, 0, U, 0, 0);
+    pxText(msg, tx, ty - 10, '#ffcf33', 8, 'center', null);
+    pxText(`${G.score[0]} - ${G.score[1]}`, tx, ty + 1, '#ffffff', 8, 'center', null);
+    ctx.restore();
+  }
+}
+
 function ribbonColor() { const c = ['#3fa7ff', '#ff5d5d', '#ffcf33', '#c48bff']; return c[Math.floor(G.time / 2.5) % c.length]; }
 
 // Night only: dim the house, light the court, sweep spotlights and lasers. Drawn over the scene, under the HUD.
 function drawVenueLights() {
   const ex = venue().extras || [];
-  if (ex.includes('lights')) { // sunset: warm golden-hour light over everything
+  if (venue().mode === 2 && settings.time === 'night') { // night at the beach: floodlights on the court, dark all around
+    const c = proj(0, 0, 0);
+    const gr = ctx.createRadialGradient(c.x, c.y, 150, c.x, c.y, 820);
+    gr.addColorStop(0, 'rgba(6,10,28,0.05)'); gr.addColorStop(1, 'rgba(6,10,28,0.62)');
+    ctx.fillStyle = gr; ctx.fillRect(0, 0, W, H);
+    ctx.globalCompositeOperation = 'lighter';
+    for (const [x, z] of [[-HW - 2.4, -HL - 2.4], [HW + 2.4, -HL - 2.4], [-HW - 2.4, HL + 2.4], [HW + 2.4, HL + 2.4]]) {
+      const a = proj(x, 0, z), b = proj(x, 9, z), g0 = proj(x * 0.3, 0, z * 0.3);
+      ctx.strokeStyle = 'rgba(160,170,200,0.6)'; ctx.lineWidth = Math.max(3, 0.18 * a.k); ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+      ctx.fillStyle = 'rgba(255,250,220,0.9)'; ctx.fillRect(b.x - 0.8 * b.k, b.y - 0.35 * b.k, 1.6 * b.k, 0.7 * b.k);
+      ctx.fillStyle = 'rgba(255,245,210,0.05)'; ctx.beginPath(); ctx.moveTo(b.x - 0.8 * b.k, b.y); ctx.lineTo(b.x + 0.8 * b.k, b.y); ctx.lineTo(g0.x + 160, g0.y); ctx.lineTo(g0.x - 160, g0.y); ctx.closePath(); ctx.fill();
+    }
+    ctx.globalCompositeOperation = 'source-over';
+  }
+  if (venue().mode === 2 && settings.time === 'sunset') { // sunset: warm golden-hour light over everything
     const gr = ctx.createLinearGradient(0, 0, 0, H);
     gr.addColorStop(0, 'rgba(255,120,80,0.20)'); gr.addColorStop(1, 'rgba(255,170,90,0.08)');
     ctx.fillStyle = gr; ctx.fillRect(0, 0, W, H);
@@ -1569,7 +1723,7 @@ function drawVenueLights() {
 }
 
 function drawCourt() {
-  ctx.fillStyle = venue().court;
+  ctx.fillStyle = venue().court === 'sand' ? (settings.time === 'sunset' ? '#efc98f' : '#f7e6b8') : venue().court;
   groundPoly([[-HW, -HL], [HW, -HL], [HW, HL], [-HW, HL]]); ctx.fill();
   ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 4; ctx.lineJoin = 'miter';
   groundPoly([[-HW, -HL], [HW, -HL], [HW, HL], [-HW, HL]]); ctx.stroke();
@@ -1648,8 +1802,11 @@ function render() {
   ctx.imageSmoothingEnabled = false;
   ctx.save();
   if (G.shake > 0) ctx.translate(Math.round(rand(-1, 1) * 3 * G.shake) / S, Math.round(rand(-1, 1) * 3 * G.shake) / S);
-  ctx.drawImage(skyCache || (skyCache = venue().backdrop()), 0, 0, W, H);
+  ctx.drawImage(skyCache || (skyCache = backdropFor()), 0, 0, W, H);
+  drawSkyFx();
+  drawArenaWall();
   drawStands();
+  drawProps();
   drawCourt();
 
   // shadows and rings on the sand
@@ -1727,20 +1884,18 @@ function render() {
 function drawHud() {
   ctx.setTransform(U, 0, 0, U, 0, 0);
   const cx = UW / 2;
-  pxRect(cx - 122, 3, 244, 40, '#10141f');
-  pxRect(cx - 120, 5, 240, 36, '#1e2840');
-  pxRect(cx - 120, 5, 3, 36, TEAM_COLORS[0]); pxRect(cx + 117, 5, 3, 36, TEAM_COLORS[1]);
-  pxText(teams[0][0].mon.name.toUpperCase(), cx - 113, 9, '#c9d4ee', 8, 'left', null);
-  pxText(teams[1][0].mon.name.toUpperCase(), cx + 113, 9, '#c9d4ee', 8, 'right', null);
-  pxText(String(G.score[0]), cx - 34, 22, '#ffffff', 16, 'center', null);
-  pxText(String(G.score[1]), cx + 34, 22, '#ffffff', 16, 'center', null);
-  pxText(`TO ${settings.target}`, cx, 22, '#8b98b8', 8, 'center', null);
-  pxText('BY 2', cx, 31, '#8b98b8', 8, 'center', null);
-  pxRect(G.serving === 0 ? cx - 62 : cx + 56, 26, 6, 6, '#ffcf33');
-  for (let s = 0; s < 2; s++) {
-    const n = G.lastSide === s && G.phase === 'rally' ? G.touches[s] : 0;
-    for (let i = 0; i < 3; i++) pxRect((s === 0 ? cx - 113 : cx + 113 - 22) + i * 8, 30, 6, 6, i < n ? TEAM_COLORS[s] : '#33405f');
+  // compact scoreboard in the top-left corner, so the middle of the background stays visible
+  pxRect(3, 3, 162, 38, '#10141f'); pxRect(5, 5, 158, 34, '#1e2840');
+  for (let k = 0; k < 2; k++) {
+    const y = 6 + k * 17;
+    pxRect(5, y, 3, 15, TEAM_COLORS[k]);
+    if (G.serving === k) pxRect(12, y + 5, 5, 5, '#ffcf33');
+    pxText(teams[k][0].mon.name.toUpperCase().slice(0, 10), 21, y + 4, '#dfe6f5', 8, 'left', null);
+    const n = G.lastSide === k && G.phase === 'rally' ? G.touches[k] : 0;
+    for (let i = 0; i < 3; i++) pxRect(104 + i * 6, y + 6, 4, 4, i < n ? TEAM_COLORS[k] : '#33405f');
+    pxText(String(G.score[k]), 160, y, '#ffffff', 16, 'right', null);
   }
+  pxText(`TO ${settings.target}, WIN BY 2`, 6, 45, '#c9d4ee', 8, 'left');
   for (let s = 0; s < 2; s++) {
     const w = 96, x = s === 0 ? 8 : UW - 8 - w, y = UH - 12;
     const lead = s === 0 ? G.sides[0].find(p => p.human) || G.sides[0][0] : G.sides[1].find(p => p.entry.captain) || G.sides[1][0];
@@ -1864,6 +2019,13 @@ function renderVenuePick() {
     box.appendChild(b);
   }
   $('#venue-desc').textContent = VENUE_DESC[settings.venue[settings.mode]];
+  const tbox = $('#opt-time'); tbox.innerHTML = '';
+  $('#time-pick').hidden = settings.mode !== 2; // the arenas are indoors
+  for (const [id, name] of Object.entries(TIMES)) {
+    const b = el('button', '', name); b.type = 'button'; b.setAttribute('aria-pressed', String(settings.time === id));
+    b.addEventListener('click', () => { settings.time = id; renderVenuePick(); });
+    tbox.appendChild(b);
+  }
 }
 $('#opt-mode').addEventListener('click', renderVenuePick);
 renderVenuePick();
@@ -2078,6 +2240,7 @@ if (AUTO) { // test mode: draft and play without input
   if (QS.get('diff')) settings.diff = QS.get('diff');
   if (QS.get('target')) settings.target = Number(QS.get('target'));
   if (QS.get('venue') && VENUES[QS.get('venue')]) settings.venue[VENUES[QS.get('venue')].mode] = QS.get('venue');
+  if (QS.get('time') && TIMES[QS.get('time')]) settings.time = QS.get('time');
   buildPick(); startDraft(BY_ID.get(Number(QS.get('starter')) || 25));
   while (draft.picks.length < teamSize() - 1) { draft.picks.push(draft.offers[0]); makeOffers(); }
   buildTeams(); startMatch();
