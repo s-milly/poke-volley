@@ -11,6 +11,19 @@ const GB = 9.0;             // gravity on the ball (a little floaty, arcade styl
 const GP = 24;              // gravity on players
 const STEP = 1 / 120;
 const TEAM_COLORS = ['#3fa7ff', '#ff5d5d'];
+// Clubs you can play as, named after the Gen 1 towns. `color` is the club's stripe on the scoreboard.
+const CLUBS = {
+  pallet:    { name: 'Pallet Sprouts',   abbr: 'PAL', color: '#7cc96b' },
+  viridian:  { name: 'Viridian Rangers', abbr: 'VIR', color: '#1f7a4d' },
+  pewter:    { name: 'Pewter Boulders',  abbr: 'PEW', color: '#8a8f99' },
+  cerulean:  { name: 'Cerulean Tides',   abbr: 'CER', color: '#2f8cff' },
+  vermilion: { name: 'Vermilion Volts',  abbr: 'VER', color: '#ff6a2b' },
+  lavender:  { name: 'Lavender Spirits', abbr: 'LAV', color: '#9b7bd4' },
+  celadon:   { name: 'Celadon Blossoms', abbr: 'CEL', color: '#3fbf9a' },
+  fuchsia:   { name: 'Fuchsia Ninjas',   abbr: 'FCH', color: '#e0479e' },
+  saffron:   { name: 'Saffron Mystics',  abbr: 'SAF', color: '#f2b51d' },
+  cinnabar:  { name: 'Cinnabar Blaze',   abbr: 'CIN', color: '#d7262e' },
+};
 let HW = 4, HL = 8;         // half width and half length of the court (set per mode)
 
 const TYPE_COLORS = {
@@ -136,7 +149,8 @@ addEventListener('keyup', e => { const a = KEYMAP[e.code]; if (a) press(a, false
 addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
 
 // ===================== match state =====================
-const settings = { mode: 2, diff: 'normal', target: 15, sets: 1, role: { 2: 'B', 6: 'OH' }, venue: { 2: 'beach', 6: 'arena' }, time: 'day' };
+const settings = { mode: 2, diff: 'normal', target: 15, sets: 1, role: { 2: 'B', 6: 'OH' }, venue: { 2: 'beach', 6: 'arena' }, time: 'day', club: ['cerulean', 'random'] };
+let clubs = null;   // [club, club] for this match, the rival resolved from 'random'
 let draft = null;   // { starter, picks: [mon], offers: [mon], rerolls }
 let capPick = null; // { role, offers: [mon], rerolls }: your own Pokémon, offered for your position
 let teams = null;   // [[entry], [entry]], entry 0 of team 0 is you
@@ -1986,18 +2000,7 @@ function render() {
 function drawHud() {
   ctx.setTransform(U, 0, 0, U, 0, 0);
   const cx = UW / 2;
-  // compact scoreboard in the top-left corner, so the middle of the background stays visible
-  pxRect(3, 3, 162, 38, '#10141f'); pxRect(5, 5, 158, 34, '#1e2840');
-  for (let k = 0; k < 2; k++) {
-    const y = 6 + k * 17;
-    pxRect(5, y, 3, 15, TEAM_COLORS[k]);
-    if (G.serving === k) pxRect(12, y + 5, 5, 5, '#ffcf33');
-    pxText(teams[k][0].mon.name.toUpperCase().slice(0, 10), 21, y + 4, '#dfe6f5', 8, 'left', null);
-    const n = G.lastSide === k && G.phase === 'rally' ? G.touches[k] : 0;
-    for (let i = 0; i < 3; i++) pxRect(104 + i * 6, y + 6, 4, 4, i < n ? TEAM_COLORS[k] : '#33405f');
-    pxText(String(G.score[k]), 160, y, '#ffffff', 16, 'right', null);
-  }
-  pxText(settings.sets > 1 ? `SET ${G.setNo} (${G.sets[0]}-${G.sets[1]}) TO ${setTarget()}` : `TO ${setTarget()}, WIN BY 2`, 6, 45, '#c9d4ee', 8, 'left');
+  drawScoreboard();
   for (let s = 0; s < 2; s++) {
     const w = 96, x = s === 0 ? 8 : UW - 8 - w, y = UH - 12;
     const lead = s === 0 ? G.sides[0].find(p => p.human) || G.sides[0][0] : G.sides[1].find(p => p.entry.captain) || G.sides[1][0];
@@ -2029,7 +2032,52 @@ function drawHud() {
   }
   if (G.paused) { ctx.fillStyle = 'rgba(10,14,26,0.55)'; ctx.fillRect(0, 0, UW, UH); }
 }
-const teamName = s => `Team ${teams[s][0].mon.name}`;
+const teamName = s => clubs ? clubs[s].name : `Team ${teams[s][0].mon.name}`;
+
+// Broadcast-style scoreboard, top left: logo | club code | sets won | points in this set.
+let logoCache = null;
+function scoreLogo() { // a pixel volleyball with a VD monogram, drawn once at UI-grid size
+  if (logoCache) return logoCache;
+  const c = document.createElement('canvas'); c.width = c.height = 24;
+  const g = c.getContext('2d'), r = 11.5;
+  for (let y = 0; y < 24; y++) for (let x = 0; x < 24; x++) {
+    const dx = x + 0.5 - 12, dy = y + 0.5 - 12, d = Math.hypot(dx, dy);
+    if (d > r) continue;
+    const band = Math.floor((dx * 0.8 + dy + 24) / 6) % 3; // diagonal panels like a match ball
+    g.fillStyle = d > r - 1.3 ? '#0e1a3a' : ['#1f5fd6', '#ffd23a', '#ffffff'][band];
+    g.fillRect(x, y, 1, 1);
+  }
+  logoCache = c; return c;
+}
+function drawScoreboard() {
+  const x0 = 4, y0 = 4, rowH = 15, multi = settings.sets > 1;
+  const logoW = 30, nameW = 44, setW = multi ? 16 : 0, ptsW = 22, W = logoW + nameW + setW + ptsW, H = rowH * 2 + 3;
+  pxRect(x0 + 2, y0 + 2, W, H, 'rgba(5,8,16,0.45)'); // drop shadow
+  pxRect(x0, y0, W, H, '#f4f6fb');
+  // logo
+  ctx.save(); ctx.setTransform(U, 0, 0, U, 0, 0); ctx.drawImage(scoreLogo(), x0 + 3, y0 + 4); ctx.restore();
+  pxText('VD', x0 + 15, y0 + 13, '#ffffff', 8, 'center', '#0e1a3a');
+  pxRect(x0 + logoW - 1, y0 + 3, 1, H - 6, '#c5ccd9');
+  for (let k = 0; k < 2; k++) {
+    const y = y0 + 1 + k * (rowH + 1), club = clubs ? clubs[k] : { abbr: k ? 'RIV' : 'YOU', color: TEAM_COLORS[k] };
+    let x = x0 + logoW;
+    pxRect(x, y, nameW, rowH, '#e2e6ef');
+    pxRect(x, y, 3, rowH, club.color);
+    if (G.serving === k) { pxRect(x + 6, y + 6, 4, 4, '#ffcf33'); pxRect(x + 7, y + 5, 2, 6, '#ffcf33'); pxRect(x + 5, y + 7, 6, 2, '#ffcf33'); }
+    pxText(club.abbr, x + 13, y + 4, '#141c33', 8, 'left', null);
+    const n = G.lastSide === k && G.phase === 'rally' ? G.touches[k] : 0; // touches used this side
+    for (let i = 0; i < 3; i++) pxRect(x + nameW - 5, y + 3 + i * 4, 3, 3, i < n ? club.color : '#c5ccd9');
+    x += nameW;
+    if (multi) { pxRect(x, y, setW, rowH, '#141c33'); pxText(String(G.sets[k]), x + setW / 2 + 1, y + 4, '#ffffff', 8, 'center', null); x += setW; }
+    pxText(String(G.score[k]), x + ptsW / 2 + 1, y + 4, '#141c33', 8, 'center', null);
+  }
+  pxRect(x0 + logoW, y0 + rowH + 1, W - logoW, 1, '#c5ccd9');
+  // set and target, in a dark tab under the board
+  const info = multi ? `SET ${G.setNo} · TO ${setTarget()}` : `TO ${setTarget()} · WIN BY 2`;
+  const tw = info.length * 8 + 8;
+  pxRect(x0, y0 + H, tw, 12, '#141c33');
+  pxText(info, x0 + 4, y0 + H + 2, '#c9d4ee', 8, 'left', null);
+}
 
 // ===================== canvas sizing and loop =====================
 function sizeCanvas() {
@@ -2129,6 +2177,19 @@ function renderVenuePick() {
 }
 $('#opt-mode').addEventListener('click', renderVenuePick);
 renderVenuePick();
+function renderClubPick() {
+  for (const [k, sel] of [[0, '#opt-club'], [1, '#opt-rival']]) {
+    const box = $(sel); box.innerHTML = '';
+    if (k === 1) box.appendChild(new Option('Random', 'random'));
+    for (const [id, c] of Object.entries(CLUBS)) if (k === 0 || id !== settings.club[0]) box.appendChild(new Option(`${c.name} (${c.abbr})`, id));
+    if (k === 1 && settings.club[1] === settings.club[0]) settings.club[1] = 'random';
+    box.value = settings.club[k];
+    $(k ? '#sw-rival' : '#sw-club').style.background = settings.club[k] === 'random' ? 'repeating-linear-gradient(45deg,#7d8bb0 0 4px,#33405f 4px 8px)' : CLUBS[settings.club[k]].color;
+  }
+}
+$('#opt-club').addEventListener('change', e => { settings.club[0] = e.target.value; renderClubPick(); });
+$('#opt-rival').addEventListener('change', e => { settings.club[1] = e.target.value; renderClubPick(); });
+renderClubPick();
 $('#btn-start').addEventListener('click', () => { Sfx.init(); buildPick(); show('scr-pick'); });
 
 // ---------- pick your position, then your Pokémon ----------
@@ -2258,6 +2319,9 @@ function buildTeams() {
     sum += m.ovr; theirs.push(makeEntry(m, false));
   }
   teams = [mine, theirs];
+  const pickRival = settings.club[1] === 'random' || settings.club[1] === settings.club[0];
+  const rival = pickRival ? pickOne(Object.keys(CLUBS).filter(c => c !== settings.club[0])) : settings.club[1];
+  clubs = [CLUBS[settings.club[0]], CLUBS[rival]];
 }
 
 function renderMatchup() {

@@ -22,6 +22,8 @@ Phones get an on-screen pad.
 - To block, stand at the net and jump just after the other team's hitter jumps. A red ring at the net shows where to stand and flashes JUMP when it is time. If you touch the spike you either stuff it back for a point or pop it up for your team to play.
 - A spike goes to the most open spot on its own. Hold left or right to aim it across, forward for a short shot, or back to hit deep.
 - Rally scoring to 11, 15 or 25, win by 2.
+- Choose your team and the rival's (or a random rival) from 10 clubs named after the Gen 1 towns, such as the Cerulean Tides (CER) and the Vermilion Volts (VER).
+- A TV-style scoreboard in the top left shows each club's code, sets won and the points in the current set, plus who is serving and how many touches have been used.
 - Play one set, best of 3 (first to 2 sets) or best of 5 (first to 3 sets). If a best of 5 reaches 2-2, the fifth set is played to 15, win by 2.
 
 ## Draft

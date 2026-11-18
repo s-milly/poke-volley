@@ -62,6 +62,27 @@ button { color: inherit; cursor: pointer; -webkit-tap-highlight-color: transpare
 fieldset { border: 0; padding: 0; margin: 0; text-align: center; }
 legend { color: var(--muted); font-size: 10px; margin: 0 auto 10px; }
 .seg { display: inline-flex; gap: 6px; }
+.clubs { display: grid; gap: 8px; justify-items: center; }
+.club-row { display: grid; grid-template-columns: 8.5em 1fr; align-items: center; gap: 10px; }
+.club-row label { font: 9px/1.2 "Press Start 2P", monospace; color: var(--muted); text-align: right; }
+.club-pick { display: inline-flex; align-items: stretch; border: 3px solid var(--ink); background: var(--panel2); box-shadow: inset 0 0 0 2px var(--line); }
+.club-pick .swatch { width: 14px; flex: none; border-right: 3px solid var(--ink); }
+.club-pick select {
+  appearance: none; border: 0; background: transparent; color: var(--text); font: 11px/1 "Press Start 2P", monospace;
+  min-height: 44px; padding: 0 30px 0 12px; cursor: pointer;
+  background-image: linear-gradient(45deg, transparent 50%, var(--accent) 50%), linear-gradient(-45deg, transparent 50%, var(--accent) 50%);
+  background-position: right 16px center, right 10px center; background-size: 6px 6px; background-repeat: no-repeat;
+}
+.club-pick select option { background: var(--panel); color: var(--text); }
+.club-pick:focus-within { outline: 3px solid var(--accent); outline-offset: 2px; }
+.clubs, .club-row, .club-pick { min-width: 0; max-width: 100%; }
+.club-pick select { min-width: 0; width: 100%; text-overflow: ellipsis; }
+@media (max-width: 560px) {
+  .clubs { width: 100%; }
+  .club-row { grid-template-columns: 1fr; gap: 6px; width: 100%; }
+  .club-row label { text-align: center; }
+  .club-pick select { font-size: 9px; }
+}
 .seg button {
   border: 3px solid var(--ink); background: var(--panel2); padding: 12px 16px; font-size: 12px; color: var(--muted);
   min-width: 84px; min-height: 44px; box-shadow: inset 0 0 0 2px var(--line);
