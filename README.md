@@ -19,6 +19,7 @@ Phones get an on-screen pad.
 
 - Touch the ball without pressing a key and you pass it to a teammate automatically. Each side gets 3 touches.
 - An orange ring on the sand shows where the ball will land on your side. When a teammate sets you, a green ring shows where to jump.
+- To block, stand at the net and jump just after the other team's hitter jumps. A red ring at the net shows where to stand and flashes JUMP when it is time. If you touch the spike you either stuff it back for a point or pop it up for your team to play.
 - A spike goes to the most open spot on its own. Hold left or right to aim it across, forward for a short shot, or back to hit deep.
 - Rally scoring to 11, 15 or 21, win by 2.
 

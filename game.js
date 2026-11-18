@@ -205,7 +205,7 @@ function startServe() {
   }
   const sv = G.server;
   sv.x = clamp(sv.homeX, -HW + 0.6, HW - 0.6); sv.z = -toward(s) * (HL + 0.8);
-  Object.assign(G.ball, { vx: 0, vy: 0, vz: 0, trail: [], special: null, noHit: 0 });
+  Object.assign(G.ball, { vx: 0, vy: 0, vz: 0, gs: 1, trail: [], special: null, noHit: 0 });
   G.touches = [0, 0]; G.lastSide = -1; G.lastToucher = null; G.intended = [null, null]; G.lastAttack = null;
   G.phase = 'serve'; G.timer = 0; G.rally = 0;
   input.hitQ = false;
@@ -216,9 +216,10 @@ function startServe() {
 // ===================== physics and prediction =====================
 // Time until the ball, coming down, is at height y. Null if it never gets that high.
 function timeToY(b, y) {
-  const d = b.vy * b.vy + 2 * GB * (b.y - y);
+  const g = GB * (b.gs || 1);
+  const d = b.vy * b.vy + 2 * g * (b.y - y);
   if (d < 0) return null;
-  const t = (b.vy + Math.sqrt(d)) / GB;
+  const t = (b.vy + Math.sqrt(d)) / g;
   return t >= 0 ? t : null;
 }
 const ownSide = (s, z) => z * toward(s) < 0;
@@ -260,15 +261,15 @@ function launchTo(tx, tz, ty, apexY) {
   apexY = Math.max(apexY, b.y + 0.3, ty + 0.2);
   const vy = Math.sqrt(2 * GB * (apexY - b.y));
   const T = vy / GB + Math.sqrt(2 * (apexY - ty) / GB);
-  b.vx = (tx - b.x) / T; b.vz = (tz - b.z) / T; b.vy = vy;
+  b.vx = (tx - b.x) / T; b.vz = (tz - b.z) / T; b.vy = vy; b.gs = 1;
 }
-function clearsNet(x, y, z, vx, vy, vz) {
+function clearsNet(x, y, z, vx, vy, vz, g = GB) {
   if (z * vz >= 0) return false;
   const tn = -z / vz;
-  return y + vy * tn - 0.5 * GB * tn * tn > NET_H + BR + 0.02;
+  return y + vy * tn - 0.5 * g * tn * tn > NET_H + BR + 0.02;
 }
-function landAt(x, y, z, vx, vy, vz) {
-  const t = (vy + Math.sqrt(vy * vy + 2 * GB * Math.max(0, y - BR))) / GB;
+function landAt(x, y, z, vx, vy, vz, g = GB) {
+  const t = (vy + Math.sqrt(vy * vy + 2 * g * Math.max(0, y - BR))) / g;
   return [x + vx * t, z + vz * t];
 }
 // A high, arcing ball into the other court that is sure to clear the net.
@@ -468,12 +469,16 @@ function spike(p, special) {
   const aims = [[tx, tz]];
   for (let i = 0; i < 5; i++) aims.push([rand(-HW * 0.8, HW * 0.8), t * rand(1.5, HL - 1)]);
   const tries = [];
-  for (const k of [1, 1.12, 1.25, 1.4]) for (const [ax, az] of aims) tries.push([ax, az, flight * k]);
-  for (const [ax, az, T] of tries) {
-    const vx = (ax - b.x) / T, vz = (az - b.z) / T, vy = (BR - b.y + 0.5 * GB * T * T) / T;
-    if (!clearsNet(b.x, b.y, b.z, vx, vy, vz)) continue;
-    if (!inCourt(ax, az, 1 - s) || Math.abs(az) < 0.5) continue;
-    b.vx = vx; b.vy = vy; b.vz = vz;
+  for (const k of [1, 0.85, 1.15, 0.7]) for (const [ax, az] of aims) tries.push([ax, az, flight * k]);
+  // A spike leaves the hand going down, like a line drive. It gets its own lighter gravity
+  // (until someone touches it) so it still takes about `flight` seconds to land.
+  for (const c of [0.6, -0.8, -2]) for (const [ax, az, T] of tries) {
+    const g = Math.max(2.5, 2 * (b.y - BR - c * T) / (T * T));
+    const vx = (ax - b.x) / T, vz = (az - b.z) / T, vy = -c;
+    if (!clearsNet(b.x, b.y, b.z, vx, vy, vz, g)) continue;
+    const [lx, lz] = landAt(b.x, b.y, b.z, vx, vy, vz, g);
+    if (!inCourt(lx, lz, 1 - s) || Math.abs(lz) < 0.5) continue;
+    b.vx = vx; b.vy = vy; b.vz = vz; b.gs = g / GB;
     G.lastAttack = { p, type: 'spike' };
     if (special) {
       const ty = p.mon.types[0];
@@ -492,11 +497,13 @@ function spike(p, special) {
 function doBlock(p, wasSpecial) {
   const s = p.side, t = toward(s), b = G.ball;
   const atk = G.lastAttack && G.lastAttack.p;
-  const chance = (aiControlled(p) ? (s === 0 ? MATE.block : DIFF[settings.diff].block) : 0.42)
+  const human = !aiControlled(p);
+  const chance = (human ? 0.55 : s === 0 ? MATE.block : DIFF[settings.diff].block)
              + (p.r.jmp - (atk ? atk.r.pwr : 50)) / 250 - (wasSpecial ? 0.25 : 0);
-  const roll = Math.random(), stuff = roll < clamp(chance, 0.08, 0.75);
-  if (!stuff && roll < clamp(chance, 0.08, 0.75) + 0.4) { p.cool = 0.5; return; } // the spike gets past the block
-  p.cool = 0.3; b.noHit = 0.08; b.special = null;
+  const roll = Math.random(), stuff = roll < clamp(chance, human ? 0.15 : 0.08, human ? 0.8 : 0.75);
+  // a computer blocker can be beaten clean; when you get there in time you always get a hand on it
+  if (!human && !stuff && roll < clamp(chance, 0.08, 0.75) + 0.4) { p.cool = 0.5; return; }
+  p.cool = 0.3; b.noHit = 0.08; b.special = null; b.gs = 1;
   G.lastToucher = null; G.lastSide = s; G.touches[s] = 0; G.intended[s] = null; G.intended[1 - s] = null;
   if (stuff) {
     b.z = t * (BR + 0.12);
@@ -507,7 +514,7 @@ function doBlock(p, wasSpecial) {
   } else {
     b.z = -t * (BR + 0.12);
     b.vz = -t * rand(1, 2.5); b.vy = rand(4, 6); b.vx = rand(-1, 1);
-    floatText('Touched', p.x, p.cy + p.rr + 0.6, p.z, '#dfe8ff', 0.7);
+    floatText('Soft block', p.x, p.cy + p.rr + 0.6, p.z, '#dfe8ff', 0.8);
   }
   rerollAI();
   Sfx.block();
@@ -516,8 +523,18 @@ function doBlock(p, wasSpecial) {
 // ===================== rally flow =====================
 function stepBall(h) {
   const b = G.ball, pz = b.z;
-  b.vy -= GB * h; b.x += b.vx * h; b.y += b.vy * h; b.z += b.vz * h;
+  b.vy -= GB * (b.gs || 1) * h; b.x += b.vx * h; b.y += b.vy * h; b.z += b.vz * h;
   b.spin += h * Math.hypot(b.vx, b.vz) * 0.8; b.noHit -= h;
+  // a block: the ball crosses the net within reach of a jumping blocker's raised arms
+  if ((pz < 0) !== (b.z < 0) && b.y - BR >= NET_H - 0.05) {
+    const sIn = b.z < 0 ? 0 : 1;
+    if (G.lastSide === 1 - sIn) {
+      for (const p of G.sides[sIn]) {
+        if (p.onGround || p.cool > 0 || Math.abs(p.z) > p.rr + 1.0) continue;
+        if (Math.abs(b.x - p.x) < p.rr + 0.55 && b.y <= p.y + p.rr * 2 + 0.9) { doBlock(p, b.special); break; }
+      }
+    }
+  }
   // the net
   if ((pz < 0) !== (b.z < 0) && Math.abs(b.x) < HW + 0.6 && b.y - BR < NET_H) {
     if (b.y > NET_H - 0.12 && b.vy < 0) { // rolls on the tape
@@ -526,7 +543,7 @@ function stepBall(h) {
     } else {
       b.z = Math.sign(pz || -1) * (BR + 0.02); b.vz *= -0.3; b.vx *= 0.6;
     }
-    G.netWobble = 1; b.special = null;
+    G.netWobble = 1; b.special = null; b.gs = 1;
   }
   for (const p of G.players) {
     if (canContact(p, b)) { contact(p); if (G.phase !== 'rally') return true; break; }
@@ -1115,6 +1132,17 @@ function render() {
     if (tl != null) {
       const lx = b.x + b.vx * tl, lz = b.z + b.vz * tl;
       if (lz < 0) { ctx.strokeStyle = '#ff8c28'; ctx.lineWidth = 5; groundEllipse(lx, lz, 0.5, 0.5); ctx.stroke(); }
+    }
+    // where and when to block: the other team has set its hitter
+    if (you && !AUTO && G.lastSide === 1 && G.touches[1] >= 1) {
+      const atk = G.sides[1].find(q => !q.onGround && Math.abs(q.z) < 3.2) || (G.touches[1] >= 2 ? G.intended[1] : null);
+      if (atk && Math.abs(atk.z) < 4.5) {
+        const bx = clamp(atk.x, -HW + 0.4, HW - 0.4), bz = -(you.rr + 0.35), up = !atk.onGround;
+        ctx.strokeStyle = up ? '#ff4d4d' : 'rgba(255,90,90,0.75)'; ctx.lineWidth = 6;
+        groundEllipse(bx, bz, 0.7, 0.4); ctx.stroke();
+        const lab = proj(bx, 0, bz);
+        if (!up || Math.floor(G.time * 8) % 2 === 0) labels.push([up ? 'JUMP!' : 'BLOCK HERE', lab.x * S, lab.y * S + 6, '#ff8a8a']);
+      }
     }
     if (you && !AUTO && G.intended[0] === you && G.lastSide === 0) {
       const tc = timeToY(b, you.apex + you.rr * 2 + 0.05);
