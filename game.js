@@ -24,6 +24,48 @@ const CLUBS = {
   saffron:   { name: 'Saffron Mystics',  abbr: 'SAF', color: '#f2b51d' },
   cinnabar:  { name: 'Cinnabar Blaze',   abbr: 'CIN', color: '#d7262e' },
 };
+// 12x12 pixel emblems for the club crests: # is the light emblem, o a dark detail.
+const CLUB_EMBLEM = {
+  pallet: ["............", "..##....##..", ".####..####.", ".#####.####.", "..####.###..", "....##.##...", ".....###....", "......#.....", "......#.....", "......#.....", "....#####...", "............"],
+  viridian: ["......#.....", ".....###....", "....#####...", ".....###....", "....#####...", "...#######..", "....#####...", "...#######..", "..#########.", "......#.....", "......#.....", "............"],
+  pewter: ["............", "....####....", "..########..", ".####o#####.", ".###o######.", "############", "######o#####", "#####o######", ".##########.", "..########..", "............", "............"],
+  cerulean: [".....#......", ".....##.....", "....###.....", "....####....", "...######...", "..########..", "..######o#..", ".#######o##.", ".########o#.", "..########..", "...######...", "............"],
+  vermilion: [".......###..", "......###...", ".....###....", "....###.....", "...#######..", ".......###..", "......###...", ".....###....", "....##......", "...##.......", "..#.........", "............"],
+  lavender: ["....####....", "..########..", ".##########.", ".##oo##oo##.", ".##oo##oo##.", ".##########.", ".##########.", ".####oo####.", ".##########.", ".##########.", ".#.##.##.#..", "............"],
+  celadon: [".....##.....", "....####....", ".##.####.##.", ".####oo####.", "..###oo###..", ".####oo####.", ".##.####.##.", "....####....", ".....##.....", ".....#......", "....###.....", "............"],
+  fuchsia: [".....#......", ".....##.....", ".....###....", "###..##.....", ".#########..", "..###oo###..", "..###oo###..", "..#########.", ".....##..###", "....###.....", ".....##.....", "......#....."],
+  saffron: [".....##.....", ".....##.....", "....####....", "############", ".##########.", "..########..", "...######...", "...######...", "..###..###..", "..##....##..", ".#........#.", "............"],
+  cinnabar: [".....#......", ".....##.....", "....###..#..", "...####.##..", "..#######...", "..###o####..", ".###oo#####.", ".##ooo#####.", ".##oooo####.", "..##oo####..", "...######...", "............"],
+  random: ["...######...", "..##....##..", "..##....##..", "........##..", ".......##...", "......##....", ".....##.....", ".....##.....", "............", ".....##.....", ".....##.....", "............"],
+};
+const crestCache = {};
+// A club crest as a data URL: a pixel shield in the club colour with its emblem. 24x26 px, scaled up with pixelated rendering.
+function clubCrest(id) {
+  if (crestCache[id]) return crestCache[id];
+  const color = id === 'random' ? '#5b6a92' : CLUBS[id].color, W = 24, H = 26;
+  const c = document.createElement('canvas'); c.width = W; c.height = H;
+  const g = c.getContext('2d');
+  const inside = (x, y) => {
+    if (x < 1 || x > W - 2 || y < 1 || y > H - 2) return false;
+    if (y === 1 && (x < 3 || x > W - 4)) return false;
+    if (y < 16) return true;
+    return Math.abs(x + 0.5 - W / 2) <= 11 - (y - 15) * 1.15; // taper to a point
+  };
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    if (!inside(x, y)) continue;
+    const edge = !inside(x - 1, y) || !inside(x + 1, y) || !inside(x, y - 1) || !inside(x, y + 1);
+    g.fillStyle = edge ? '#0a0e18' : y < 4 ? shade(color, 0.25) : x > W / 2 + 6 || y > 17 ? shade(color, -0.22) : color;
+    g.fillRect(x, y, 1, 1);
+  }
+  CLUB_EMBLEM[id].forEach((row, y) => [...row].forEach((ch, x) => {
+    if (ch === '.') return;
+    g.fillStyle = ch === '#' ? '#fbfcff' : shade(color, -0.45);
+    g.fillRect(x + 6, y + 5, 1, 1);
+  }));
+  return (crestCache[id] = c.toDataURL());
+}
+const clubId = club => Object.keys(CLUBS).find(id => CLUBS[id] === club);
+const crestImg = (id, size = 48) => `<img class="crest" src="${clubCrest(id)}" width="${size}" height="${Math.round(size * 26 / 24)}" alt="">`;
 let HW = 4, HL = 8;         // half width and half length of the court (set per mode)
 
 const TYPE_COLORS = {
@@ -2178,17 +2220,24 @@ function renderVenuePick() {
 $('#opt-mode').addEventListener('click', renderVenuePick);
 renderVenuePick();
 function renderClubPick() {
-  for (const [k, sel] of [[0, '#opt-club'], [1, '#opt-rival']]) {
-    const box = $(sel); box.innerHTML = '';
-    if (k === 1) box.appendChild(new Option('Random', 'random'));
-    for (const [id, c] of Object.entries(CLUBS)) if (k === 0 || id !== settings.club[0]) box.appendChild(new Option(`${c.name} (${c.abbr})`, id));
-    if (k === 1 && settings.club[1] === settings.club[0]) settings.club[1] = 'random';
-    box.value = settings.club[k];
-    $(k ? '#sw-rival' : '#sw-club').style.background = settings.club[k] === 'random' ? 'repeating-linear-gradient(45deg,#7d8bb0 0 4px,#33405f 4px 8px)' : CLUBS[settings.club[k]].color;
+  if (settings.club[1] === settings.club[0]) settings.club[1] = 'random';
+  for (const k of [0, 1]) {
+    const box = $(k ? '#opt-rival' : '#opt-club'); box.innerHTML = '';
+    for (const id of k ? ['random', ...Object.keys(CLUBS)] : Object.keys(CLUBS)) {
+      const c = id === 'random' ? null : CLUBS[id], mine = k === 1 && id === settings.club[0];
+      const [city, nick] = c ? c.name.split(' ') : ['Random', 'Any club'];
+      const b = el('button', 'club-tile' + (c ? '' : ' random'), c ? `${crestImg(id, 72)}<b>${city}</b><span>${mine ? 'Your team' : nick}</span><i>${c.abbr}</i>` : `${crestImg(id, 36)}<b>Random rival</b><span>Any club but yours</span>`);
+      b.type = 'button'; b.setAttribute('aria-pressed', String(settings.club[k] === id));
+      b.setAttribute('aria-label', c ? `${c.name} (${c.abbr})` : 'Random rival');
+      if (c) b.style.setProperty('--cc', c.color);
+      b.disabled = mine;
+      b.addEventListener('click', () => { settings.club[k] = id; renderClubPick(); $(`${k ? '#opt-rival' : '#opt-club'} [aria-pressed="true"]`).focus(); });
+      box.appendChild(b);
+    }
+    const id = settings.club[k];
+    $(k ? '#opt-rival-name' : '#opt-club-name').textContent = id === 'random' ? 'Random rival' : CLUBS[id].name;
   }
 }
-$('#opt-club').addEventListener('change', e => { settings.club[0] = e.target.value; renderClubPick(); });
-$('#opt-rival').addEventListener('change', e => { settings.club[1] = e.target.value; renderClubPick(); });
 renderClubPick();
 // Title screen: team size and a one-glance summary; the rest lives on the Match settings screen.
 function setsLabel() {
@@ -2198,7 +2247,7 @@ function renderSummary() {
   const v = VENUES[settings.venue[settings.mode]];
   const rival = settings.club[1] === 'random' ? 'a random rival' : CLUBS[settings.club[1]].name;
   const rows = [
-    ['Teams', `${CLUBS[settings.club[0]].name} vs ${rival}`],
+    ['Teams', `${crestImg(settings.club[0], 18)} ${CLUBS[settings.club[0]].name} vs ${crestImg(settings.club[1], 18)} ${rival}`],
     ['Venue', v.name + (settings.mode === 2 ? `, ${TIMES[settings.time].toLowerCase()}` : '')],
     ['Rules', `${cap(settings.diff)} · ${setsLabel()}`],
   ];
@@ -2351,7 +2400,7 @@ function renderMatchup() {
   for (let s = 0; s < 2; s++) {
     const box = $(s === 0 ? '#mu-you' : '#mu-rival');
     box.innerHTML = '';
-    box.appendChild(el('h3', '', `${teamName(s)} <span class="mu-ovr">${teamOvr(teams[s])}</span>`));
+    box.appendChild(el('h3', '', `<span class="mu-name">${clubs ? crestImg(clubId(clubs[s]), 28) : ''}${teamName(s)}</span> <span class="mu-ovr">${teamOvr(teams[s])}</span>`));
     const lu = lineup(teams[s], s === 0 ? teams[0][0] : null, settings.role[n], n);
     const ul = el('ul', 'mu-list');
     for (const { entry: e, role } of lu) {

@@ -57,16 +57,15 @@
     <div class="settings-grid">
       <section class="panel set-group" aria-labelledby="sg-teams">
         <h3 id="sg-teams">Teams</h3>
-        <fieldset class="clubs">
-          <legend class="vh">Teams</legend>
-          <div class="club-row">
-            <label for="opt-club">Your team</label>
-            <span class="club-pick"><span class="swatch" id="sw-club" aria-hidden="true"></span><select id="opt-club"></select></span>
-          </div>
-          <div class="club-row">
-            <label for="opt-rival">Rival</label>
-            <span class="club-pick"><span class="swatch" id="sw-rival" aria-hidden="true"></span><select id="opt-rival"></select></span>
-          </div>
+        <fieldset class="club-set">
+          <legend>Your team</legend>
+          <div class="club-grid" id="opt-club"></div>
+          <p class="club-name" id="opt-club-name" aria-live="polite"></p>
+        </fieldset>
+        <fieldset class="club-set">
+          <legend>Rival</legend>
+          <div class="club-grid" id="opt-rival"></div>
+          <p class="club-name" id="opt-rival-name" aria-live="polite"></p>
         </fieldset>
       </section>
       <section class="panel set-group" aria-labelledby="sg-venue">

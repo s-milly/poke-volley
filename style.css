@@ -75,10 +75,40 @@ button { color: inherit; cursor: pointer; -webkit-tap-highlight-color: transpare
 /* match settings screen */
 .settings-grid { display: grid; grid-template-columns: 1fr 1fr; max-width: 920px; margin-inline: auto; gap: 20px; align-items: start; margin-bottom: 26px; }
 .settings-grid > .set-group:first-child { grid-column: 1 / -1; }
+/* club picker: every crest on show */
+.crest { image-rendering: pixelated; display: block; flex: none; }
+.summary .crest { display: inline-block; vertical-align: -3px; }
+.club-set { width: 100%; }
+.club-name { display: none; margin: 8px 0 0; font: 20px/1 var(--body); color: var(--accent); }
+.club-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
+.club-tile {
+  --cc: #5b6a92;
+  display: grid; justify-items: center; gap: 6px; padding: 12px 8px 10px; min-height: 44px;
+  border: 3px solid var(--ink); background: var(--panel2); color: var(--muted);
+  box-shadow: inset 0 0 0 2px var(--line), inset 0 -4px 0 var(--cc);
+  transition-property: background-color; transition-duration: 120ms; transition-timing-function: ease-out;
+  -webkit-tap-highlight-color: transparent;
+}
+.club-tile b { font-size: 10px; color: var(--text); }
+.club-tile i { display: none; font: normal 9px/1 "Press Start 2P", monospace; color: var(--text); }
+.club-tile span { font: 18px/1 var(--body); }
+.club-tile[aria-pressed="true"] { background: #2b3a5e; box-shadow: inset 0 0 0 3px var(--accent), inset 0 -6px 0 var(--cc); }
+.club-tile[aria-pressed="true"] span { color: var(--accent); }
+.club-tile:disabled { opacity: 0.4; }
+.club-tile.random { grid-column: 1 / -1; grid-template-columns: auto auto auto; align-items: center; justify-content: center; gap: 14px; padding: 8px 12px; }
+.club-tile.random .crest { width: 36px; height: auto; }
+@media (hover: hover) { .club-tile:not(:disabled):not([aria-pressed="true"]):hover { background: #26314d; } }
+@media (max-width: 560px) {
+  .club-grid { grid-template-columns: repeat(5, 1fr); gap: 5px; }
+  .club-tile { padding: 7px 0 8px; gap: 4px; }
+  .club-tile .crest { width: 40px; height: auto; }
+  .club-tile b, .club-tile span { display: none; }
+  .club-tile i { display: block; }
+  .club-name { display: block; }
+  .club-tile.random { grid-template-columns: auto auto; }
+  .club-tile.random b { display: block; }
+}
 @media (max-width: 720px) { .settings-grid { grid-template-columns: 1fr; } }
-.set-group .clubs { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px 28px; }
-.set-group .club-row { grid-template-columns: auto auto; }
-.set-group .club-pick select { width: auto; }
 .set-group { display: grid; gap: 18px; justify-items: center; padding: 22px 18px; }
 .set-group h3 { font-size: 13px; color: var(--accent); text-shadow: 2px 2px 0 var(--ink); }
 .set-group .seg { flex-wrap: wrap; justify-content: center; }
@@ -86,27 +116,6 @@ button { color: inherit; cursor: pointer; -webkit-tap-highlight-color: transpare
 fieldset { border: 0; padding: 0; margin: 0; text-align: center; }
 legend { color: var(--muted); font-size: 10px; margin: 0 auto 10px; }
 .seg { display: inline-flex; gap: 6px; }
-.clubs { display: grid; gap: 8px; justify-items: center; }
-.club-row { display: grid; grid-template-columns: 8.5em 1fr; align-items: center; gap: 10px; }
-.club-row label { font: 9px/1.2 "Press Start 2P", monospace; color: var(--muted); text-align: right; }
-.club-pick { display: inline-flex; align-items: stretch; border: 3px solid var(--ink); background: var(--panel2); box-shadow: inset 0 0 0 2px var(--line); }
-.club-pick .swatch { width: 14px; flex: none; border-right: 3px solid var(--ink); }
-.club-pick select {
-  appearance: none; border: 0; background: transparent; color: var(--text); font: 11px/1 "Press Start 2P", monospace;
-  min-height: 44px; padding: 0 30px 0 12px; cursor: pointer;
-  background-image: linear-gradient(45deg, transparent 50%, var(--accent) 50%), linear-gradient(-45deg, transparent 50%, var(--accent) 50%);
-  background-position: right 16px center, right 10px center; background-size: 6px 6px; background-repeat: no-repeat;
-}
-.club-pick select option { background: var(--panel); color: var(--text); }
-.club-pick:focus-within { outline: 3px solid var(--accent); outline-offset: 2px; }
-.clubs, .club-row, .club-pick { min-width: 0; max-width: 100%; }
-.club-pick select { min-width: 0; width: 100%; text-overflow: ellipsis; }
-@media (max-width: 560px) {
-  .clubs, .set-group .clubs { width: 100%; }
-  .club-row, .set-group .club-row { grid-template-columns: 1fr; gap: 6px; width: 100%; }
-  .club-row label { text-align: center; }
-  .club-pick select, .set-group .club-pick select { font-size: 9px; width: 100%; }
-}
 .seg button {
   border: 3px solid var(--ink); background: var(--panel2); padding: 12px 16px; font-size: 12px; color: var(--muted);
   min-width: 84px; min-height: 44px; box-shadow: inset 0 0 0 2px var(--line);
@@ -202,6 +211,7 @@ button.card:not(:disabled):active { translate: 4px 4px; box-shadow: 0 0 0 var(--
 .mu-team.rival { border-top: 8px solid var(--rival); }
 .mu-team h3 { display: flex; justify-content: space-between; gap: 10px; font-size: 12px; margin-bottom: 14px; }
 .mu-ovr { color: var(--accent); }
+.mu-name { display: inline-flex; align-items: center; gap: 10px; }
 .mu-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
 .vs { align-self: center; font-size: 26px; color: var(--accent); text-shadow: 3px 3px 0 var(--ink); }
 #btn-play { display: block; margin: 0 auto; min-width: 220px; }
