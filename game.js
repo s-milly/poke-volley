@@ -2144,6 +2144,7 @@ function show(id) {
   for (const s of document.querySelectorAll('.screen')) s.hidden = s.id !== id;
   $('#stage').hidden = id !== 'stage';
   $('#menu').hidden = id === 'stage';
+  Rally.run(id === 'scr-title'); // the demo rally plays only on the title screen
   window.scrollTo(0, 0);
   const first = id === 'stage' ? null : document.querySelector(`#${id} [data-autofocus]`);
   if (first) first.focus({ preventScroll: true });
@@ -2200,6 +2201,27 @@ function seg(group, key) {
   });
 }
 seg('#opt-mode', 'mode'); seg('#opt-diff', 'diff'); seg('#opt-target', 'target'); seg('#opt-sets', 'sets');
+// Settings are kept between visits (not in test mode). Anything stale or unknown falls back to the default.
+const SAVE_KEY = 'volleydex-settings';
+function saveSettings() { if (!AUTO) try { localStorage.setItem(SAVE_KEY, JSON.stringify(settings)); } catch (e) {} }
+function loadSettings() {
+  let o; try { o = JSON.parse(localStorage.getItem(SAVE_KEY)); } catch (e) { return; }
+  if (!o || typeof o !== 'object') return;
+  if ([2, 6].includes(o.mode)) settings.mode = o.mode;
+  if (DIFF[o.diff]) settings.diff = o.diff;
+  if ([11, 15, 25].includes(o.target)) settings.target = o.target;
+  if ([1, 3, 5].includes(o.sets)) settings.sets = o.sets;
+  if (TIMES[o.time]) settings.time = o.time;
+  for (const n of [2, 6]) {
+    if (o.role && YOUR_ROLES[n].includes(o.role[n])) settings.role[n] = o.role[n];
+    if (o.venue && VENUES[o.venue[n]] && VENUES[o.venue[n]].mode === n) settings.venue[n] = o.venue[n];
+  }
+  if (Array.isArray(o.club) && CLUBS[o.club[0]]) settings.club[0] = o.club[0];
+  if (Array.isArray(o.club) && (CLUBS[o.club[1]] || o.club[1] === 'random')) settings.club[1] = o.club[1];
+  for (const [box, key] of [['#opt-mode', 'mode'], ['#opt-diff', 'diff'], ['#opt-target', 'target'], ['#opt-sets', 'sets']])
+    for (const b of document.querySelectorAll(`${box} button`)) b.setAttribute('aria-pressed', String(b.dataset.v === String(settings[key])));
+}
+if (!AUTO) loadSettings();
 function renderVenuePick() {
   const box = $('#opt-venue'); box.innerHTML = '';
   for (const [id, v] of Object.entries(VENUES)) {
@@ -2245,19 +2267,45 @@ function setsLabel() {
 }
 function renderSummary() {
   const v = VENUES[settings.venue[settings.mode]];
+  const name = id => id === 'random' ? 'Random rival' : CLUBS[id].name;
   const team = id => {
     const c = id === 'random' ? null : CLUBS[id];
-    return `<div class="tt" style="--cc:${c ? c.color : '#5b6a92'}">${crestImg(id, 56)}<b>${c ? c.name : 'Random rival'}</b><span>${c ? c.abbr : 'Any club'}</span></div>`;
+    return `<span class="tt" style="--cc:${c ? c.color : '#5b6a92'}">${crestImg(id, 56)}<b>${name(id)}</b><span>${c ? c.abbr : 'Any club'}</span></span>`;
   };
-  $('#ticket-teams').innerHTML = team(settings.club[0]) + '<span class="tt-vs">VS</span>' + team(settings.club[1]);
+  const tb = $('#ticket-teams');
+  tb.innerHTML = team(settings.club[0]) + '<span class="tt-vs">VS</span>' + team(settings.club[1]);
+  tb.setAttribute('aria-label', `Teams: ${name(settings.club[0])} versus ${name(settings.club[1])}. Change teams`);
   const rows = [
-    ['Venue', v.name + (settings.mode === 2 ? `, ${TIMES[settings.time].toLowerCase()}` : '')],
-    ['Level', cap(settings.diff)],
-    ['Format', setsLabel()],
+    ['venue', 'Venue', v.name + (settings.mode === 2 ? `, ${TIMES[settings.time].toLowerCase()}` : '')],
+    ['level', 'Level', cap(settings.diff)],
+    ['format', 'Format', setsLabel()],
   ];
-  $('#setup-summary').innerHTML = rows.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join('');
+  $('#setup-summary').innerHTML = rows.map(([go, k, val]) =>
+    `<button type="button" data-go="${go}" aria-label="${k}: ${val}. Change"><span class="tm-k">${k}</span><span class="tm-v">${val}</span></button>`).join('');
+  // the demo scoreboard wears the same clubs
+  const rows2 = document.querySelectorAll('#bug .bug-row');
+  settings.club.forEach((id, k) => {
+    rows2[k].style.setProperty('--cc', id === 'random' ? '#8a93a8' : CLUBS[id].color);
+    rows2[k].querySelector('b').textContent = id === 'random' ? '???' : CLUBS[id].abbr;
+  });
+  saveSettings();
   renderScene();
 }
+// Ticket parts open the Match settings screen at the matching group, and Done comes back to the same part.
+let settingsFrom = null;
+function openSettings(go) {
+  renderVenuePick(); renderClubPick();
+  $('#settings-sub').textContent = `Settings for ${settings.mode} v ${settings.mode}. Everything has a default, so change only what you want.`;
+  show('scr-settings');
+  if (!go) return;
+  settingsFrom = go;
+  const box = $({ teams: '#sg-teams', venue: '#sg-venue', level: '#sg-rules', format: '#sg-rules' }[go]).closest('section');
+  const target = $({ teams: '#opt-club', venue: '#opt-venue', level: '#opt-diff', format: '#opt-target' }[go] + ' [aria-pressed="true"]');
+  if (target) target.focus({ preventScroll: true });
+  box.scrollIntoView({ block: 'center', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+  box.classList.add('hl'); setTimeout(() => box.classList.remove('hl'), 1400);
+}
+$('.ticket').addEventListener('click', e => { const b = e.target.closest('[data-go]'); if (b) openSettings(b.dataset.go); });
 
 // ---- Title scene: the chosen venue's sky over a court, a net and two teams of Pokémon in a rally. ----
 // Drawn at 2x: a 560x220 canvas behind a 440 px tall stage, with the sprites, net and ball laid over it in CSS px.
@@ -2265,7 +2313,7 @@ const SCENE_W = 560, SCENE_H = 220, SCENE_SKY = 110, SCENE_COURT = 150;
 const SCENE_BALL = [
   '....oooo....', '..oowwyyoo..', '.owwwwyyyyo.', '.owwwwwyyyo.', 'owbbwwwwyyyo', 'obbbbwwwwyyo',
   'obbbbbwwwwwo', 'owbbbbwwwwwo', '.owbbbwwwwo.', '.owwbbwwwwo.', '..oowwwwoo..', '....oooo....'];
-// x offsets from the centre in CSS px; the first near and the last far Pokémon trade the ball.
+// x offsets from the centre in CSS px for each player on the stage.
 const SCENE_LAYOUT = { 2: { far: [110, -100], near: [-230, 230] }, 6: { far: [110, -210, -50], near: [-230, -420, 260] } };
 const scenePicks = (() => { // a fresh cast each visit: six of yours from behind, six rivals facing you
   const ids = DEX.map(m => m.id).sort(() => Math.random() - 0.5);
@@ -2316,33 +2364,129 @@ function sceneMon(id, x, back) {
 function renderScene() {
   const scene = $('#scene'), base = SCENE_LAYOUT[settings.mode];
   const k = Math.min(1, (Math.min(innerWidth, 1120) - 40) / 600); // pull the players in on narrow screens
-  const L = { far: base.far.map(x => Math.round(x * k)), near: base.near.map(x => Math.round(x * k)) };
+  const L = { k, far: base.far.map(x => Math.round(x * k)), near: base.near.map(x => Math.round(x * k)) };
   $('#title-hero').style.backgroundImage = `url(${sceneBackdrop()})`;
   scene.style.setProperty('--ball', `url(${sceneBall()})`);
+  $('#bug-logo').src = scoreLogo().toDataURL();
   for (const side of ['far', 'near']) {
     const box = $(`#scene-${side}`); box.innerHTML = '';
     L[side].forEach((x, i) => {
-      const m = sceneMon(scenePicks[side][i], x, side === 'near');
-      if (i === 0) m.classList.add('hitter');
-      box.appendChild(m);
+      box.appendChild(sceneMon(scenePicks[side][i], x, side === 'near'));
     });
   }
   scene.style.setProperty('--ax', `${L.near[0] + 14}px`);
   scene.style.setProperty('--bx', `${L.far[0]}px`);
+  Rally.cast(L);
 }
+
+// ---- Attract mode: the stage plays a demo rally. Passes go back and forth, then someone spikes it in and the
+// scoreboard counts the point. Runs only while the title is on screen and the reader has not asked for reduced motion.
+const Rally = (() => {
+  const ground = d => 314 + 124 * d;   // screen y of the sand at depth d (0 = rival line by the net, 1 = your feet)
+  const lift = d => 32 + 61 * d;       // ball height above the sand at a head-height touch
+  const lerp = (a, b, t) => a + (b - a) * t;
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)');
+  let L = null, mons = [[], []], leg = null, wait = 0, touches = 0, rallyLen = 3, side = 0, score = [0, 0], serve = 0;
+  let raf = 0, last = 0, on = false;
+  const els = {};
+  const spot = (k, i) => ({ x: (k ? L.far : L.near)[i] + (k ? 0 : 14), d: k ? 0 : 1 });
+  function hop(k, i, h) {
+    const m = mons[k][i]; if (!m) return;
+    m.animate([{ translate: '0 0' }, { translate: `0 -${h}px` }, { translate: '0 0' }], { duration: 320, easing: 'ease-out' });
+  }
+  function pass(fromK, fromI) { // a touch over to a random player on the other side
+    const to = 1 - fromK, toI = Math.floor(Math.random() * mons[to].length), a = spot(fromK, fromI), b = spot(to, toI);
+    leg = { kind: 'pass', a, b, h0: lift(a.d), h1: lift(b.d), H: rand(46, 70), dur: rand(1.05, 1.35), t: 0, to, toI };
+    hop(fromK, fromI, 10);
+  }
+  function spike(fromK, fromI) { // a hard, flat hit into the open court
+    const a = spot(fromK, fromI), toD = fromK ? rand(0.35, 0.85) : rand(-0.09, -0.02);
+    const b = { x: Math.round(rand(-150, 150) * (L.k || 1)), d: toD };
+    leg = { kind: 'spike', a, b, h0: lift(a.d) + 14, h1: 0, H: 6, dur: 0.42, t: 0, by: fromK };
+    hop(fromK, fromI, 20);
+  }
+  function burst(x, y) {
+    els.burst.style.translate = `${x}px ${y}px`;
+    els.burst.animate([{ opacity: 1, scale: 0.4 }, { opacity: 0, scale: 1.4 }], { duration: 420, easing: 'ease-out' });
+  }
+  function point(k) {
+    score[k]++;
+    const row = document.querySelectorAll('#bug .bug-row')[k];
+    row.querySelector('em').textContent = score[k];
+    row.classList.add('pt'); setTimeout(() => row.classList.remove('pt'), 900);
+    serve = k; markServe();
+  }
+  function markServe() { document.querySelectorAll('#bug .bug-row').forEach((r, k) => r.classList.toggle('serving', k === serve)); }
+  function draw(x, d, h, sc) {
+    els.bx.style.translate = `${x}px ${ground(d) - h}px`;
+    els.ball.style.scale = sc;
+    els.sh.style.translate = `${x}px ${ground(d)}px`;
+    els.sh.style.scale = String(lerp(0.55, 1, Math.max(0, d)));
+  }
+  function step(dt) {
+    if (wait > 0) { wait -= dt; if (wait <= 0) { wait = 0; touches = 0; rallyLen = 2 + Math.floor(Math.random() * 5); pass(serve, 0); } return; }
+    if (!leg) return;
+    leg.t = Math.min(1, leg.t + dt / leg.dur);
+    const t = leg.t, d = lerp(leg.a.d, leg.b.d, t), x = lerp(leg.a.x, leg.b.x, t);
+    const h = lerp(leg.h0, leg.h1, t) + leg.H * 4 * t * (1 - t);
+    draw(x, d, h, lerp(0.6, 1, Math.max(0, Math.min(1, d))));
+    if (t < 1) return;
+    if (leg.kind === 'pass') {
+      touches++;
+      if (touches >= rallyLen) spike(leg.to, leg.toI); else pass(leg.to, leg.toI);
+    } else if (leg.kind === 'spike') {
+      burst(x, ground(d)); point(leg.by);
+      leg = { kind: 'bounce', a: leg.b, b: { x: leg.b.x + (leg.by ? 30 : -18), d: leg.b.d + (leg.by ? 0.12 : -0.01) }, h0: 0, h1: 0, H: 20, dur: 0.45, t: 0 };
+    } else {
+      leg = null; wait = 1.1;
+      if (Math.max(...score) >= settings.target) setTimeout(() => { score = [0, 0]; document.querySelectorAll('#bug em').forEach(e => (e.textContent = '0')); }, 900);
+    }
+  }
+  function loop(now) {
+    const dt = Math.min(0.05, (now - last) / 1000); last = now;
+    step(dt);
+    raf = requestAnimationFrame(loop);
+  }
+  function run(want) {
+    want = want && !reduce.matches;
+    if (want === on) return;
+    on = want; $('#scene').classList.toggle('live', on);
+    cancelAnimationFrame(raf);
+    if (on) { last = performance.now(); if (!leg && !wait) wait = 0.6; raf = requestAnimationFrame(loop); }
+    else for (const e of [els.bx, els.ball, els.sh]) if (e) { e.style.translate = ''; e.style.scale = ''; } // back to the still frame
+  }
+  reduce.addEventListener('change', () => run(!$('#scr-title').hidden));
+  return {
+    cast(layout) { // new players: start a fresh rally with them
+      L = layout;
+      mons = [[...document.querySelectorAll('#scene-near .mon')], [...document.querySelectorAll('#scene-far .mon')]];
+      Object.assign(els, { bx: $('#scene .ball-x'), ball: $('#scene .ball'), sh: $('#scene .ball-shadow'), burst: $('#scene .burst') });
+      leg = null; wait = 0.6; markServe();
+    },
+    run,
+  };
+})();
 let sceneW = innerWidth;
 addEventListener('resize', () => { if (Math.abs(innerWidth - sceneW) > 40 && !$('#scr-title').hidden) { sceneW = innerWidth; renderScene(); } });
 $('#scr-title').classList.add('intro');
 setTimeout(() => $('#scr-title').classList.remove('intro'), 1200);
 $('#opt-mode').addEventListener('click', renderSummary);
-$('#btn-settings').addEventListener('click', () => {
-  renderVenuePick(); renderClubPick();
-  $('#settings-sub').textContent = `Settings for ${settings.mode} v ${settings.mode}. Everything has a default, so change only what you want.`;
-  show('scr-settings');
+$('#btn-settings').addEventListener('click', () => { settingsFrom = null; openSettings(); });
+$('#btn-settings-done').addEventListener('click', () => {
+  renderSummary(); show('scr-title');
+  (settingsFrom ? $(`.ticket [data-go="${settingsFrom}"]`) : $('#btn-settings')).focus();
 });
-$('#btn-settings-done').addEventListener('click', () => { renderSummary(); show('scr-title'); $('#btn-start').focus(); });
 renderSummary();
 $('#btn-start').addEventListener('click', () => { Sfx.init(); buildPick(); show('scr-pick'); });
+// Quick match: the best fit of your three captain offers, then the strongest Pokémon of each draft round.
+$('#btn-quick').addEventListener('click', () => {
+  Sfx.init(); buildPick();
+  const fit = ROLES[capPick.role].fit, best = (list, f) => list.reduce((a, b) => (f(b) > f(a) ? b : a));
+  draft = { starter: best(capPick.offers, m => fit(makeEntry(m, true).r)), picks: [], offers: [], rerolls: 2 };
+  makeOffers();
+  while (draft.picks.length < teamSize() - 1) { draft.picks.push(best(draft.offers, m => m.ovr)); makeOffers(); }
+  buildTeams(); renderMatchup(); show('scr-matchup');
+});
 
 // ---------- pick your position, then your Pokémon ----------
 // Three random Pokémon from those best suited to the position (top third of the dex by that role's fit).
@@ -2360,6 +2504,7 @@ function buildPick() {
   renderPick();
 }
 function renderPick() {
+  saveSettings();
   const n = settings.mode, role = settings.role[n];
   if (!capPick || capPick.role !== role) capPick = { role, offers: captainOffers(role), rerolls: capPick ? capPick.rerolls : 2 };
   const pick = $('#opt-role'); pick.innerHTML = '';

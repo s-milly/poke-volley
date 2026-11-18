@@ -17,12 +17,21 @@
         <h1>Volley<span>Dex</span></h1>
         <p class="lede">Choose your Pokémon, draft teammates by their stats, and spike your way to the win.</p>
       </div>
+      <div class="bug" id="bug" aria-hidden="true">
+        <span class="bug-logo"><img id="bug-logo" alt="" width="36" height="36"><b>VD</b></span>
+        <span class="bug-rows">
+          <span class="bug-row"><i></i><s></s><b></b><em>0</em></span>
+          <span class="bug-row"><i></i><s></s><b></b><em>0</em></span>
+        </span>
+      </div>
+      <span class="demo-tag" aria-hidden="true">Demo</span>
       <div class="scene" id="scene" aria-hidden="true">
         <div class="far" id="scene-far"></div>
         <div class="net"><i></i><i></i></div>
         <div class="ball-shadow"></div>
         <div class="near" id="scene-near"></div>
         <div class="ball-x"><div class="ball-y"><span class="ball"></span></div></div>
+        <span class="burst"></span>
       </div>
     </div>
 
@@ -42,14 +51,18 @@
           </div>
         </fieldset>
         <button type="button" class="cta big" id="btn-start" data-autofocus><span aria-hidden="true">▶</span> Choose your position</button>
+        <div class="quick-row">
+          <button type="button" class="ghost small" id="btn-quick" aria-describedby="quick-hint">Quick match</button>
+          <p class="start-hint" id="quick-hint">Skips the draft: your team is picked for you.</p>
+        </div>
       </div>
       <section class="ticket" aria-labelledby="ticket-h">
         <header>
           <h2 id="ticket-h">Your match</h2>
           <button type="button" class="ghost small" id="btn-settings">Edit settings</button>
         </header>
-        <div class="ticket-teams" id="ticket-teams"></div>
-        <dl class="ticket-meta" id="setup-summary"></dl>
+        <button type="button" class="ticket-teams" id="ticket-teams" data-go="teams"></button>
+        <div class="ticket-meta" id="setup-summary"></div>
       </section>
     </div>
 

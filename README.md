@@ -28,7 +28,7 @@ Phones get an on-screen pad.
 
 ## Draft
 
-The title screen opens on a pixel stage: the sky of the venue you chose, a court and net, and random Pokémon in a rally (still under reduced motion). Below it you pick team size (2 v 2 or 6 v 6), and a match ticket shows both club crests, the venue, the level and the format. Teams, venue, time of day, difficulty, points and sets are on the Match settings screen (Edit settings), and all of them have defaults.
+The title screen opens on a pixel stage in attract mode: the sky of the venue you chose, a court and net, and random Pokémon playing a demo rally. Passes go back and forth until someone spikes it in, and a broadcast scoreboard in your clubs' colours counts the points (the stage holds still under reduced motion). Below it you pick team size (2 v 2 or 6 v 6) and start with Choose your position, or Quick match, which picks your captain and drafts the rest for you. A match ticket shows both clubs, the venue, the level and the format; tap any part of it to change that part on the Match settings screen. Your settings are saved in the browser for the next visit.
 
 
 1. Choose your position, then pick the Pokémon you control from three random offers suited to that position (you can ask for new offers twice). As captain it gets +14 to every rating.
