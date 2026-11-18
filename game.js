@@ -172,6 +172,7 @@ const ROLES = {
   OPP: { name: 'Opposite',       short: 'OPP', fit: r => r.pwr * 2 + r.jmp },
   B:   { name: 'Blocker',        short: 'BLK', fit: r => r.jmp * 2 + r.pwr },
   D:   { name: 'Defender',       short: 'DEF', fit: r => r.def * 2 + r.spd },
+  L:   { name: 'Libero',         short: 'L',   fit: r => r.def * 2 + r.spd + r.skl * 0.3 },
 };
 const ROLE_DESC = {
   S: 'Takes the second touch and runs the offense: you choose who gets the set (hold left for the outside, up for the middle quick, right for the opposite, down for the pipe).',
@@ -180,19 +181,21 @@ const ROLE_DESC = {
   OPP: 'Hits from the right side, blocks the other team\'s outside hitter, and sets if the setter has to dig.',
   B: 'Takes the net on defense: block the other team\'s hitter.',
   D: 'Stays back on defense to dig spikes and chase tips.',
+  L: 'Back-row defensive specialist: passes serves, digs and serves in zone 1. Always replaces the middle blocker who is in the back row, so you sit out while your middle is in the front row. A libero cannot block or attack a ball above the net.',
 };
 const ROSTER_6 = ['S', 'OH', 'MB', 'OPP', 'OH', 'MB'];   // who starts in zones 1 to 6
 const ZONE_X = [0.62, 0.62, 0, -0.62, -0.62, 0];          // zones 1 to 6, as a share of the half width; your right is +
 const attackLine = () => HL / 3;                            // the "3 meter" line, scaled to this court
-const YOUR_ROLES = { 2: ['B', 'D'], 6: ['S', 'OH', 'MB', 'OPP'] };
+const YOUR_ROLES = { 2: ['B', 'D'], 6: ['S', 'OH', 'MB', 'OPP', 'L'] };
+const teamSize = () => (settings.mode === 6 ? 7 : 2); // 6 v 6 drafts a libero as the seventh player
 
 // Fill each role with the Pokémon that suits it best. Returns [{ entry, role }] in zone order.
 function lineup(entries, you, yourRole, mode) {
   const pool = entries.filter(e => e !== you);
-  const roles = mode === 2 ? ['B', 'D'] : ROSTER_6.slice();
+  const roles = mode === 2 ? ['B', 'D'] : [...ROSTER_6, 'L']; // index 6 is the libero, outside the rotation
   const out = new Array(roles.length).fill(null);
   if (you) { const i = Math.max(0, roles.indexOf(yourRole)); out[i] = { entry: you, role: roles[i] }; }
-  for (const i of mode === 2 ? [0, 1] : [0, 3, 2, 5, 1, 4]) { // setter, opposite and middles first, then outsides
+  for (const i of mode === 2 ? [0, 1] : [0, 3, 2, 5, 6, 1, 4]) { // setter, opposite, middles and libero first, then outsides
     if (out[i]) continue;
     const f = ROLES[roles[i]].fit;
     pool.sort((a, b) => f(b.r) - f(a.r));
@@ -202,9 +205,9 @@ function lineup(entries, you, yourRole, mode) {
   return out;
 }
 
-const zoneOf = p => G.rot[p.side].indexOf(p) + 1;
+const zoneOf = p => (p.role === 'L' ? G.rot[p.side].indexOf(G.libSub[p.side]) + 1 : G.rot[p.side].indexOf(p) + 1);
 const isFront = p => settings.mode !== 6 || (zoneOf(p) >= 2 && zoneOf(p) <= 4);
-const isPasser = p => settings.mode !== 6 || p.role === 'OH' || (p.role === 'MB' && !isFront(p));
+const isPasser = p => settings.mode !== 6 || p.role === 'OH' || p.role === 'L' || (p.role === 'MB' && !isFront(p));
 
 // What a side is doing right now.
 function sidePhase(s) {
@@ -237,10 +240,10 @@ function updateFormation() {
 }
 
 function spots6(s, ph) {
-  const m = toward(s), rot = G.rot[s], spots = new Map(), blockers = [];
+  const m = toward(s), rot = G.sides[s], spots = new Map(), blockers = []; // on court, in zone order (the libero sits in its middle's zone)
   const fz = -0.16 * HL, bz = -0.6 * HL;
   const wing = p => (p.role === 'OH' ? -1 : p.role === 'MB' ? 0 : 1); // OH left, MB middle, S and OPP right
-  const backSpot = p => (p.role === 'OH' ? [0, -0.86 * HL] : p.role === 'MB' ? [-0.68 * HW, -0.72 * HL] : [0.68 * HW, -0.72 * HL]);
+  const backSpot = p => (p.role === 'OH' ? [0, -0.86 * HL] : p.role === 'MB' || p.role === 'L' ? [-0.68 * HW, -0.72 * HL] : [0.68 * HW, -0.72 * HL]);
   if (ph === 'serve') {
     rot.forEach((p, i) => spots.set(p, [ZONE_X[i] * HW, i >= 1 && i <= 3 ? fz : bz]));
   } else if (ph === 'receive') {
@@ -254,6 +257,7 @@ function spots6(s, ph) {
       else if (isFront(p)) spots.set(p, [ZONE_X[zoneOf(p) - 1] * HW, -1.6]);
       else spots.set(p, [ZONE_X[zoneOf(p) - 1] * HW, -0.86 * HL]);
     }
+    legalize(spots, rot, false);
   } else if (ph === 'offense') {
     const setter = G.setterNow[s] || rot.find(p => p.role === 'S');
     for (const p of rot) {
@@ -289,6 +293,56 @@ function spots6(s, ph) {
   return { spots, blockers };
 }
 
+// The overlap rule, checked when the ball is served: each front-row player must be nearer the net than
+// the back-row player behind them (4 ahead of 5, 3 ahead of 6, 2 ahead of 1), and each row must keep its
+// left-to-right order (4, 3, 2 and 5, 6, 1). The server is free to stand anywhere behind the end line.
+const OVERLAP_PAIRS = [[3, 4], [2, 5], [1, 0]];             // [front, back] as zone indexes (zone - 1)
+const OVERLAP_ROWS = [[3, 2, 1], [4, 5, 0]];                 // left to right
+// Nudge a formation (own coordinates) so it obeys the rule with some room to spare.
+function legalize(spots, court, serving) {
+  const at = i => spots.get(court[i]);
+  for (let pass = 0; pass < 3; pass++) {
+    for (const [f, k] of OVERLAP_PAIRS) {
+      if (serving && k === 0) continue;
+      const F = at(f), B = at(k);
+      if (F[1] < B[1] + 0.8) { const mid = (F[1] + B[1]) / 2; F[1] = mid + 0.45; B[1] = mid - 0.45; }
+    }
+    for (const row of OVERLAP_ROWS) for (let i = 0; i < 2; i++) {
+      if (serving && (row[i] === 0 || row[i + 1] === 0)) continue;
+      const L = at(row[i]), R = at(row[i + 1]);
+      if (L[0] > R[0] - 0.8) { const mid = (L[0] + R[0]) / 2; L[0] = mid - 0.45; R[0] = mid + 0.45; }
+    }
+  }
+}
+// Who is out of position on side s right now (empty if the rotation order is legal).
+function overlaps(s) {
+  if (settings.mode !== 6) return [];
+  const court = G.sides[s], m = toward(s), serving = G.serving === s, bad = new Set();
+  const ox = p => p.x * m, oz = p => p.z * m;
+  for (const [f, k] of OVERLAP_PAIRS) {
+    if (serving && k === 0) continue;
+    if (oz(court[f]) <= oz(court[k])) { bad.add(court[f]); bad.add(court[k]); }
+  }
+  for (const row of OVERLAP_ROWS) for (let i = 0; i < 2; i++) {
+    if (serving && (row[i] === 0 || row[i + 1] === 0)) continue;
+    if (ox(court[row[i]]) >= ox(court[row[i + 1]])) { bad.add(court[row[i]]); bad.add(court[row[i + 1]]); }
+  }
+  return [...bad];
+}
+
+// The libero always replaces the middle blocker who is in the back row (zones 1, 5 and 6).
+// Swaps happen between rallies. The benched player waits at the sideline.
+function applyLibero(s) {
+  const L = G.libero[s];
+  if (!L) { G.sides[s] = G.rot[s].slice(); G.bench[s] = []; return; }
+  const mb = G.rot[s].find((p, i) => p.role === 'MB' && (i === 0 || i === 4 || i === 5)) || null;
+  G.libSub[s] = mb;
+  G.sides[s] = G.rot[s].map(p => (p === mb ? L : p));
+  G.bench[s] = [mb ? mb : L];
+  const m = toward(s);
+  G.bench[s].forEach(p => { p.x = -(HW + 1.6) * m; p.z = -0.3 * HL * m; p.y = 0; p.vx = p.vz = p.vy = 0; p.onGround = true; });
+}
+
 function spots2(s, ph) {
   const m = toward(s), spots = new Map(), blockers = [];
   const B = G.sides[s].find(p => p.role === 'B'), D = G.sides[s].find(p => p.role === 'D');
@@ -316,17 +370,18 @@ function newMatch() {
   const n = settings.mode;
   HW = n === 2 ? 8 : 9.5; HL = n === 2 ? 12 : 14;
   const size = n === 6 ? 0.9 : 1;
-  const sides = [[], []], rot = [[], []];
+  const sides = [[], []], rot = [[], []], all = [[], []], libero = [null, null];
   for (let s = 0; s < 2; s++) {
     const you = s === 0 ? teams[0][0] : null;
     for (const { entry, role } of lineup(teams[s], you, settings.role[n], n)) {
       const p = new Player(entry, s, entry === you, size);
       p.role = role;
-      sides[s].push(p); rot[s].push(p);
+      all[s].push(p);
+      if (role === 'L') libero[s] = p; else { sides[s].push(p); rot[s].push(p); }
     }
   }
   G = {
-    sides, players: [...sides[0], ...sides[1]], rot,
+    sides, players: [...sides[0], ...sides[1]], rot, all, libero, libSub: [null, null], bench: [[], []],
     ball: { x: 0, y: 1, z: 0, vx: 0, vy: 0, vz: 0, spin: 0, trail: [], special: null, noHit: 0 },
     score: [0, 0], touches: [0, 0], lastSide: -1, lastToucher: null, intended: [null, null], lastAttack: null,
     setterNow: [null, null], blockers: [[], []], play: [null, null],
@@ -340,7 +395,9 @@ function newMatch() {
 
 function startServe() {
   const s = G.serving;
-  G.server = G.rot[s][0];
+  for (let k = 0; k < 2; k++) applyLibero(k);
+  G.players = [...G.sides[0], ...G.sides[1]];
+  G.server = G.sides[s][0];
   Object.assign(G.ball, { vx: 0, vy: 0, vz: 0, gs: 1, trail: [], special: null, noHit: 0 });
   G.touches = [0, 0]; G.lastSide = -1; G.lastToucher = null; G.intended = [null, null]; G.lastAttack = null;
   G.setterNow = [null, null]; G.play = [null, null];
@@ -428,6 +485,13 @@ function lob(tx, tz, apexY) {
 // ===================== serving =====================
 function doServe(p) {
   const s = p.side, t = toward(s);
+  for (const k of [1 - s, s]) {
+    if (overlaps(k).length) { // out of rotation order when the ball is served
+      G.phase = 'rally';
+      awardPoint(1 - k, 'OVERLAP', `${teamName(k)} was out of rotation order`, null, null);
+      return;
+    }
+  }
   const human = !aiControlled(p);
   let tx, depth;
   if (human) {
@@ -473,8 +537,8 @@ function contact(p) {
   const fromOpp = G.lastSide !== s;
   const wasSpecial = b.special;
 
-  // block at the net
-  if (!p.onGround && Math.abs(p.z) < p.rr + 0.9 && fromOpp && b.vz * t < 0 && b.y > NET_H - 0.3 && G.lastSide !== -1) {
+  // block at the net (a libero may not block)
+  if (p.role !== 'L' && !p.onGround && Math.abs(p.z) < p.rr + 0.9 && fromOpp && b.vz * t < 0 && b.y > NET_H - 0.3 && G.lastSide !== -1) {
     doBlock(p, wasSpecial);
     return;
   }
@@ -512,6 +576,11 @@ function contact(p) {
     else action = G.touches[s] >= 3 ? 'over' : 'pass';
   }
 
+  // a libero may not attack a ball that is above the net
+  if ((action === 'spike' || action === 'tip') && p.role === 'L' && b.y > NET_H) {
+    action = 'over';
+    if (!aiControlled(p)) floatText('LIBERO: NO ATTACKS ABOVE THE NET', p.x, p.cy + p.rr + 0.6, p.z, '#ffd6d6', 1.4);
+  }
   // back-row players may only spike from behind the attack line
   if (action === 'spike' && settings.mode === 6 && !isFront(p) && -p.z * t < attackLine()) {
     action = 'over';
@@ -704,7 +773,7 @@ function stepBall(h) {
     const sIn = b.z < 0 ? 0 : 1;
     if (G.lastSide === 1 - sIn) {
       for (const p of G.sides[sIn]) {
-        if (p.onGround || p.cool > 0 || Math.abs(p.z) > p.rr + 1.0) continue;
+        if (p.role === 'L' || p.onGround || p.cool > 0 || Math.abs(p.z) > p.rr + 1.0) continue;
         if (Math.abs(b.x - p.x) < p.rr + 0.55 && b.y <= p.y + p.rr * 2 + 0.9) { doBlock(p, b.special); break; }
       }
     }
@@ -1279,7 +1348,7 @@ function render() {
     const lift = clamp(p.y / 2, 0, 0.6);
     ctx.fillStyle = 'rgba(80,55,20,0.35)';
     groundEllipse(p.x, p.z, p.rr * (1.0 - lift), p.rr * (0.75 - lift * 0.5)); ctx.fill();
-    ctx.strokeStyle = p.human ? '#ffe14a' : TEAM_COLORS[p.side]; ctx.lineWidth = p.human ? 5 : 3;
+    ctx.strokeStyle = p.human ? '#ffe14a' : p.role === 'L' ? '#c48bff' : TEAM_COLORS[p.side]; ctx.lineWidth = p.human || p.role === 'L' ? 5 : 3;
     groundEllipse(p.x, p.z, p.rr * 1.2, p.rr * 0.95); ctx.stroke();
   }
   ctx.fillStyle = `rgba(60,40,20,${0.45 - clamp(b.y / 8, 0, 0.25)})`;
@@ -1287,6 +1356,12 @@ function render() {
 
   const you = G.sides[0].find(p => p.human);
   const labels = [];
+  if (G.phase === 'serve' && you && !AUTO && settings.mode === 6 && you !== G.server) { // your legal spot for this serve
+    const bad = overlaps(0).includes(you);
+    ctx.strokeStyle = bad ? '#ff4d4d' : '#50e68c'; ctx.lineWidth = 4;
+    groundEllipse(you.homeX, you.homeZ, 0.55, 0.55); ctx.stroke();
+    const lab = proj(you.homeX, 0, you.homeZ); labels.push(['YOUR SPOT', lab.x * S, lab.y * S + 6, bad ? '#ff8a8a' : '#7dffb0']);
+  }
   if (G.phase === 'rally') {
     const tl = timeToY(b, BR);
     if (tl != null) {
@@ -1316,7 +1391,8 @@ function render() {
   }
 
   // far side, the net, then the near side
-  const items = [...G.players.map(p => ({ z: p.z, d: () => drawPlayer(p) })), { z: b.z, d: () => drawBall(b) }];
+  const items = [...G.players, ...G.bench[0], ...G.bench[1]].map(p => ({ z: p.z, d: () => drawPlayer(p) }));
+  items.push({ z: b.z, d: () => drawBall(b) });
   for (const q of G.particles) items.push({ z: q.z, d: () => { const p = proj(q.x, q.y, q.z), s = Math.max(2.7, q.r * 2 * p.k); ctx.globalAlpha = clamp(q.life * 2.5, 0, 1); ctx.fillStyle = q.color; ctx.fillRect(p.x - s / 2, p.y - s / 2, s, s); ctx.globalAlpha = 1; } });
   items.sort((a, c) => c.z - a.z);
   let netDrawn = false;
@@ -1370,6 +1446,9 @@ function drawHud() {
   if (me && !AUTO) {
     const where = settings.mode === 6 ? `  ZONE ${zoneOf(me)} ${isFront(me) ? 'FRONT' : 'BACK'} ROW` : '';
     pxText(ROLES[me.role].name.toUpperCase() + where, cx, LH - 12, '#c9d4ee', 8);
+    if (G.phase === 'serve' && me !== G.server && overlaps(0).includes(me) && Math.floor(G.time * 4) % 2 === 0) pxText('OVERLAP! GET TO YOUR SPOT', cx, 76, '#ff8a8a', 8);
+  } else if (!AUTO && G.bench[0].some(p => p.human)) {
+    pxText('LIBERO ON THE BENCH: YOUR MIDDLE IS IN THE FRONT ROW', cx, LH - 12, '#c9d4ee', 8);
   }
   if (G.phase === 'serve' && !aiControlled(G.server) && Math.floor(G.time * 2.5) % 2 === 0) {
     pxText('PRESS J TO SERVE', cx, 52, '#ffffff', 8);
@@ -1501,9 +1580,11 @@ function makeOffers() {
   draft.offers = out;
 }
 function renderDraft() {
-  const need = settings.mode - 1, round = draft.picks.length + 1;
+  const need = teamSize() - 1, round = draft.picks.length + 1;
   $('#draft-round').textContent = need === 1 ? 'Pick your partner' : `Round ${round} of ${need}`;
-  $('#draft-help').textContent = 'Pick one teammate from these three offers.';
+  $('#draft-help').textContent = settings.mode === 6
+    ? 'Pick one teammate from these three offers. You need six: five on court plus a libero. Positions are given out by stats on the matchup screen.'
+    : 'Pick one teammate from these three offers.';
   const offers = $('#offers'); offers.innerHTML = '';
   draft.offers.forEach((mon, i) => {
     const card = monCard(mon, { button: true });
@@ -1527,7 +1608,7 @@ function renderRoster() {
     li.appendChild(el('div', 'ri-ovr', String(e.ovr)));
     list.appendChild(li);
   });
-  for (let i = es.length; i < settings.mode; i++) list.appendChild(el('li', 'roster-item empty', '<span>Open slot</span>'));
+  for (let i = es.length; i < teamSize(); i++) list.appendChild(el('li', 'roster-item empty', `<span>${settings.mode === 6 && i === 6 ? 'Open slot (libero)' : 'Open slot'}</span>`));
   $('#roster-ovr').textContent = `Team rating ${teamOvr(es)}`;
 }
 $('#btn-reroll').addEventListener('click', () => {
@@ -1537,14 +1618,14 @@ $('#btn-reroll').addEventListener('click', () => {
 });
 function draftPick(mon) {
   draft.picks.push(mon);
-  if (draft.picks.length >= settings.mode - 1) { buildTeams(); renderMatchup(); show('scr-matchup'); return; }
+  if (draft.picks.length >= teamSize() - 1) { buildTeams(); renderMatchup(); show('scr-matchup'); return; }
   makeOffers(); renderDraft();
   const f = document.querySelector('#offers .card'); if (f) f.focus();
 }
 
 function buildTeams() {
   const mine = [makeEntry(draft.starter, true), ...draft.picks.map(m => makeEntry(m, false))];
-  const n = settings.mode;
+  const n = teamSize();
   const myDrafted = draft.picks.length ? draft.picks.reduce((a, m) => a + m.ovr, 0) / draft.picks.length : 55;
   const target = myDrafted + DIFF[settings.diff].teamOffset;
   const rivalCap = BY_ID.get(pickOne(STARTERS.filter(id => id !== draft.starter.id)));
@@ -1592,13 +1673,14 @@ function renderMatchup() {
     if (n === 6) { // the starting rotation, seen from that team's side of the net
       const court = el('div', 'rot-court');
       court.appendChild(el('div', 'rot-net', 'NET'));
+      const lib = lu[6], subbed = [0, 4, 5].find(i => lu[i].role === 'MB'); // the libero takes the back-row middle's place
       for (const z of [4, 3, 2, 5, 6, 1]) {
-        const { entry: e, role } = lu[z - 1];
+        const { entry: e, role } = z - 1 === subbed ? lib : lu[z - 1];
         const you = s === 0 && e === teams[0][0];
-        court.appendChild(el('div', 'rot-cell' + (you ? ' you' : ''), `<i>${z}</i><b>${ROLES[role].short}</b><span>${e.mon.name}</span>`));
+        court.appendChild(el('div', 'rot-cell' + (you ? ' you' : '') + (role === 'L' ? ' lib' : ''), `<i>${z}</i><b>${ROLES[role].short}</b><span>${e.mon.name}</span>`));
       }
       box.appendChild(court);
-      box.appendChild(el('p', 'rot-note', 'Starting rotation. Zone 1 serves. When your team wins back the serve, everyone rotates one zone clockwise.'));
+      box.appendChild(el('p', 'rot-note', `Starting rotation. Zone 1 serves, and the team rotates one zone clockwise each time it wins back the serve. The libero (${lib.entry.mon.name}) always plays for the middle blocker in the back row, so only one middle is on court at a time; ${lu[subbed].entry.mon.name} starts on the bench.`));
     }
   }
   $('#mu-meta').textContent = `${n} v ${n} · ${cap(settings.diff)} · first to ${settings.target}, win by 2`;
@@ -1634,7 +1716,7 @@ function showResult() {
     const tbl = el('table', 'box');
     tbl.innerHTML = `<caption>${teamName(s)}</caption><thead><tr><th scope="col">Pokémon</th><th scope="col" title="Kills">K</th><th scope="col" title="Aces">A</th><th scope="col" title="Blocks">B</th><th scope="col" title="Digs">D</th><th scope="col" title="Sets">S</th></tr></thead>`;
     const tb = el('tbody');
-    for (const p of G.sides[s]) {
+    for (const p of G.all[s]) {
       const st = p.stats;
       tb.appendChild(el('tr', p.human ? 'you' : '', `<th scope="row">${p.mon.name}</th><td>${st.kills}</td><td>${st.aces}</td><td>${st.blocks}</td><td>${st.digs}</td><td>${st.sets}</td>`));
     }
@@ -1674,6 +1756,6 @@ if (AUTO) { // test mode: draft and play without input
   if (QS.get('diff')) settings.diff = QS.get('diff');
   if (QS.get('target')) settings.target = Number(QS.get('target'));
   buildPick(); startDraft(BY_ID.get(Number(QS.get('starter')) || 25));
-  while (draft.picks.length < settings.mode - 1) { draft.picks.push(draft.offers[0]); makeOffers(); }
+  while (draft.picks.length < teamSize() - 1) { draft.picks.push(draft.offers[0]); makeOffers(); }
   buildTeams(); startMatch();
 }
