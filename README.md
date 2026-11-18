@@ -28,6 +28,9 @@ Phones get an on-screen pad.
 
 ## Draft
 
+The title screen only asks for team size (2 v 2 or 6 v 6) and shows the current match settings in a short summary. Teams, venue, time of day, difficulty, points and sets are on the Match settings screen, and all of them have defaults.
+
+
 1. Choose your position, then pick the Pokémon you control from three random offers suited to that position (you can ask for new offers twice). As captain it gets +14 to every rating.
 2. Each round shows 3 random Pokémon from the 151. Pick one. You get 2 rerolls per draft.
 3. The rival team is built to a similar rating, adjusted for the difficulty you chose.

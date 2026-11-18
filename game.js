@@ -2190,6 +2190,28 @@ function renderClubPick() {
 $('#opt-club').addEventListener('change', e => { settings.club[0] = e.target.value; renderClubPick(); });
 $('#opt-rival').addEventListener('change', e => { settings.club[1] = e.target.value; renderClubPick(); });
 renderClubPick();
+// Title screen: team size and a one-glance summary; the rest lives on the Match settings screen.
+function setsLabel() {
+  return settings.sets === 1 ? `1 set to ${settings.target}` : `Best of ${settings.sets}, sets to ${settings.target}`;
+}
+function renderSummary() {
+  const v = VENUES[settings.venue[settings.mode]];
+  const rival = settings.club[1] === 'random' ? 'a random rival' : CLUBS[settings.club[1]].name;
+  const rows = [
+    ['Teams', `${CLUBS[settings.club[0]].name} vs ${rival}`],
+    ['Venue', v.name + (settings.mode === 2 ? `, ${TIMES[settings.time].toLowerCase()}` : '')],
+    ['Rules', `${cap(settings.diff)} · ${setsLabel()}`],
+  ];
+  $('#setup-summary').innerHTML = rows.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join('');
+}
+$('#opt-mode').addEventListener('click', renderSummary);
+$('#btn-settings').addEventListener('click', () => {
+  renderVenuePick(); renderClubPick();
+  $('#settings-sub').textContent = `Settings for ${settings.mode} v ${settings.mode}. Everything has a default, so change only what you want.`;
+  show('scr-settings');
+});
+$('#btn-settings-done').addEventListener('click', () => { renderSummary(); show('scr-title'); $('#btn-start').focus(); });
+renderSummary();
 $('#btn-start').addEventListener('click', () => { Sfx.init(); buildPick(); show('scr-pick'); });
 
 // ---------- pick your position, then your Pokémon ----------
@@ -2410,7 +2432,7 @@ const val = p => (p.stats.kills + p.stats.aces + p.stats.blocks) * 3 + p.stats.d
 $('#btn-rematch').addEventListener('click', startMatch);
 $('#btn-redraft').addEventListener('click', () => { buildPick(); show('scr-pick'); });
 $('#btn-menu').addEventListener('click', () => show('scr-title'));
-for (const b of document.querySelectorAll('[data-back]')) b.addEventListener('click', () => show(b.dataset.back));
+for (const b of document.querySelectorAll('[data-back]')) b.addEventListener('click', () => { if (b.dataset.back === 'scr-title') renderSummary(); show(b.dataset.back); });
 
 // ---------- touch controls ----------
 const isTouch = matchMedia('(pointer: coarse)').matches;

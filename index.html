@@ -20,60 +20,20 @@
     <div class="setup">
       <fieldset>
         <legend>Team size</legend>
-        <div class="seg" id="opt-mode">
-          <button type="button" data-v="2" aria-pressed="true" data-autofocus>2 v 2</button>
-          <button type="button" data-v="6" aria-pressed="false">6 v 6</button>
+        <div class="seg mode-pick" id="opt-mode">
+          <button type="button" data-v="2" aria-pressed="true"><b>2 v 2</b><span>On the sand</span></button>
+          <button type="button" data-v="6" aria-pressed="false"><b>6 v 6</b><span>In the arena</span></button>
         </div>
       </fieldset>
-      <fieldset class="clubs">
-        <legend>Teams</legend>
-        <div class="club-row">
-          <label for="opt-club">Your team</label>
-          <span class="club-pick"><span class="swatch" id="sw-club" aria-hidden="true"></span><select id="opt-club"></select></span>
-        </div>
-        <div class="club-row">
-          <label for="opt-rival">Rival</label>
-          <span class="club-pick"><span class="swatch" id="sw-rival" aria-hidden="true"></span><select id="opt-rival"></select></span>
-        </div>
-      </fieldset>
-      <fieldset>
-        <legend>Venue</legend>
-        <div class="seg" id="opt-venue"></div>
-        <p class="role-desc" id="venue-desc"></p>
-      </fieldset>
-      <fieldset id="time-pick">
-        <legend>Time of day</legend>
-        <div class="seg" id="opt-time"></div>
-      </fieldset>
-      <fieldset>
-        <legend>Difficulty</legend>
-        <div class="seg" id="opt-diff">
-          <button type="button" data-v="easy" aria-pressed="false">Easy</button>
-          <button type="button" data-v="normal" aria-pressed="true">Normal</button>
-          <button type="button" data-v="hard" aria-pressed="false">Hard</button>
-        </div>
-      </fieldset>
-      <fieldset>
-        <legend>Points per set</legend>
-        <div class="seg" id="opt-target">
-          <button type="button" data-v="11" aria-pressed="false">11</button>
-          <button type="button" data-v="15" aria-pressed="true">15</button>
-          <button type="button" data-v="25" aria-pressed="false">25</button>
-        </div>
-      </fieldset>
-      <fieldset>
-        <legend>Sets</legend>
-        <div class="seg" id="opt-sets">
-          <button type="button" data-v="1" aria-pressed="true">1 set</button>
-          <button type="button" data-v="3" aria-pressed="false">Best of 3</button>
-          <button type="button" data-v="5" aria-pressed="false">Best of 5</button>
-        </div>
-      </fieldset>
-      <button type="button" class="cta" id="btn-start">Choose your position</button>
+      <dl class="summary" id="setup-summary"></dl>
+      <div class="setup-actions">
+        <button type="button" class="cta" id="btn-start" data-autofocus>Choose your position</button>
+        <button type="button" class="ghost" id="btn-settings">Match settings</button>
+      </div>
     </div>
 
-    <div class="howto">
-      <h2>How to play</h2>
+    <details class="howto">
+      <summary><h2>How to play</h2></summary>
       <ul class="keys">
         <li><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> or arrow keys<span>Move around the court</span></li>
         <li><kbd>Space</kbd><span>Jump</span></li>
@@ -83,7 +43,73 @@
       </ul>
       <p>The camera sits behind your team, looking at the net. Touch the ball without pressing anything and you pass it to a teammate automatically. Each side gets 3 touches. An orange ring on the sand shows where the ball will land, and when a teammate sets you a green ring shows where to jump. When you spike, it goes to the open spot on its own; hold left or right to aim across, forward for a short shot or back to hit deep. To block, stand at the net and jump just after the other team's hitter jumps. A red ring at the net shows where, and flashes JUMP when it is time. Before the draft you choose your position, and you get three Pokémon suited to it to pick from: Setter, Outside hitter, Middle blocker, Opposite or Libero in 6 v 6 (with real rotations and the overlap rule: stand on the green YOUR SPOT ring when the ball is served), or Blocker or Defender in 2 v 2.</p>
       <p>Ratings come from each Pokémon's base stats: <b>SPD</b> from Speed, <b>JMP</b> from Speed and Attack (heavy Pokémon jump lower), <b>PWR</b> from Attack and Sp. Atk, <b>DEF</b> from HP and Defense, <b>SKL</b> from Sp. Atk and Sp. Def.</p>
+    </details>
+  </section>
+
+  <section id="scr-settings" class="screen" hidden>
+    <header class="bar-head">
+      <button type="button" class="ghost" data-back="scr-title">← Back</button>
+      <div>
+        <h2>Match settings</h2>
+        <p class="sub" id="settings-sub">Everything here has a default, so change only what you want.</p>
+      </div>
+    </header>
+    <div class="settings-grid">
+      <section class="panel set-group" aria-labelledby="sg-teams">
+        <h3 id="sg-teams">Teams</h3>
+        <fieldset class="clubs">
+          <legend class="vh">Teams</legend>
+          <div class="club-row">
+            <label for="opt-club">Your team</label>
+            <span class="club-pick"><span class="swatch" id="sw-club" aria-hidden="true"></span><select id="opt-club"></select></span>
+          </div>
+          <div class="club-row">
+            <label for="opt-rival">Rival</label>
+            <span class="club-pick"><span class="swatch" id="sw-rival" aria-hidden="true"></span><select id="opt-rival"></select></span>
+          </div>
+        </fieldset>
+      </section>
+      <section class="panel set-group" aria-labelledby="sg-venue">
+        <h3 id="sg-venue">Venue</h3>
+        <fieldset>
+          <legend class="vh">Venue</legend>
+          <div class="seg" id="opt-venue"></div>
+          <p class="role-desc" id="venue-desc"></p>
+        </fieldset>
+        <fieldset id="time-pick">
+          <legend>Time of day</legend>
+          <div class="seg" id="opt-time"></div>
+        </fieldset>
+      </section>
+      <section class="panel set-group" aria-labelledby="sg-rules">
+        <h3 id="sg-rules">Rules</h3>
+        <fieldset>
+          <legend>Difficulty</legend>
+          <div class="seg" id="opt-diff">
+            <button type="button" data-v="easy" aria-pressed="false">Easy</button>
+            <button type="button" data-v="normal" aria-pressed="true">Normal</button>
+            <button type="button" data-v="hard" aria-pressed="false">Hard</button>
+          </div>
+        </fieldset>
+        <fieldset>
+          <legend>Points per set</legend>
+          <div class="seg" id="opt-target">
+            <button type="button" data-v="11" aria-pressed="false">11</button>
+            <button type="button" data-v="15" aria-pressed="true">15</button>
+            <button type="button" data-v="25" aria-pressed="false">25</button>
+          </div>
+        </fieldset>
+        <fieldset>
+          <legend>Sets</legend>
+          <div class="seg" id="opt-sets">
+            <button type="button" data-v="1" aria-pressed="true">1 set</button>
+            <button type="button" data-v="3" aria-pressed="false">Best of 3</button>
+            <button type="button" data-v="5" aria-pressed="false">Best of 5</button>
+          </div>
+        </fieldset>
+      </section>
     </div>
+    <button type="button" class="cta" id="btn-settings-done" data-autofocus>Done</button>
   </section>
 
   <section id="scr-pick" class="screen" hidden>
