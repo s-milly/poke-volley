@@ -1079,7 +1079,6 @@ function drawPlayer(p) {
   const back = p.side === 0, f = proj(p.x, p.y, p.z);
   const img = spriteImg(p.mon.id, back), box = SPRITE_BOX[p.mon.id];
   if (Math.abs(p.vx) > 0.6) p.flip = back ? p.vx < 0 : p.vx > 0;
-  let topY;
   if (img.complete && img.naturalWidth) {
     const [sx, sy, sw, sh] = back ? box.slice(4) : box.slice(0, 4);
     const k = p.rr * 3.3 * (back ? 1 : 1.3) * f.k / sh; // the far team is drawn a bit larger so it reads at a distance
@@ -1087,20 +1086,9 @@ function drawPlayer(p) {
     ctx.save(); ctx.translate(f.x, f.y); if (p.flip) ctx.scale(-1, 1);
     ctx.drawImage(img, sx, sy, sw, sh, -w / 2, -h, w, h);
     ctx.restore();
-    topY = f.y - h;
   } else { // fallback while sprites load
     const c = proj(p.x, p.cy, p.z), r = p.rr * c.k;
     drawMon(ctx, p.mon, c.x, c.y, r, { face: p.face, back, squash: p.squash, time: G.time });
-    topY = c.y - r;
-  }
-  // name tags: everyone in 2 v 2; in 6 v 6 only you, everyone else gets a small team marker
-  const tx = f.x * S, ty = topY * S;
-  if (settings.mode === 2 || p.human) {
-    const name = p.mon.name.toUpperCase(), w = name.length * 8 + 6;
-    pxRect(tx - w / 2, ty - 13, w, 11, p.human ? '#ffe14a' : TEAM_COLORS[p.side]);
-    pxText(name, tx + 0.5, ty - 11, p.human ? '#2a2200' : '#ffffff', 8, 'center', null);
-  } else {
-    pxRect(tx - 2, ty - 6, 4, 3, TEAM_COLORS[p.side]);
   }
 }
 
