@@ -2201,7 +2201,7 @@ function seg(group, key) {
     settings[key] = key === 'diff' ? b.dataset.v : Number(b.dataset.v);
   });
 }
-seg('#opt-mode', 'mode'); seg('#opt-diff', 'diff'); seg('#opt-target', 'target'); seg('#opt-sets', 'sets');
+seg('#opt-diff', 'diff'); seg('#opt-target', 'target'); seg('#opt-sets', 'sets');
 // Settings are kept between visits (not in test mode). Anything stale or unknown falls back to the default.
 const SAVE_KEY = 'volleydex-settings';
 function saveSettings() { if (!AUTO) try { localStorage.setItem(SAVE_KEY, JSON.stringify(settings)); } catch (e) {} }
@@ -2219,7 +2219,7 @@ function loadSettings() {
   }
   if (Array.isArray(o.club) && CLUBS[o.club[0]]) settings.club[0] = o.club[0];
   if (Array.isArray(o.club) && (CLUBS[o.club[1]] || o.club[1] === 'random')) settings.club[1] = o.club[1];
-  for (const [box, key] of [['#opt-mode', 'mode'], ['#opt-diff', 'diff'], ['#opt-target', 'target'], ['#opt-sets', 'sets']])
+  for (const [box, key] of [['#opt-diff', 'diff'], ['#opt-target', 'target'], ['#opt-sets', 'sets']])
     for (const b of document.querySelectorAll(`${box} button`)) b.setAttribute('aria-pressed', String(b.dataset.v === String(settings[key])));
 }
 if (!AUTO) loadSettings();
@@ -2231,6 +2231,7 @@ function renderVenuePick() {
     b.addEventListener('click', () => { settings.venue[settings.mode] = id; renderVenuePick(); });
     box.appendChild(b);
   }
+  $('#venue-sub').textContent = settings.mode === 2 ? '2 v 2 on the sand. Pick a beach and a time of day.' : '6 v 6 in the arena. Arenas are indoors, so there is no time of day to pick.';
   $('#venue-desc').textContent = VENUE_DESC[settings.venue[settings.mode]];
   const tbox = $('#opt-time'); tbox.innerHTML = '';
   $('#time-pick').hidden = settings.mode !== 2; // the arenas are indoors
@@ -2240,7 +2241,6 @@ function renderVenuePick() {
     tbox.appendChild(b);
   }
 }
-$('#opt-mode').addEventListener('click', renderVenuePick);
 renderVenuePick();
 function renderClubPick() {
   if (settings.club[1] === settings.club[0]) settings.club[1] = 'random';
@@ -2262,27 +2262,8 @@ function renderClubPick() {
   }
 }
 renderClubPick();
-// Title screen: team size, a match ticket (clubs and rules) and the stage; the rest lives on the Match settings screen.
-function setsLabel() {
-  return settings.sets === 1 ? `1 set to ${settings.target}` : `Best of ${settings.sets}, sets to ${settings.target}`;
-}
+// Menu flow: game mode on the title screen, then teams, then venue, time of day and rules.
 function renderSummary() {
-  const v = VENUES[settings.venue[settings.mode]];
-  const name = id => id === 'random' ? 'Random rival' : CLUBS[id].name;
-  const team = id => {
-    const c = id === 'random' ? null : CLUBS[id];
-    return `<span class="tt" style="--cc:${c ? c.color : '#5b6a92'}">${crestImg(id, 56)}<b>${name(id)}</b><span>${c ? c.abbr : 'Any club'}</span></span>`;
-  };
-  const tb = $('#ticket-teams');
-  tb.innerHTML = team(settings.club[0]) + '<span class="tt-vs">VS</span>' + team(settings.club[1]);
-  tb.setAttribute('aria-label', `Teams: ${name(settings.club[0])} versus ${name(settings.club[1])}. Change teams`);
-  const rows = [
-    ['venue', 'Venue', v.name + (settings.mode === 2 ? `, ${TIMES[settings.time].toLowerCase()}` : '')],
-    ['level', 'Level', cap(settings.diff)],
-    ['format', 'Format', setsLabel()],
-  ];
-  $('#setup-summary').innerHTML = rows.map(([go, k, val]) =>
-    `<button type="button" data-go="${go}" aria-label="${k}: ${val}. Change"><span class="tm-k">${k}</span><span class="tm-v">${val}</span></button>`).join('');
   // the demo scoreboard wears the same clubs
   const rows2 = document.querySelectorAll('#bug .bug-row');
   settings.club.forEach((id, k) => {
@@ -2292,21 +2273,6 @@ function renderSummary() {
   saveSettings();
   renderScene();
 }
-// Ticket parts open the Match settings screen at the matching group, and Done comes back to the same part.
-let settingsFrom = null;
-function openSettings(go) {
-  renderVenuePick(); renderClubPick();
-  $('#settings-sub').textContent = `Settings for ${settings.mode} v ${settings.mode}. Everything has a default, so change only what you want.`;
-  show('scr-settings');
-  if (!go) return;
-  settingsFrom = go;
-  const box = $({ teams: '#sg-teams', venue: '#sg-venue', level: '#sg-rules', format: '#sg-rules' }[go]).closest('section');
-  const target = $({ teams: '#opt-club', venue: '#opt-venue', level: '#opt-diff', format: '#opt-target' }[go] + ' [aria-pressed="true"]');
-  if (target) target.focus({ preventScroll: true });
-  box.scrollIntoView({ block: 'center', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
-  box.classList.add('hl'); setTimeout(() => box.classList.remove('hl'), 1400);
-}
-$('.ticket').addEventListener('click', e => { const b = e.target.closest('[data-go]'); if (b) openSettings(b.dataset.go); });
 
 // ---- Title scene: the chosen venue's sky over a court, a net and two teams of Pokémon in a rally. ----
 // Drawn at 2x: a 560x220 canvas behind a 440 px tall stage, with the sprites, net and ball laid over it in CSS px.
@@ -2492,14 +2458,14 @@ let sceneW = innerWidth;
 addEventListener('resize', () => { if (Math.abs(innerWidth - sceneW) > 40 && !$('#scr-title').hidden) { sceneW = innerWidth; renderScene(); } });
 $('#scr-title').classList.add('intro');
 setTimeout(() => $('#scr-title').classList.remove('intro'), 1200);
-$('#opt-mode').addEventListener('click', renderSummary);
-$('#btn-settings').addEventListener('click', () => { settingsFrom = null; openSettings(); });
-$('#btn-settings-done').addEventListener('click', () => {
-  renderSummary(); show('scr-title');
-  (settingsFrom ? $(`.ticket [data-go="${settingsFrom}"]`) : $('#btn-settings')).focus();
+$('#opt-mode').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  Sfx.init(); settings.mode = Number(b.dataset.v); saveSettings();
+  renderClubPick(); show('scr-team');
 });
+$('#btn-team-next').addEventListener('click', () => { renderSummary(); renderVenuePick(); show('scr-venue'); });
 renderSummary();
-$('#btn-start').addEventListener('click', () => { Sfx.init(); buildPick(); show('scr-pick'); });
+$('#btn-start').addEventListener('click', () => { Sfx.init(); saveSettings(); buildPick(); show('scr-pick'); });
 // Quick match: the best fit of your three captain offers, then the strongest Pokémon of each draft round.
 $('#btn-quick').addEventListener('click', () => {
   Sfx.init(); buildPick();

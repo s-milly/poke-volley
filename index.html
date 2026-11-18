@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>VolleyDex: Gen 1 Draft Volleyball</title>
 <meta name="description" content="Pick a Gen 1 Pokémon, draft teammates by their stats, and play arcade volleyball in the browser.">
-<link rel="stylesheet" href="style.css?v=4">
+<link rel="stylesheet" href="style.css?v=5">
 </head>
 <body class="on-title">
 <main id="menu">
@@ -36,34 +36,19 @@
     </div>
 
     <div class="setup">
-      <div class="setup-main">
-        <fieldset>
-          <legend>Team size</legend>
-          <div class="seg mode-pick" id="opt-mode">
-            <button type="button" data-v="2" aria-pressed="true">
-              <svg viewBox="0 0 64 36" aria-hidden="true"><rect x="2" y="2" width="60" height="32"/><path d="M32 0v36"/><circle cx="14" cy="12" r="3"/><circle cx="20" cy="24" r="3"/><circle cx="44" cy="12" r="3"/><circle cx="50" cy="24" r="3"/></svg>
-              <b>2 v 2</b><span>On the sand</span>
-            </button>
-            <button type="button" data-v="6" aria-pressed="false">
-              <svg viewBox="0 0 64 36" aria-hidden="true"><rect x="2" y="2" width="60" height="32"/><path d="M32 0v36"/><circle cx="11" cy="9" r="2.5"/><circle cx="11" cy="18" r="2.5"/><circle cx="11" cy="27" r="2.5"/><circle cx="23" cy="9" r="2.5"/><circle cx="23" cy="18" r="2.5"/><circle cx="23" cy="27" r="2.5"/><circle cx="41" cy="9" r="2.5"/><circle cx="41" cy="18" r="2.5"/><circle cx="41" cy="27" r="2.5"/><circle cx="53" cy="9" r="2.5"/><circle cx="53" cy="18" r="2.5"/><circle cx="53" cy="27" r="2.5"/></svg>
-              <b>6 v 6</b><span>In the arena</span>
-            </button>
-          </div>
-        </fieldset>
-        <button type="button" class="cta big" id="btn-start" data-autofocus><span aria-hidden="true">▶</span> Choose your position</button>
-        <div class="quick-row">
-          <button type="button" class="ghost small" id="btn-quick" aria-describedby="quick-hint">Quick match</button>
-          <p class="start-hint" id="quick-hint">Skips the draft: your team is picked for you.</p>
+      <fieldset>
+        <legend>Choose a game mode</legend>
+        <div class="mode-pick" id="opt-mode">
+          <button type="button" data-v="2" data-autofocus>
+            <svg viewBox="0 0 64 36" aria-hidden="true"><rect x="2" y="2" width="60" height="32"/><path d="M32 0v36"/><circle cx="14" cy="12" r="3"/><circle cx="20" cy="24" r="3"/><circle cx="44" cy="12" r="3"/><circle cx="50" cy="24" r="3"/></svg>
+            <b>2 v 2</b><span>On the sand</span><em aria-hidden="true">▶</em>
+          </button>
+          <button type="button" data-v="6">
+            <svg viewBox="0 0 64 36" aria-hidden="true"><rect x="2" y="2" width="60" height="32"/><path d="M32 0v36"/><circle cx="11" cy="9" r="2.5"/><circle cx="11" cy="18" r="2.5"/><circle cx="11" cy="27" r="2.5"/><circle cx="23" cy="9" r="2.5"/><circle cx="23" cy="18" r="2.5"/><circle cx="23" cy="27" r="2.5"/><circle cx="41" cy="9" r="2.5"/><circle cx="41" cy="18" r="2.5"/><circle cx="41" cy="27" r="2.5"/><circle cx="53" cy="9" r="2.5"/><circle cx="53" cy="18" r="2.5"/><circle cx="53" cy="27" r="2.5"/></svg>
+            <b>6 v 6</b><span>In the arena</span><em aria-hidden="true">▶</em>
+          </button>
         </div>
-      </div>
-      <section class="ticket" aria-labelledby="ticket-h">
-        <header>
-          <h2 id="ticket-h">Your match</h2>
-          <button type="button" class="ghost small" id="btn-settings">Edit settings</button>
-        </header>
-        <button type="button" class="ticket-teams" id="ticket-teams" data-go="teams"></button>
-        <div class="ticket-meta" id="setup-summary"></div>
-      </section>
+      </fieldset>
     </div>
 
     <details class="howto">
@@ -80,17 +65,16 @@
     </details>
   </section>
 
-  <section id="scr-settings" class="screen" hidden>
+  <section id="scr-team" class="screen" hidden>
     <header class="bar-head">
       <button type="button" class="ghost" data-back="scr-title">← Back</button>
       <div>
-        <h2>Match settings</h2>
-        <p class="sub" id="settings-sub">Everything here has a default, so change only what you want.</p>
+        <h2>Choose your team</h2>
+        <p class="sub" id="team-sub">Pick the club you play for, then the club you face.</p>
       </div>
     </header>
     <div class="settings-grid">
-      <section class="panel set-group" aria-labelledby="sg-teams">
-        <h3 id="sg-teams">Teams</h3>
+      <section class="panel set-group" aria-label="Teams">
         <fieldset class="club-set">
           <legend>Your team</legend>
           <div class="club-grid" id="opt-club"></div>
@@ -102,6 +86,19 @@
           <p class="club-name" id="opt-rival-name" aria-live="polite"></p>
         </fieldset>
       </section>
+    </div>
+    <button type="button" class="cta step-next" id="btn-team-next" data-autofocus>Next: venue <span aria-hidden="true">▶</span></button>
+  </section>
+
+  <section id="scr-venue" class="screen" hidden>
+    <header class="bar-head">
+      <button type="button" class="ghost" data-back="scr-team">← Back</button>
+      <div>
+        <h2>Venue and time of day</h2>
+        <p class="sub" id="venue-sub"></p>
+      </div>
+    </header>
+    <div class="settings-grid">
       <section class="panel set-group" aria-labelledby="sg-venue">
         <h3 id="sg-venue">Venue</h3>
         <fieldset>
@@ -142,12 +139,18 @@
         </fieldset>
       </section>
     </div>
-    <button type="button" class="cta" id="btn-settings-done" data-autofocus>Done</button>
+    <div class="step-actions">
+      <button type="button" class="cta big" id="btn-start" data-autofocus><span aria-hidden="true">▶</span> Choose your position</button>
+      <div class="quick-row">
+        <button type="button" class="ghost small" id="btn-quick" aria-describedby="quick-hint">Quick match</button>
+        <p class="start-hint" id="quick-hint">Skips the draft: your team is picked for you.</p>
+      </div>
+    </div>
   </section>
 
   <section id="scr-pick" class="screen" hidden>
     <header class="bar-head">
-      <button type="button" class="ghost" data-back="scr-title">← Back</button>
+      <button type="button" class="ghost" data-back="scr-venue">← Back</button>
       <div>
         <h2>Choose your position</h2>
         <p class="sub" id="pick-help">Pick where you play, then choose your Pokémon from three offers suited to that spot. As captain it gets +14 to every rating.</p>
@@ -242,8 +245,8 @@
   </div>
 </div>
 
-<script src="data.js?v=4"></script>
-<script src="sprites.js?v=4"></script>
-<script src="game.js?v=4"></script>
+<script src="data.js?v=5"></script>
+<script src="sprites.js?v=5"></script>
+<script src="game.js?v=5"></script>
 </body>
 </html>
