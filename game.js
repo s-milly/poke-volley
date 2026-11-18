@@ -1190,9 +1190,11 @@ function groundEllipse(x, z, rw, rd) { // an ellipse lying flat on the sand
 }
 
 // ===================== drawing: scene =====================
-// The game is drawn at a low resolution (LW x LH) and scaled up with hard pixel edges.
-// World drawing uses 1280 x 720 coordinates under a scale of S; text and the HUD use low-res pixels.
-const LW = 480, LH = 270, S = LW / W;
+// The game is drawn at LW x LH and scaled up with hard pixel edges.
+// World drawing uses 1280 x 720 coordinates under a scale of S. The HUD, text and the painted backdrops are laid
+// out on a 480 x 270 grid (UW x UH) and drawn at U times that size, so the pixel font stays crisp.
+const LW = 960, LH = 540, S = LW / W;
+const UW = 480, UH = 270, US = UW / W, U = LW / UW;
 const PX_FONT = '"Press Start 2P", monospace';
 
 // Sprites: front for the other team, back for yours (Pokémon FireRed/LeafGreen sprites).
@@ -1204,7 +1206,7 @@ function spriteImg(id, back) {
 }
 
 function pxText(text, x, y, color, size = 8, align = 'center', outline = '#10141f') {
-  ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.save(); ctx.setTransform(U, 0, 0, U, 0, 0);
   ctx.font = `${size}px ${PX_FONT}`; ctx.textAlign = align; ctx.textBaseline = 'top';
   x = Math.round(x); y = Math.round(y);
   if (outline) {
@@ -1214,8 +1216,8 @@ function pxText(text, x, y, color, size = 8, align = 'center', outline = '#10141
   ctx.fillStyle = color; ctx.fillText(text, x, y);
   ctx.restore();
 }
-function pxRect(x, y, w, h, col) { // low-res pixels, whatever the current transform
-  ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0);
+function pxRect(x, y, w, h, col) { // UI grid pixels, whatever the current transform
+  ctx.save(); ctx.setTransform(U, 0, 0, U, 0, 0);
   ctx.fillStyle = col; ctx.fillRect(Math.round(x), Math.round(y), Math.round(w), Math.round(h));
   ctx.restore();
 }
@@ -1226,27 +1228,27 @@ function pixelDisc(g, cx, cy, r, col) {
 
 let skyCache = null;
 function buildSky() {
-  const c = document.createElement('canvas'); c.width = LW; c.height = LH; const g = c.getContext('2d');
-  const hy = Math.round(horizonY() * S);
+  const c = document.createElement('canvas'); c.width = UW; c.height = UH; const g = c.getContext('2d');
+  const hy = Math.round(horizonY() * US);
   const bands = ['#3c9fe4', '#4aa8e9', '#58b2ed', '#68bcf0', '#7ac6f3', '#8ed0f6', '#a6dbf8', '#bfe6fa'];
   const bh = Math.ceil((hy - 12) / bands.length);
-  bands.forEach((col, i) => { g.fillStyle = col; g.fillRect(0, i * bh, LW, bh); });
+  bands.forEach((col, i) => { g.fillStyle = col; g.fillRect(0, i * bh, UW, bh); });
   pixelDisc(g, 412, 30, 15, '#fff3b8'); pixelDisc(g, 412, 30, 12, '#fffbe0');
   for (const [cx, cy, s] of [[70, 34, 1], [190, 22, 0.7], [300, 44, 0.9], [450, 70, 0.55]]) {
     for (const [dx, dy, r] of [[0, 4, 10], [12, -2, 11], [25, 3, 9], [36, 6, 7]]) pixelDisc(g, Math.round(cx + dx * s), Math.round(cy + dy * s), Math.round(r * s), '#ffffff');
     g.fillStyle = '#dceffa'; g.fillRect(Math.round(cx - 9 * s), Math.round(cy + 11 * s), Math.round(52 * s), 2);
   }
   // sea
-  g.fillStyle = '#2f86c8'; g.fillRect(0, hy - 12, LW, 6);
-  g.fillStyle = '#3a98d6'; g.fillRect(0, hy - 6, LW, 7);
-  g.fillStyle = '#56b4e2'; g.fillRect(0, hy + 1, LW, 6);
+  g.fillStyle = '#2f86c8'; g.fillRect(0, hy - 12, UW, 6);
+  g.fillStyle = '#3a98d6'; g.fillRect(0, hy - 6, UW, 7);
+  g.fillStyle = '#56b4e2'; g.fillRect(0, hy + 1, UW, 6);
   g.fillStyle = '#e8f7ff';
-  for (let i = 0; i < 26; i++) g.fillRect((i * 37) % LW, hy - 10 + (i * 5) % 16, 6, 1);
-  g.fillStyle = '#ffffff'; g.fillRect(0, hy + 7, LW, 1);
+  for (let i = 0; i < 26; i++) g.fillRect((i * 37) % UW, hy - 10 + (i * 5) % 16, 6, 1);
+  g.fillStyle = '#ffffff'; g.fillRect(0, hy + 7, UW, 1);
   // sand with a dither
-  g.fillStyle = '#f0dba2'; g.fillRect(0, hy + 8, LW, LH - hy - 8);
+  g.fillStyle = '#f0dba2'; g.fillRect(0, hy + 8, UW, UH - hy - 8);
   g.fillStyle = '#e4c98a';
-  for (let y = hy + 10; y < LH; y += 3) for (let x = (y * 7) % 11; x < LW; x += 11) g.fillRect(x, y, 1, 1);
+  for (let y = hy + 10; y < UH; y += 3) for (let x = (y * 7) % 11; x < UW; x += 11) g.fillRect(x, y, 1, 1);
   // palms
   for (const [px, sc] of [[24, 1.1], [80, 0.75], [392, 0.8], [456, 1.1]]) {
     const by = hy + 12, h = Math.round(44 * sc);
@@ -1267,16 +1269,16 @@ function seeded(n) { return () => ((n = (n * 1664525 + 1013904223) >>> 0) / 4294
 
 // Indoor backdrop, drawn once at low resolution: arena walls, light rigs and banners above, the blue floor below.
 function buildArena() {
-  const c = document.createElement('canvas'); c.width = LW; c.height = LH; const g = c.getContext('2d');
-  const hy = Math.round(horizonY() * S);
+  const c = document.createElement('canvas'); c.width = UW; c.height = UH; const g = c.getContext('2d');
+  const hy = Math.round(horizonY() * US);
   const bands = ['#0f1424', '#141a2e', '#182038', '#1c2642', '#212c4c', '#263256'];
   const bh = Math.ceil(hy / bands.length);
-  bands.forEach((col, i) => { g.fillStyle = col; g.fillRect(0, i * bh, LW, bh); });
+  bands.forEach((col, i) => { g.fillStyle = col; g.fillRect(0, i * bh, UW, bh); });
   // light rigs
   for (let row = 0; row < 2; row++) {
     const y = 8 + row * 14;
-    g.fillStyle = '#2d3550'; g.fillRect(0, y + 3, LW, 2);
-    for (let x = 6 + row * 10; x < LW; x += 22) {
+    g.fillStyle = '#2d3550'; g.fillRect(0, y + 3, UW, 2);
+    for (let x = 6 + row * 10; x < UW; x += 22) {
       g.fillStyle = '#fff6d0'; g.fillRect(x, y, 6, 3);
       g.fillStyle = 'rgba(255,246,208,0.12)'; g.fillRect(x - 3, y + 3, 12, 10);
     }
@@ -1291,14 +1293,14 @@ function buildArena() {
     g.fillStyle = col; g.fillRect(x, 58, 9, 3);
   }
   // upper concourse glow along the wall
-  g.fillStyle = '#323c62'; g.fillRect(0, hy - 34, LW, 3);
-  g.fillStyle = '#3c4772'; g.fillRect(0, hy - 31, LW, 31);
+  g.fillStyle = '#323c62'; g.fillRect(0, hy - 34, UW, 3);
+  g.fillStyle = '#3c4772'; g.fillRect(0, hy - 31, UW, 31);
   g.fillStyle = '#2a3354';
-  for (let x = 0; x < LW; x += 6) g.fillRect(x, hy - 31 + ((x / 6) % 2) * 2, 3, 31);
+  for (let x = 0; x < UW; x += 6) g.fillRect(x, hy - 31 + ((x / 6) % 2) * 2, 3, 31);
   // floor: blue free zone with faint boards
-  g.fillStyle = '#2f5d9e'; g.fillRect(0, hy, LW, LH - hy);
+  g.fillStyle = '#2f5d9e'; g.fillRect(0, hy, UW, UH - hy);
   g.fillStyle = '#2a5592';
-  for (let y = hy + 2; y < LH; y += 4) g.fillRect(0, y, LW, 1);
+  for (let y = hy + 2; y < UH; y += 4) g.fillRect(0, y, UW, 1);
   return c;
 }
 
@@ -1481,7 +1483,7 @@ function render() {
     const bad = overlaps(0).includes(you);
     ctx.strokeStyle = bad ? '#ff4d4d' : '#50e68c'; ctx.lineWidth = 4;
     groundEllipse(you.homeX, you.homeZ, 0.55, 0.55); ctx.stroke();
-    const lab = proj(you.homeX, 0, you.homeZ); labels.push(['YOUR SPOT', lab.x * S, lab.y * S + 6, bad ? '#ff8a8a' : '#7dffb0']);
+    const lab = proj(you.homeX, 0, you.homeZ); labels.push(['YOUR SPOT', lab.x * US, lab.y * US + 6, bad ? '#ff8a8a' : '#7dffb0']);
   }
   if (G.phase === 'rally') {
     const tl = timeToY(b, BR);
@@ -1497,7 +1499,7 @@ function render() {
         ctx.strokeStyle = up ? '#ff4d4d' : 'rgba(255,90,90,0.75)'; ctx.lineWidth = 6;
         groundEllipse(bx, bz, 0.7, 0.4); ctx.stroke();
         const lab = proj(bx, 0, bz);
-        if (!up || Math.floor(G.time * 8) % 2 === 0) labels.push([up ? 'JUMP!' : 'BLOCK HERE', lab.x * S, lab.y * S + 6, '#ff8a8a']);
+        if (!up || Math.floor(G.time * 8) % 2 === 0) labels.push([up ? 'JUMP!' : 'BLOCK HERE', lab.x * US, lab.y * US + 6, '#ff8a8a']);
       }
     }
     if (you && !AUTO && G.intended[0] === you && G.lastSide === 0) {
@@ -1506,7 +1508,7 @@ function render() {
         const mx = b.x + b.vx * tc, mz = b.z + b.vz * tc;
         ctx.strokeStyle = '#50e68c'; ctx.lineWidth = 6;
         groundEllipse(mx, mz, 0.6, 0.6); ctx.stroke(); groundEllipse(mx, mz, 0.25, 0.25); ctx.stroke();
-        const lab = proj(mx, 0, mz); labels.push(['JUMP + HIT', lab.x * S, lab.y * S + 6, '#7dffb0']);
+        const lab = proj(mx, 0, mz); labels.push(['JUMP + HIT', lab.x * US, lab.y * US + 6, '#7dffb0']);
       }
     }
   }
@@ -1525,19 +1527,19 @@ function render() {
   ctx.restore();
 
   const bp = proj(b.x, b.y, b.z);
-  if (bp.y < 0) { ctx.setTransform(1, 0, 0, 1, 0, 0); pxRect(bp.x * S - 3, 2, 6, 3, '#ffffff'); pxRect(bp.x * S - 1, 5, 2, 2, '#ffffff'); }
+  if (bp.y < 0) { ctx.setTransform(1, 0, 0, 1, 0, 0); pxRect(bp.x * US - 3, 2, 6, 3, '#ffffff'); pxRect(bp.x * US - 1, 5, 2, 2, '#ffffff'); }
   for (const l of labels) pxText(l[0], l[1], l[2], l[3]);
   for (const t of G.texts) if (!t.big) {
     const k = t.t / t.life, p = proj(t.x, t.y, t.z);
     if (k > 0.8 && Math.floor(t.t * 20) % 2) continue; // blink out
-    pxText(t.text.toUpperCase(), p.x * S, p.y * S - t.t * 16, t.color, t.size > 24 ? 16 : 8);
+    pxText(t.text.toUpperCase(), p.x * US, p.y * US - t.t * 16, t.color, t.size > 24 ? 16 : 8);
   }
   drawHud();
 }
 
 function drawHud() {
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
-  const cx = LW / 2;
+  ctx.setTransform(U, 0, 0, U, 0, 0);
+  const cx = UW / 2;
   pxRect(cx - 122, 3, 244, 40, '#10141f');
   pxRect(cx - 120, 5, 240, 36, '#1e2840');
   pxRect(cx - 120, 5, 3, 36, TEAM_COLORS[0]); pxRect(cx + 117, 5, 3, 36, TEAM_COLORS[1]);
@@ -1553,7 +1555,7 @@ function drawHud() {
     for (let i = 0; i < 3; i++) pxRect((s === 0 ? cx - 113 : cx + 113 - 22) + i * 8, 30, 6, 6, i < n ? TEAM_COLORS[s] : '#33405f');
   }
   for (let s = 0; s < 2; s++) {
-    const w = 96, x = s === 0 ? 8 : LW - 8 - w, y = LH - 12;
+    const w = 96, x = s === 0 ? 8 : UW - 8 - w, y = UH - 12;
     const lead = s === 0 ? G.sides[0].find(p => p.human) || G.sides[0][0] : G.sides[1].find(p => p.entry.captain) || G.sides[1][0];
     pxRect(x - 1, y - 1, w + 2, 8, '#10141f'); pxRect(x, y, w, 6, '#33405f');
     const fill = Math.floor((w * G.meter[s] / 100) / 4) * 4; // fills in 4 px steps
@@ -1566,10 +1568,10 @@ function drawHud() {
   const me = G.sides[0].find(p => p.human);
   if (me && !AUTO) {
     const where = settings.mode === 6 ? `  ZONE ${zoneOf(me)} ${isFront(me) ? 'FRONT' : 'BACK'} ROW` : '';
-    pxText(ROLES[me.role].name.toUpperCase() + where, cx, LH - 12, '#c9d4ee', 8);
+    pxText(ROLES[me.role].name.toUpperCase() + where, cx, UH - 12, '#c9d4ee', 8);
     if (G.phase === 'serve' && me !== G.server && overlaps(0).includes(me) && Math.floor(G.time * 4) % 2 === 0) pxText('OVERLAP! GET TO YOUR SPOT', cx, 76, '#ff8a8a', 8);
   } else if (!AUTO && G.bench[0].some(p => p.human)) {
-    pxText('LIBERO ON THE BENCH: YOUR MIDDLE IS IN THE FRONT ROW', cx, LH - 12, '#c9d4ee', 8);
+    pxText('LIBERO ON THE BENCH: YOUR MIDDLE IS IN THE FRONT ROW', cx, UH - 12, '#c9d4ee', 8);
   }
   if (G.phase === 'serve' && !aiControlled(G.server) && Math.floor(G.time * 2.5) % 2 === 0) {
     pxText('PRESS J TO SERVE', cx, 52, '#ffffff', 8);
@@ -1583,7 +1585,7 @@ function drawHud() {
     pxRect(cx - 24, 96, 48, 3, t.color);
     if (t.sub) pxText(t.sub.toUpperCase(), cx, 104, '#eef3ff', 8);
   }
-  if (G.paused) { ctx.fillStyle = 'rgba(10,14,26,0.55)'; ctx.fillRect(0, 0, LW, LH); }
+  if (G.paused) { ctx.fillStyle = 'rgba(10,14,26,0.55)'; ctx.fillRect(0, 0, UW, UH); }
 }
 const teamName = s => `Team ${teams[s][0].mon.name}`;
 

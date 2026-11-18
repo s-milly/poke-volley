@@ -78,6 +78,6 @@ The overall rating (OVR) is a weighted average of the five. Body size comes from
 
 ## Art
 
-The game is drawn at 480 x 270 and scaled up with hard pixel edges. The Pokémon are the Black/White sprites from the [PokeAPI sprites collection](https://github.com/PokeAPI/sprites): front sprites for the other team, full-body back sprites for yours (`sprites/`, with each sprite's visible area in `sprites.js`). Fonts are Press Start 2P and VT323, both under the SIL Open Font License (`fonts/`).
+The game is drawn at 960 x 540 and scaled up with hard pixel edges, with the HUD and pixel font on a 480 x 270 grid. The Pokémon are the Black/White sprites from the [PokeAPI sprites collection](https://github.com/PokeAPI/sprites): front sprites for the other team, full-body back sprites for yours (`sprites/`, with each sprite's visible area in `sprites.js`). Fonts are Press Start 2P and VT323, both under the SIL Open Font License (`fonts/`).
 
 Fan project. Not affiliated with Nintendo, Game Freak or The Pokémon Company. Pokémon and its sprites belong to them.
