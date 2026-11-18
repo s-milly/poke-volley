@@ -30,7 +30,6 @@ const SPECIAL = {
   ghost: 'Phantom Spike', dragon: 'Dragon Spike', normal: 'Giga Spike', fairy: 'Moonlight Spike',
   steel: 'Iron Spike',
 };
-const STARTERS = [25, 1, 4, 7, 133, 66, 39, 54];
 const CAPTAIN_BOOST = 14;
 const STAT_KEYS = [['spd', 'SPD', 'Speed: how fast it runs'], ['jmp', 'JMP', 'Jump: how high it leaps'],
   ['pwr', 'PWR', 'Power: how hard it spikes and serves'], ['def', 'DEF', 'Defense: how cleanly it receives'],
@@ -139,6 +138,7 @@ addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
 // ===================== match state =====================
 const settings = { mode: 2, diff: 'normal', target: 15, role: { 2: 'B', 6: 'OH' }, venue: { 2: 'beach', 6: 'arena' }, time: 'day' };
 let draft = null;   // { starter, picks: [mon], offers: [mon], rerolls }
+let capPick = null; // { role, offers: [mon], rerolls }: your own Pokémon, offered for your position
 let teams = null;   // [[entry], [entry]], entry 0 of team 0 is you
 let G = null;       // live match
 
@@ -2113,18 +2113,50 @@ $('#opt-mode').addEventListener('click', renderVenuePick);
 renderVenuePick();
 $('#btn-start').addEventListener('click', () => { Sfx.init(); buildPick(); show('scr-pick'); });
 
-// ---------- pick your Pokémon ----------
+// ---------- pick your position, then your Pokémon ----------
+// Three random Pokémon from those best suited to the position (top third of the dex by that role's fit).
+function captainOffers(role) {
+  const fit = ROLES[role].fit;
+  const pool = DEX.filter(m => !m.leg || Math.random() < 0.25)
+    .sort((a, b) => fit(makeEntry(b, true).r) - fit(makeEntry(a, true).r)).slice(0, 50);
+  const out = [];
+  while (out.length < 3 && pool.length) out.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
+  return out;
+}
 function buildPick() {
+  const role = settings.role[settings.mode];
+  capPick = { role, offers: captainOffers(role), rerolls: 2 };
+  renderPick();
+}
+function renderPick() {
+  const n = settings.mode, role = settings.role[n];
+  if (!capPick || capPick.role !== role) capPick = { role, offers: captainOffers(role), rerolls: capPick ? capPick.rerolls : 2 };
+  const pick = $('#opt-role'); pick.innerHTML = '';
+  for (const r of YOUR_ROLES[n]) {
+    const btn = el('button', '', ROLES[r].name);
+    btn.type = 'button'; btn.setAttribute('aria-pressed', String(role === r));
+    if (role === r) btn.setAttribute('data-autofocus', '');
+    btn.addEventListener('click', () => { settings.role[n] = r; renderPick(); $('#opt-role [aria-pressed="true"]').focus(); });
+    pick.appendChild(btn);
+  }
+  $('#role-desc').textContent = ROLE_DESC[role];
   const grid = $('#pick-grid'); grid.innerHTML = '';
-  for (const id of STARTERS) {
-    const mon = BY_ID.get(id), e = makeEntry(mon, true);
+  for (const mon of capPick.offers) {
+    const e = makeEntry(mon, true);
     const card = monCard(e, { button: true });
-    card.setAttribute('aria-label', `Play as ${mon.name}, overall ${e.ovr}`);
+    card.setAttribute('aria-label', `Play ${ROLES[role].name} as ${mon.name}, overall ${e.ovr}`);
     card.addEventListener('click', () => startDraft(mon));
     grid.appendChild(card);
   }
-  grid.querySelector('button').setAttribute('data-autofocus', '');
+  const rr = $('#btn-reroll-cap');
+  rr.textContent = `New offers (${capPick.rerolls} left)`;
+  rr.disabled = capPick.rerolls <= 0;
 }
+$('#btn-reroll-cap').addEventListener('click', () => {
+  if (!capPick || capPick.rerolls <= 0) return;
+  capPick.rerolls--; capPick.offers = captainOffers(capPick.role); renderPick();
+  const f = document.querySelector('#pick-grid .card'); if (f) f.focus();
+});
 
 // ---------- draft ----------
 function startDraft(starter) {
@@ -2194,7 +2226,8 @@ function buildTeams() {
   const n = teamSize();
   const myDrafted = draft.picks.length ? draft.picks.reduce((a, m) => a + m.ovr, 0) / draft.picks.length : 55;
   const target = myDrafted + DIFF[settings.diff].teamOffset;
-  const rivalCap = BY_ID.get(pickOne(STARTERS.filter(id => id !== draft.starter.id)));
+  const capPool = DEX.filter(m => !m.leg && m.id !== draft.starter.id && !draft.picks.includes(m));
+  const rivalCap = pickOne(capPool);
   const taken = new Set([draft.starter.id, rivalCap.id, ...draft.picks.map(m => m.id)]);
   const pool = DEX.filter(m => !taken.has(m.id) && (!m.leg || Math.random() < 0.3));
   const theirs = [makeEntry(rivalCap, true)];
@@ -2211,15 +2244,6 @@ function buildTeams() {
 
 function renderMatchup() {
   const n = settings.mode;
-  // your position
-  const pick = $('#opt-role'); pick.innerHTML = '';
-  for (const r of YOUR_ROLES[n]) {
-    const btn = el('button', '', ROLES[r].name);
-    btn.type = 'button'; btn.setAttribute('aria-pressed', String(settings.role[n] === r));
-    btn.addEventListener('click', () => { settings.role[n] = r; renderMatchup(); $('#opt-role [aria-pressed="true"]').focus(); });
-    pick.appendChild(btn);
-  }
-  $('#role-desc').textContent = ROLE_DESC[settings.role[n]];
   for (let s = 0; s < 2; s++) {
     const box = $(s === 0 ? '#mu-you' : '#mu-rival');
     box.innerHTML = '';
@@ -2249,7 +2273,7 @@ function renderMatchup() {
       box.appendChild(el('p', 'rot-note', `Starting rotation. Zone 1 serves, and the team rotates one zone clockwise each time it wins back the serve. The libero (${lib.entry.mon.name}) always plays for the middle blocker in the back row, so only one middle is on court at a time; ${lu[subbed].entry.mon.name} starts on the bench.`));
     }
   }
-  $('#mu-meta').textContent = `${n} v ${n} · ${cap(settings.diff)} · first to ${settings.target}, win by 2`;
+  $('#mu-meta').textContent = `${n} v ${n} · You play ${ROLES[settings.role[n]].name} · ${cap(settings.diff)} · first to ${settings.target}, win by 2`;
 }
 $('#btn-play').addEventListener('click', startMatch);
 function startMatch() {
@@ -2323,7 +2347,8 @@ if (AUTO) { // test mode: draft and play without input
   if (QS.get('target')) settings.target = Number(QS.get('target'));
   if (QS.get('venue') && VENUES[QS.get('venue')]) settings.venue[VENUES[QS.get('venue')].mode] = QS.get('venue');
   if (QS.get('time') && TIMES[QS.get('time')]) settings.time = QS.get('time');
-  buildPick(); startDraft(BY_ID.get(Number(QS.get('starter')) || 25));
+  if (QS.get('role') && YOUR_ROLES[settings.mode].includes(QS.get('role'))) settings.role[settings.mode] = QS.get('role');
+  buildPick(); startDraft(BY_ID.get(Number(QS.get('starter'))) || capPick.offers[0]);
   while (draft.picks.length < teamSize() - 1) { draft.picks.push(draft.offers[0]); makeOffers(); }
   buildTeams(); startMatch();
 }

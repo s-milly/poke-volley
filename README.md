@@ -25,13 +25,13 @@ Phones get an on-screen pad.
 
 ## Draft
 
-1. Choose one of 8 Pokémon to control: Pikachu, Bulbasaur, Charmander, Squirtle, Eevee, Machop, Jigglypuff or Psyduck. As captain it gets +14 to every rating.
+1. Choose your position, then pick the Pokémon you control from three random offers suited to that position (you can ask for new offers twice). As captain it gets +14 to every rating.
 2. Each round shows 3 random Pokémon from the 151. Pick one. You get 2 rerolls per draft.
 3. The rival team is built to a similar rating, adjusted for the difficulty you chose.
 
 ## Positions and rotations
 
-Before each match you pick your position on the matchup screen. Your teammates fill the other roles, each given to the Pokémon whose stats suit it best.
+You pick your position before the draft, and the three Pokémon offered to you are drawn from the ones whose stats suit that position best. Your teammates fill the other roles, each given to the Pokémon whose stats suit it best.
 
 **6 v 6** uses a 5-1 system: a Setter, two Outside hitters (OH), two Middle blockers (MB), an Opposite (OPP) and a Libero (L). You draft six teammates: five on court plus the libero.
 

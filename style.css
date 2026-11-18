@@ -127,7 +127,7 @@ button.card:not(:disabled):active { translate: 4px 4px; box-shadow: 0 0 0 var(--
 .fill { display: block; height: 100%; -webkit-mask: repeating-linear-gradient(90deg, #000 0 6px, transparent 6px 8px); mask: repeating-linear-gradient(90deg, #000 0 6px, transparent 6px 8px); }
 .fill.b1 { background: #ff6b6b; } .fill.b2 { background: #ffb547; } .fill.b3 { background: #6bd88a; } .fill.b4 { background: #4fd2ff; }
 .bar b { width: 24px; text-align: right; font-size: 9px; }
-.boost { font-size: 18px; color: var(--accent); width: 26px; }
+.boost { flex: none; width: 3ch; font-size: 18px; color: var(--accent); white-space: nowrap; }
 .base { margin: 12px 0 0; font: 19px/1.1 var(--body); color: var(--muted); }
 
 /* ---------- draft ---------- */
