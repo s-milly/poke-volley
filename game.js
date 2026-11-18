@@ -308,7 +308,7 @@ function canContact(p, b) {
   if (p.cool > 0 || b.noHit > 0) return false;
   if (b.z * toward(p.side) > 0.7) return false;               // ball well over on the other side
   if (G.lastToucher === p && G.lastSide === p.side && G.touches[p.side] > 0) return false; // no double touch
-  const pad = !aiControlled(p) ? 0.28 : 0.22;
+  const pad = !aiControlled(p) ? 0.45 : 0.22; // you get a longer reach than the computer
   const dx = b.x - p.x, dy = b.y - p.cy, dz = b.z - p.z;
   return dx * dx + dy * dy + dz * dz < (p.rr + BR + pad) ** 2;
 }
@@ -414,8 +414,8 @@ function pass(p, incoming, wasSpecial, fromOpp) {
   tz = -t * Math.max(0.5, -tz * t);
 
   // a hard spike can shank off the arms
-  if (G.touches[s] === 1 && fromOpp && incoming > 12) {
-    const shank = clamp((incoming - 12) / 12, 0, 1) * (1.35 - p.r.def / 100) * (wasSpecial ? 1.5 : 1);
+  if (G.touches[s] === 1 && fromOpp && incoming > 12.5) {
+    const shank = clamp((incoming - 12.5) / 8, 0, 1) * (1.35 - p.r.def / 100) * (wasSpecial ? 1.5 : 1);
     if (Math.random() < shank) {
       const sx = Math.random() < 0.5 ? -1 : 1;
       tx = b.x + sx * rand(2.5, 7); tz = b.z - t * rand(1, 8); apexY = b.y + rand(0.2, 1.4); target = null;
@@ -439,10 +439,10 @@ function tip(p) {
 }
 
 // Where to hit: the open spot farthest from every defender.
-function openSpot(s) {
+function openSpot(s, tries = 16) {
   const t = toward(s), opp = G.sides[1 - s];
   let best = [0, t * HL * 0.6], bs = -1;
-  for (let i = 0; i < 16; i++) {
+  for (let i = 0; i < tries; i++) {
     const x = rand(-HW * 0.85, HW * 0.85), z = t * rand(1.4, HL - 0.7);
     let d = Infinity; for (const q of opp) d = Math.min(d, Math.hypot(q.x - x, q.z - z));
     if (d > bs) { bs = d; best = [x, z]; }
@@ -453,7 +453,7 @@ function openSpot(s) {
 function spike(p, special) {
   const s = p.side, t = toward(s), b = G.ball;
   const human = !aiControlled(p);
-  let [tx, tz] = openSpot(s);
+  let [tx, tz] = openSpot(s, human ? 16 : 4); // the computer does not always find the best gap
   if (human) {
     const ix = (keys.right ? 1 : 0) - (keys.left ? 1 : 0);
     if (ix) tx = clamp(b.x + ix * HW, -HW * 0.85, HW * 0.85);
@@ -462,18 +462,17 @@ function spike(p, special) {
     const e = (s === 0 ? MATE : DIFF[settings.diff]).err;
     tx += rand(-1, 1) * e; tz += rand(-1, 1) * e;
   }
-  const speed0 = (17 + p.r.pwr * 0.12) * (special ? 1.3 : 1);
+  // Each spike is timed rather than given a raw speed: harder hitters land it sooner,
+  // but there is always enough time to react and run to the landing ring.
+  const flight = clamp(1.3 - p.r.pwr * 0.005, 0.8, 1.15) * (special ? 0.8 : 1) * (settings.mode === 6 ? 0.75 : 1); // 6 v 6 has more defenders to beat
   const aims = [[tx, tz]];
   for (let i = 0; i < 5; i++) aims.push([rand(-HW * 0.8, HW * 0.8), t * rand(1.5, HL - 1)]);
   const tries = [];
-  for (const f of [1, 0.9, 0.8, 0.7, 0.6, 0.5]) for (const [ax, az] of aims) tries.push([ax, 0, az, f]);
-  for (const f of [0.8, 0.65]) for (const k of [0.4, 0.9]) tries.push([tx * 0.4, NET_H + k, 0, f]);
-  for (const [ax, ay, az, f] of tries) {
-    const dx = ax - b.x, dy = ay - b.y, dz = az - b.z, d = Math.hypot(dx, dy, dz) || 1;
-    const sp = speed0 * f, vx = dx / d * sp, vy = dy / d * sp, vz = dz / d * sp;
+  for (const k of [1, 1.12, 1.25, 1.4]) for (const [ax, az] of aims) tries.push([ax, az, flight * k]);
+  for (const [ax, az, T] of tries) {
+    const vx = (ax - b.x) / T, vz = (az - b.z) / T, vy = (BR - b.y + 0.5 * GB * T * T) / T;
     if (!clearsNet(b.x, b.y, b.z, vx, vy, vz)) continue;
-    const [lx, lz] = landAt(b.x, b.y, b.z, vx, vy, vz);
-    if (!inCourt(lx, lz, 1 - s) || Math.abs(lz) < 0.5) continue;
+    if (!inCourt(ax, az, 1 - s) || Math.abs(az) < 0.5) continue;
     b.vx = vx; b.vy = vy; b.vz = vz;
     G.lastAttack = { p, type: 'spike' };
     if (special) {
