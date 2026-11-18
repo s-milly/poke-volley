@@ -166,7 +166,7 @@ function homeSpots(n) {
 
 function newMatch() {
   const n = settings.mode;
-  HW = n === 2 ? 6 : 7; HL = n === 2 ? 11.5 : 13;
+  HW = n === 2 ? 6 : 7; HL = n === 2 ? 9.5 : 11;
   const size = n === 6 ? 0.9 : 1;
   const sides = [[], []], serveOrder = [[], []];
   const spots = homeSpots(n);
@@ -902,7 +902,7 @@ function star(ctx, x, y, s) {
 
 // ===================== camera and projection =====================
 const canvas = $('#court'), ctx = canvas.getContext('2d');
-const CAM = { y: 4.3, back: 5.2, pitch: 0.2, F: (H / 2) / Math.tan(28 * Math.PI / 180), cy: H * 0.5 };
+const CAM = { y: 8.6, back: 3.6, pitch: 0.47, F: (H / 2) / Math.tan(31 * Math.PI / 180), cy: H * 0.56 };
 function proj(x, y, z) {
   const dx = x - G.cam.x, dy = y - CAM.y, dz = z - G.cam.z;
   const c = Math.cos(CAM.pitch), s = Math.sin(CAM.pitch);
@@ -1015,7 +1015,8 @@ function drawCourt() {
 
 function drawNet() {
   const wob = Math.sin(G.time * 40) * 0.04 * G.netWobble;
-  const xL = -HW - 0.6, xR = HW + 0.6, top = NET_H, bot = NET_H - 0.95;
+  // the mesh is a band at the top with open space below, so you can see the far side through it
+  const xL = -HW - 0.6, xR = HW + 0.6, top = NET_H, bot = NET_H - 0.5;
   const a = proj(xL, top, wob), b = proj(xR, top, wob), c = proj(xR, bot, wob), d = proj(xL, bot, wob);
   ctx.lineWidth = 8; ctx.strokeStyle = '#d8392f'; ctx.lineCap = 'butt';
   for (const x of [xL, xR]) { const p0 = proj(x, 0, 0), p1 = proj(x, top + 0.1, 0); ctx.beginPath(); ctx.moveTo(p0.x, p0.y); ctx.lineTo(p1.x, p1.y); ctx.stroke(); }
@@ -1024,7 +1025,7 @@ function drawNet() {
   ctx.strokeStyle = 'rgba(16,20,31,0.55)'; ctx.lineWidth = 2.7;
   const cols = Math.round((xR - xL) / 0.45);
   for (let i = 0; i <= cols; i++) { const u = i / cols; ctx.beginPath(); ctx.moveTo(a.x + (b.x - a.x) * u, a.y + (b.y - a.y) * u); ctx.lineTo(d.x + (c.x - d.x) * u, d.y + (c.y - d.y) * u); ctx.stroke(); }
-  for (let j = 0; j <= 3; j++) { const v = j / 3; ctx.beginPath(); ctx.moveTo(a.x + (d.x - a.x) * v, a.y + (d.y - a.y) * v); ctx.lineTo(b.x + (c.x - b.x) * v, b.y + (c.y - b.y) * v); ctx.stroke(); }
+  for (let j = 0; j <= 2; j++) { const v = j / 2; ctx.beginPath(); ctx.moveTo(a.x + (d.x - a.x) * v, a.y + (d.y - a.y) * v); ctx.lineTo(b.x + (c.x - b.x) * v, b.y + (c.y - b.y) * v); ctx.stroke(); }
   ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 6;
   ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
   ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(d.x, d.y); ctx.lineTo(c.x, c.y); ctx.stroke();
@@ -1065,7 +1066,7 @@ function drawPlayer(p) {
   let topY;
   if (img.complete && img.naturalWidth) {
     const [sx, sy, sw, sh] = back ? box.slice(4) : box.slice(0, 4);
-    const k = p.rr * 2.9 * f.k / sh;
+    const k = p.rr * 3.3 * (back ? 1 : 1.3) * f.k / sh; // the far team is drawn a bit larger so it reads at a distance
     const h = sh * k * p.squash, w = sw * k * (1 + (1 - p.squash) * 0.6);
     ctx.save(); ctx.translate(f.x, f.y); if (p.flip) ctx.scale(-1, 1);
     ctx.drawImage(img, sx, sy, sw, sh, -w / 2, -h, w, h);
@@ -1222,11 +1223,13 @@ function show(id) {
   if (first) first.focus({ preventScroll: true });
 }
 
-function portrait(mon, size = 64) {
+// A sprite drawn at `size` px (a multiple of 96 keeps the pixels even), cropped to a `box` px square.
+function portrait(mon, size = 96, box = 64) {
+  const wrap = el('span', 'portrait'); wrap.style.width = wrap.style.height = box + 'px';
   const img = new Image();
-  img.src = `sprites/front/${mon.id}.png`; img.width = img.height = size;
-  img.className = 'portrait'; img.alt = ''; img.decoding = 'async';
-  return img;
+  img.src = `sprites/front/${mon.id}.png`; img.width = img.height = size; img.alt = ''; img.decoding = 'async';
+  wrap.appendChild(img);
+  return wrap;
 }
 
 function typeChips(mon) {
@@ -1250,7 +1253,7 @@ function monCard(entryOrMon, opts = {}) {
   if (opts.button) card.type = 'button';
   card.style.setProperty('--tc', TYPE_COLORS[mon.types[0]]);
   const top = el('div', 'card-top');
-  top.appendChild(portrait(mon, 128));
+  top.appendChild(portrait(mon, 192, 128));
   top.appendChild(el('div', 'ovr', `<b>${ovr}</b><span>OVR</span>`));
   card.appendChild(top);
   card.appendChild(el('div', 'card-body',
@@ -1327,7 +1330,7 @@ function renderRoster() {
   const es = [makeEntry(draft.starter, true), ...draft.picks.map(m => makeEntry(m, false))];
   es.forEach((e, i) => {
     const li = el('li', 'roster-item');
-    li.appendChild(portrait(e.mon, 64));
+    li.appendChild(portrait(e.mon, 96, 64));
     li.appendChild(el('div', 'ri-text', `<b>${e.mon.name}</b><span>${i === 0 ? 'You (captain)' : 'Teammate'}</span>`));
     li.appendChild(el('div', 'ri-ovr', String(e.ovr)));
     list.appendChild(li);
@@ -1375,7 +1378,7 @@ function renderMatchup() {
     const ul = el('ul', 'mu-list');
     teams[s].forEach((e, i) => {
       const li = el('li', '');
-      li.appendChild(portrait(e.mon, 64));
+      li.appendChild(portrait(e.mon, 96, 64));
       li.appendChild(el('div', 'ri-text', `<b>${e.mon.name}</b><span>${i === 0 ? (s === 0 ? 'You (captain)' : 'Captain') : e.mon.types.map(cap).join(' / ')}</span>`));
       li.appendChild(el('div', 'ri-ovr', String(e.ovr)));
       ul.appendChild(li);
@@ -1423,7 +1426,7 @@ function showResult() {
   }
   const mvp = G.players.reduce((a, p) => (val(p) > val(a) ? p : a));
   $('#res-mvp').innerHTML = '';
-  $('#res-mvp').appendChild(portrait(mvp.mon, 128));
+  $('#res-mvp').appendChild(portrait(mvp.mon, 192, 128));
   $('#res-mvp').appendChild(el('div', '', `<span>MVP</span><b>${mvp.mon.name}</b><small>${teamName(mvp.side)}</small>`));
   show('scr-result');
 }
