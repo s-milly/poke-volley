@@ -146,7 +146,7 @@ class Player {
   constructor(entry, side, human, size) {
     this.entry = entry; this.mon = entry.mon; this.r = entry.r; this.side = side; this.human = human;
     this.rr = clamp(0.24 + Math.sqrt(this.mon.h) * 0.075, 0.3, 0.72) * size; // body radius
-    this.speed = 3.4 + this.r.spd * 0.042;
+    this.speed = 4.4 + this.r.spd * 0.055;
     this.apex = 0.55 + this.r.jmp * 0.011;
     this.jumpV = Math.sqrt(2 * GP * this.apex);
     this.x = 0; this.y = 0; this.z = 0; this.vx = 0; this.vy = 0; this.vz = 0; this.onGround = true;
@@ -166,7 +166,7 @@ function homeSpots(n) {
 
 function newMatch() {
   const n = settings.mode;
-  HW = n === 2 ? 4 : 4.5; HL = n === 2 ? 8 : 9;
+  HW = n === 2 ? 6 : 7; HL = n === 2 ? 11.5 : 13;
   const size = n === 6 ? 0.9 : 1;
   const sides = [[], []], serveOrder = [[], []];
   const spots = homeSpots(n);
@@ -178,7 +178,7 @@ function newMatch() {
     const order = you ? [...rest, you] : rest;
     order.forEach((e, i) => {
       const p = new Player(e, s, e === you, size);
-      const [hx, hz] = spots[i];
+      const [hx, hz] = spots[i].map((v, k) => v * (k ? HL / (n === 2 ? 8 : 9) : HW / (n === 2 ? 4 : 4.5)));
       p.homeX = s === 0 ? hx : -hx; p.homeZ = s === 0 ? hz : -hz;
       sides[s].push(p);
     });
