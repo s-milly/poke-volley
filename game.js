@@ -136,7 +136,7 @@ addEventListener('keyup', e => { const a = KEYMAP[e.code]; if (a) press(a, false
 addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
 
 // ===================== match state =====================
-const settings = { mode: 2, diff: 'normal', target: 15, role: { 2: 'B', 6: 'OH' }, venue: { 2: 'beach', 6: 'arena' }, time: 'day' };
+const settings = { mode: 2, diff: 'normal', target: 15, sets: 1, role: { 2: 'B', 6: 'OH' }, venue: { 2: 'beach', 6: 'arena' }, time: 'day' };
 let draft = null;   // { starter, picks: [mon], offers: [mon], rerolls }
 let capPick = null; // { role, offers: [mon], rerolls }: your own Pokémon, offered for your position
 let teams = null;   // [[entry], [entry]], entry 0 of team 0 is you
@@ -432,7 +432,7 @@ function newMatch() {
   G = {
     sides, players: [...sides[0], ...sides[1]], rot, all, libero, libSub: [null, null], bench: [[], []],
     ball: { x: 0, y: 1, z: 0, vx: 0, vy: 0, vz: 0, spin: 0, trail: [], special: null, noHit: 0 },
-    score: [0, 0], touches: [0, 0], lastSide: -1, lastToucher: null, intended: [null, null], lastAttack: null,
+    score: [0, 0], sets: [0, 0], setNo: 1, setLog: [], setDone: false, firstServe: 0, touches: [0, 0], lastSide: -1, lastToucher: null, intended: [null, null], lastAttack: null,
     setterNow: [null, null], blockers: [[], []], play: [null, null], subs: [], started: false,
     serving: 0, server: null, phase: 'serve', timer: 0, time: 0,
     meter: [0, 0], armed: [false, false], react: [0, 0], aiErr: [[0, 0], [0, 0]], leave: [false, false],
@@ -440,6 +440,12 @@ function newMatch() {
     cam: { x: 0, z: -HL - CAM.back },
   };
   startServe();
+}
+
+function nextSet() { // fresh score; the team that received first last set serves first this time
+  G.setDone = false; G.setNo++; G.score = [0, 0];
+  G.firstServe = 1 - G.firstServe; G.serving = G.firstServe;
+  G.meter = [0, 0]; G.armed = [false, false];
 }
 
 function startServe() {
@@ -874,6 +880,14 @@ function ballDown() {
   awardPoint(w, label, sub, credit, key);
 }
 
+// Best of 3 is first to 2 sets, best of 5 first to 3. At 2-2 in a best of 5 the fifth set is played to 15
+// (or to the chosen target if that is lower), still win by 2.
+const setsToWin = () => Math.ceil(settings.sets / 2);
+const decider = () => Math.min(15, settings.target);
+function setTarget() {
+  return settings.sets === 5 && G.setNo === 5 ? decider() : settings.target;
+}
+
 function awardPoint(w, label, sub, credit, key) {
   if (G.phase !== 'rally') return;
   G.score[w]++;
@@ -888,9 +902,13 @@ function awardPoint(w, label, sub, credit, key) {
   }
   G.texts.push({ big: true, text: label, sub, color: TEAM_COLORS[w], t: 0, life: 1.6 });
   Sfx.whistle(); Sfx.point(w === 0);
-  const won = G.score[w] >= settings.target && G.score[w] - G.score[1 - w] >= 2;
-  if (won) { G.phase = 'over'; G.timer = 2.0; G.winner = w; }
-  else { G.phase = 'point'; G.timer = 1.6; }
+  const setWon = G.score[w] >= setTarget() && G.score[w] - G.score[1 - w] >= 2;
+  if (setWon) {
+    G.sets[w]++; G.setLog.push([...G.score]);
+    if (G.sets[w] >= setsToWin()) { G.phase = 'over'; G.timer = 2.0; G.winner = w; return; }
+    G.setDone = true; G.phase = 'point'; G.timer = 3.0;
+    G.texts.push({ big: true, text: `SET ${G.setNo} TO ${w === 0 ? 'YOU' : 'RIVAL'}`, sub: `${G.score[0]} - ${G.score[1]} · Sets ${G.sets[0]} - ${G.sets[1]}`, color: TEAM_COLORS[w], t: -1.4, life: 1.6 });
+  } else { G.phase = 'point'; G.timer = 1.6; }
 }
 
 // ===================== AI =====================
@@ -1022,7 +1040,7 @@ function update(dt) {
       stepPlayer(p, dt);
     }
     if (G.timer <= 0) {
-      if (G.phase === 'point') { if (!G.subs.length) startServe(); }
+      if (G.phase === 'point') { if (!G.subs.length) { if (G.setDone) nextSet(); startServe(); } }
       else if (!G.shown) { G.shown = true; showResult(); }
     }
   }
@@ -1767,7 +1785,7 @@ function drawArenaWall() {
   quad([[-bw, b0, z - 0.06], [bw, b0, z - 0.06], [bw, b1, z - 0.06], [-bw, b1, z - 0.06]], '#05070d');
   const c = proj(0, (b0 + b1) / 2, z), tx = c.x * US, ty = c.y * US;
   if (ty > 2 && ty < UH) {
-    const msg = G.cheer > 0.4 ? (Math.floor(G.time * 4) % 2 ? 'MAKE SOME NOISE!' : 'POINT!') : 'VOLLEYDEX';
+    const msg = G.cheer > 0.4 ? (Math.floor(G.time * 4) % 2 ? 'MAKE SOME NOISE!' : 'POINT!') : settings.sets > 1 ? `SETS ${G.sets[0]}-${G.sets[1]}` : 'VOLLEYDEX';
     ctx.save(); ctx.setTransform(U, 0, 0, U, 0, 0);
     pxText(msg, tx, ty - 10, '#ffcf33', 8, 'center', null);
     pxText(`${G.score[0]} - ${G.score[1]}`, tx, ty + 1, '#ffffff', 8, 'center', null);
@@ -1979,7 +1997,7 @@ function drawHud() {
     for (let i = 0; i < 3; i++) pxRect(104 + i * 6, y + 6, 4, 4, i < n ? TEAM_COLORS[k] : '#33405f');
     pxText(String(G.score[k]), 160, y, '#ffffff', 16, 'right', null);
   }
-  pxText(`TO ${settings.target}, WIN BY 2`, 6, 45, '#c9d4ee', 8, 'left');
+  pxText(settings.sets > 1 ? `SET ${G.setNo} (${G.sets[0]}-${G.sets[1]}) TO ${setTarget()}` : `TO ${setTarget()}, WIN BY 2`, 6, 45, '#c9d4ee', 8, 'left');
   for (let s = 0; s < 2; s++) {
     const w = 96, x = s === 0 ? 8 : UW - 8 - w, y = UH - 12;
     const lead = s === 0 ? G.sides[0].find(p => p.human) || G.sides[0][0] : G.sides[1].find(p => p.entry.captain) || G.sides[1][0];
@@ -2001,7 +2019,7 @@ function drawHud() {
     pxText('PRESS J TO SERVE', cx, 52, '#ffffff', 8);
     pxText('ARROWS AIM', cx, 63, '#c9d4ee', 8);
   }
-  for (const t of G.texts) if (t.big) {
+  for (const t of G.texts) if (t.big && t.t >= 0) {
     const k = t.t / t.life;
     if (k > 0.8 && Math.floor(t.t * 20) % 2) continue;
     const size = t.t < 0.12 ? 24 : 16;
@@ -2091,7 +2109,7 @@ function seg(group, key) {
     settings[key] = key === 'diff' ? b.dataset.v : Number(b.dataset.v);
   });
 }
-seg('#opt-mode', 'mode'); seg('#opt-diff', 'diff'); seg('#opt-target', 'target');
+seg('#opt-mode', 'mode'); seg('#opt-diff', 'diff'); seg('#opt-target', 'target'); seg('#opt-sets', 'sets');
 function renderVenuePick() {
   const box = $('#opt-venue'); box.innerHTML = '';
   for (const [id, v] of Object.entries(VENUES)) {
@@ -2273,7 +2291,12 @@ function renderMatchup() {
       box.appendChild(el('p', 'rot-note', `Starting rotation. Zone 1 serves, and the team rotates one zone clockwise each time it wins back the serve. The libero (${lib.entry.mon.name}) always plays for the middle blocker in the back row, so only one middle is on court at a time; ${lu[subbed].entry.mon.name} starts on the bench.`));
     }
   }
-  $('#mu-meta').textContent = `${n} v ${n} · You play ${ROLES[settings.role[n]].name} · ${cap(settings.diff)} · first to ${settings.target}, win by 2`;
+  $('#mu-meta').textContent = `${n} v ${n} · You play ${ROLES[settings.role[n]].name} · ${cap(settings.diff)} · ${matchFormat()}`;
+}
+function matchFormat() {
+  if (settings.sets === 1) return `one set to ${settings.target}, win by 2`;
+  const fifth = settings.sets === 5 && decider() < settings.target ? `, 5th set to ${decider()}` : '';
+  return `best of ${settings.sets} (first to ${setsToWin()} sets), sets to ${settings.target}${fifth}, win by 2`;
 }
 $('#btn-play').addEventListener('click', startMatch);
 function startMatch() {
@@ -2299,8 +2322,9 @@ $('#btn-quit').addEventListener('click', () => { G.paused = false; $('#pause').h
 function showResult() {
   const w = G.winner;
   $('#res-title').textContent = w === 0 ? 'You win!' : `${teamName(1)} wins`;
-  $('#res-score').textContent = `${G.score[0]} : ${G.score[1]}`;
-  $('#res-meta').textContent = `Longest rally: ${G.longestRally} touches`;
+  const multi = settings.sets > 1;
+  $('#res-score').textContent = multi ? `${G.sets[0]} : ${G.sets[1]}` : `${G.score[0]} : ${G.score[1]}`;
+  $('#res-meta').textContent = (multi ? `Sets: ${G.setLog.map(x => x.join('-')).join(', ')} · ` : '') + `Longest rally: ${G.longestRally} touches`;
   const box = $('#res-box'); box.innerHTML = '';
   for (let s = 0; s < 2; s++) {
     const tbl = el('table', 'box');
@@ -2345,6 +2369,7 @@ if (AUTO) { // test mode: draft and play without input
   if (QS.get('mode')) settings.mode = Number(QS.get('mode'));
   if (QS.get('diff')) settings.diff = QS.get('diff');
   if (QS.get('target')) settings.target = Number(QS.get('target'));
+  if (QS.get('sets')) settings.sets = Number(QS.get('sets'));
   if (QS.get('venue') && VENUES[QS.get('venue')]) settings.venue[VENUES[QS.get('venue')].mode] = QS.get('venue');
   if (QS.get('time') && TIMES[QS.get('time')]) settings.time = QS.get('time');
   if (QS.get('role') && YOUR_ROLES[settings.mode].includes(QS.get('role'))) settings.role[settings.mode] = QS.get('role');
