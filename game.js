@@ -137,7 +137,7 @@ addEventListener('keyup', e => { const a = KEYMAP[e.code]; if (a) press(a, false
 addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
 
 // ===================== match state =====================
-const settings = { mode: 2, diff: 'normal', target: 15 };
+const settings = { mode: 2, diff: 'normal', target: 15, role: { 2: 'B', 6: 'OH' } };
 let draft = null;   // { starter, picks: [mon], offers: [mon], rerolls }
 let teams = null;   // [[entry], [entry]], entry 0 of team 0 is you
 let G = null;       // live match
@@ -158,37 +158,179 @@ class Player {
 }
 const aiControlled = p => !p.human || AUTO;
 
-// Home spots for your side (z < 0). The opponent's are mirrored.
-function homeSpots(n) {
-  if (n === 2) return [[-1.7, -4.8], [1.5, -3.6]];                 // partner, you
-  return [[-3, -6.3], [0, -6.6], [3, -6.3], [-3, -2.2], [3, -2.2], [0, -2.0]]; // back row, front row, you front center
+// ===================== positions, rotations and formations =====================
+// 6 v 6 uses a 5-1 system: one Setter, two Outside hitters, two Middle blockers and an Opposite.
+// Zones are numbered the volleyball way, seen from your own side facing the net:
+//     front row:  4 (left)   3 (middle)   2 (right)
+//     back row:   5 (left)   6 (middle)   1 (right, the server)
+// G.rot[s][i] is the player in zone i + 1. Winning the serve back rotates the team one zone clockwise.
+// 2 v 2 uses beach roles: a Blocker who takes the net on defense and a Defender who stays back.
+const ROLES = {
+  S:   { name: 'Setter',         short: 'S',   fit: r => r.skl * 2 + r.spd },
+  OH:  { name: 'Outside hitter', short: 'OH',  fit: r => r.pwr + r.def + r.jmp },
+  MB:  { name: 'Middle blocker', short: 'MB',  fit: r => r.jmp * 1.5 + r.pwr * 0.5 + r.def * 0.3 },
+  OPP: { name: 'Opposite',       short: 'OPP', fit: r => r.pwr * 2 + r.jmp },
+  B:   { name: 'Blocker',        short: 'BLK', fit: r => r.jmp * 2 + r.pwr },
+  D:   { name: 'Defender',       short: 'DEF', fit: r => r.def * 2 + r.spd },
+};
+const ROLE_DESC = {
+  S: 'Takes the second touch and runs the offense: you choose who gets the set (hold left for the outside, up for the middle quick, right for the opposite, down for the pipe).',
+  OH: 'Passes serves and hits high sets from the left side. In the back row you hit the pipe, taking off from behind the attack line.',
+  MB: 'Blocks along the whole net and hits fast quick sets right next to the setter.',
+  OPP: 'Hits from the right side, blocks the other team\'s outside hitter, and sets if the setter has to dig.',
+  B: 'Takes the net on defense: block the other team\'s hitter.',
+  D: 'Stays back on defense to dig spikes and chase tips.',
+};
+const ROSTER_6 = ['S', 'OH', 'MB', 'OPP', 'OH', 'MB'];   // who starts in zones 1 to 6
+const ZONE_X = [0.62, 0.62, 0, -0.62, -0.62, 0];          // zones 1 to 6, as a share of the half width; your right is +
+const attackLine = () => HL / 3;                            // the "3 meter" line, scaled to this court
+const YOUR_ROLES = { 2: ['B', 'D'], 6: ['S', 'OH', 'MB', 'OPP'] };
+
+// Fill each role with the Pokémon that suits it best. Returns [{ entry, role }] in zone order.
+function lineup(entries, you, yourRole, mode) {
+  const pool = entries.filter(e => e !== you);
+  const roles = mode === 2 ? ['B', 'D'] : ROSTER_6.slice();
+  const out = new Array(roles.length).fill(null);
+  if (you) { const i = Math.max(0, roles.indexOf(yourRole)); out[i] = { entry: you, role: roles[i] }; }
+  for (const i of mode === 2 ? [0, 1] : [0, 3, 2, 5, 1, 4]) { // setter, opposite and middles first, then outsides
+    if (out[i]) continue;
+    const f = ROLES[roles[i]].fit;
+    pool.sort((a, b) => f(b.r) - f(a.r));
+    out[i] = { entry: pool.shift(), role: roles[i] };
+  }
+  if (mode === 2 && you) out.sort((a, b) => (b.entry === you) - (a.entry === you)); // you serve first
+  return out;
+}
+
+const zoneOf = p => G.rot[p.side].indexOf(p) + 1;
+const isFront = p => settings.mode !== 6 || (zoneOf(p) >= 2 && zoneOf(p) <= 4);
+const isPasser = p => settings.mode !== 6 || p.role === 'OH' || (p.role === 'MB' && !isFront(p));
+
+// What a side is doing right now.
+function sidePhase(s) {
+  if (G.phase !== 'rally') return G.serving === s ? 'serve' : 'receive';
+  const b = G.ball, tl = timeToY(b, BR) || 0;
+  if (ownSide(s, b.z + b.vz * tl)) return G.lastSide === s ? 'offense' : 'dig';
+  return 'defense';
+}
+// The other team's hitter once their set is up, or null.
+function oppHitter(s) {
+  const o = 1 - s;
+  if (G.lastSide !== o) return null;
+  return G.sides[o].find(q => !q.onGround && Math.abs(q.z) < 3.5) || (G.touches[o] >= 2 ? G.intended[o] : null);
+}
+const setterSpot = () => (settings.mode === 6 ? [HW * 0.18, -0.9] : [HW * 0.1, -1.2]); // own coordinates
+
+// Each frame: where every player should stand, by role, rotation and phase.
+// Spots are worked out in "own" coordinates (your right is +x, the net is z = 0, your court is z < 0)
+// and turned into world coordinates by multiplying by toward(s).
+function updateFormation() {
+  for (let s = 0; s < 2; s++) {
+    const m = toward(s), ph = sidePhase(s);
+    const { spots, blockers } = settings.mode === 6 ? spots6(s, ph) : spots2(s, ph);
+    G.blockers[s] = blockers;
+    for (const p of G.sides[s]) {
+      const [ox, oz] = spots.get(p);
+      p.homeX = clamp(ox, -HW - 1, HW + 1) * m; p.homeZ = oz * m;
+    }
+  }
+}
+
+function spots6(s, ph) {
+  const m = toward(s), rot = G.rot[s], spots = new Map(), blockers = [];
+  const fz = -0.16 * HL, bz = -0.6 * HL;
+  const wing = p => (p.role === 'OH' ? -1 : p.role === 'MB' ? 0 : 1); // OH left, MB middle, S and OPP right
+  const backSpot = p => (p.role === 'OH' ? [0, -0.86 * HL] : p.role === 'MB' ? [-0.68 * HW, -0.72 * HL] : [0.68 * HW, -0.72 * HL]);
+  if (ph === 'serve') {
+    rot.forEach((p, i) => spots.set(p, [ZONE_X[i] * HW, i >= 1 && i <= 3 ? fz : bz]));
+  } else if (ph === 'receive') {
+    // three passers in a W; the setter hides near the net, ready to run to the target
+    const passers = rot.filter(isPasser).sort((a, b) => ZONE_X[zoneOf(a) - 1] - ZONE_X[zoneOf(b) - 1] || zoneOf(b) - zoneOf(a));
+    const W = [[-0.55 * HW, -0.6 * HL], [0, -0.7 * HL], [0.55 * HW, -0.6 * HL]];
+    passers.forEach((p, i) => spots.set(p, W[i] || W[1]));
+    for (const p of rot) {
+      if (spots.has(p)) continue;
+      if (p.role === 'S') spots.set(p, isFront(p) ? [0.35 * HW, -1.3] : [0.5 * HW, -0.28 * HL]);
+      else if (isFront(p)) spots.set(p, [ZONE_X[zoneOf(p) - 1] * HW, -1.6]);
+      else spots.set(p, [ZONE_X[zoneOf(p) - 1] * HW, -0.86 * HL]);
+    }
+  } else if (ph === 'offense') {
+    const setter = G.setterNow[s] || rot.find(p => p.role === 'S');
+    for (const p of rot) {
+      if (p === setter) spots.set(p, setterSpot());
+      else if (isFront(p)) spots.set(p, wing(p) === 0 ? [-0.05 * HW, -2.6] : [wing(p) * 0.75 * HW, -0.28 * HL]); // approach starts
+      else if (p.role === 'OH') spots.set(p, [0, -(attackLine() + 2.2)]); // pipe approach
+      else { const [x] = backSpot(p); spots.set(p, [x, -0.55 * HL]); }
+    }
+    // once the set is up, everyone else closes in behind the hitter to cover a blocked ball
+    const hitter = G.touches[s] >= 2 ? G.intended[s] : null;
+    if (hitter) {
+      const hx = hitter.x * m, hz = hitter.z * m;
+      for (const p of rot) if (p !== hitter) { const [x, z] = spots.get(p); spots.set(p, [x + (hx - x) * 0.45, z + (hz - 2.5 - z) * 0.45]); }
+    }
+  } else { // defense, or digging their attack
+    const h = oppHitter(s), hx = h ? clamp(h.x * m, -HW + 0.5, HW - 0.5) : 0;
+    const shift = hx * 0.22; // the back row leans toward the hitter
+    const front = rot.filter(isFront);
+    for (const p of rot) {
+      if (isFront(p)) spots.set(p, [wing(p) * 0.6 * HW, -0.7]);
+      else { const [x, z] = backSpot(p); spots.set(p, [x + shift, z]); }
+    }
+    if (h && ph === 'defense') {
+      // double block: the middle slides over next to the wing on the hitter's side; the other wing drops back for tips
+      const mb = front.find(p => p.role === 'MB');
+      const wings = front.filter(p => p !== mb).sort((a, b) => Math.abs(wing(a) * 0.6 * HW - hx) - Math.abs(wing(b) * 0.6 * HW - hx));
+      const out = Math.sign(hx) || 1;
+      if (wings[0]) { const x = hx + out * 0.45; spots.set(wings[0], [x, -0.7]); blockers.push([wings[0], x]); }
+      if (mb) { const x = hx - out * 0.45; spots.set(mb, [x, -0.7]); blockers.push([mb, x]); }
+      if (wings[1]) spots.set(wings[1], [wing(wings[1]) * 0.62 * HW, -0.33 * HL]);
+    }
+  }
+  return { spots, blockers };
+}
+
+function spots2(s, ph) {
+  const m = toward(s), spots = new Map(), blockers = [];
+  const B = G.sides[s].find(p => p.role === 'B'), D = G.sides[s].find(p => p.role === 'D');
+  if (ph === 'serve') {
+    const partner = G.rot[s][1];
+    spots.set(G.rot[s][0], [0.4 * HW, -HL]);
+    spots.set(partner, partner.role === 'B' ? [0.15 * HW, -1.4] : [0, -0.5 * HL]);
+  } else if (ph === 'receive') {
+    spots.set(B, [-0.4 * HW, -0.55 * HL]); spots.set(D, [0.4 * HW, -0.55 * HL]);
+  } else if (ph === 'offense') {
+    const setter = G.setterNow[s] || D;
+    const other = setter === B ? D : B;
+    spots.set(setter, setterSpot());
+    spots.set(other, [clamp(other.x * m, -0.6 * HW, 0.6 * HW), -0.3 * HL]);
+  } else {
+    const h = oppHitter(s), hx = h ? clamp(h.x * m, -HW + 0.5, HW - 0.5) : 0;
+    spots.set(B, [hx, -0.7]);
+    spots.set(D, [clamp(hx * 0.3, -0.5 * HW, 0.5 * HW), -0.6 * HL]);
+    if (h && ph === 'defense') blockers.push([B, hx]);
+  }
+  return { spots, blockers };
 }
 
 function newMatch() {
   const n = settings.mode;
   HW = n === 2 ? 8 : 9.5; HL = n === 2 ? 12 : 14;
   const size = n === 6 ? 0.9 : 1;
-  const sides = [[], []], serveOrder = [[], []];
-  const spots = homeSpots(n);
+  const sides = [[], []], rot = [[], []];
   for (let s = 0; s < 2; s++) {
-    const es = teams[s];
-    const you = s === 0 ? es[0] : null;
-    // the most defensive Pokémon play back, the best attackers near the net
-    const rest = es.filter(e => e !== you).sort((a, b) => (b.r.def - b.r.pwr) - (a.r.def - a.r.pwr));
-    const order = you ? [...rest, you] : rest;
-    order.forEach((e, i) => {
-      const p = new Player(e, s, e === you, size);
-      const [hx, hz] = spots[i].map((v, k) => v * (k ? HL / (n === 2 ? 8 : 9) : HW / (n === 2 ? 4 : 4.5)));
-      p.homeX = s === 0 ? hx : -hx; p.homeZ = s === 0 ? hz : -hz;
-      sides[s].push(p);
-    });
-    serveOrder[s] = you ? [sides[s].find(p => p.human), ...sides[s].filter(p => !p.human)] : sides[s].slice();
+    const you = s === 0 ? teams[0][0] : null;
+    for (const { entry, role } of lineup(teams[s], you, settings.role[n], n)) {
+      const p = new Player(entry, s, entry === you, size);
+      p.role = role;
+      sides[s].push(p); rot[s].push(p);
+    }
   }
   G = {
-    sides, players: [...sides[0], ...sides[1]], serveOrder,
+    sides, players: [...sides[0], ...sides[1]], rot,
     ball: { x: 0, y: 1, z: 0, vx: 0, vy: 0, vz: 0, spin: 0, trail: [], special: null, noHit: 0 },
     score: [0, 0], touches: [0, 0], lastSide: -1, lastToucher: null, intended: [null, null], lastAttack: null,
-    serving: 0, serverIdx: [0, -1], server: null, phase: 'serve', timer: 0, time: 0,
+    setterNow: [null, null], blockers: [[], []], play: [null, null],
+    serving: 0, server: null, phase: 'serve', timer: 0, time: 0,
     meter: [0, 0], armed: [false, false], react: [0, 0], aiErr: [[0, 0], [0, 0]], leave: [false, false],
     particles: [], texts: [], shake: 0, netWobble: 0, paused: false, shown: false, rally: 0, longestRally: 0,
     cam: { x: 0, z: -HL - CAM.back },
@@ -197,17 +339,18 @@ function newMatch() {
 }
 
 function startServe() {
-  const s = G.serving, order = G.serveOrder[s];
-  const idx = ((G.serverIdx[s] % order.length) + order.length) % order.length;
-  G.server = order[idx];
+  const s = G.serving;
+  G.server = G.rot[s][0];
+  Object.assign(G.ball, { vx: 0, vy: 0, vz: 0, gs: 1, trail: [], special: null, noHit: 0 });
+  G.touches = [0, 0]; G.lastSide = -1; G.lastToucher = null; G.intended = [null, null]; G.lastAttack = null;
+  G.setterNow = [null, null]; G.play = [null, null];
+  G.phase = 'serve'; G.timer = 0; G.rally = 0;
+  updateFormation();
   for (const p of G.players) {
     p.x = p.homeX; p.z = p.homeZ; p.y = 0; p.vx = p.vy = p.vz = 0; p.onGround = true; p.cool = 0; p.ai.blockWait = -1;
   }
   const sv = G.server;
-  sv.x = clamp(sv.homeX, -HW + 0.6, HW - 0.6); sv.z = -toward(s) * (HL + 0.8);
-  Object.assign(G.ball, { vx: 0, vy: 0, vz: 0, gs: 1, trail: [], special: null, noHit: 0 });
-  G.touches = [0, 0]; G.lastSide = -1; G.lastToucher = null; G.intended = [null, null]; G.lastAttack = null;
-  G.phase = 'serve'; G.timer = 0; G.rally = 0;
+  sv.x = clamp(0.5 * HW, -HW + 0.6, HW - 0.6) * toward(s); sv.z = -toward(s) * (HL + 0.8); // serve from the right, behind the end line
   input.hitQ = false;
   const you = G.sides[0].find(p => p.human) || G.sides[0][0];
   G.cam.z = Math.min(-HL - CAM.back, you.z - 6.6); G.cam.x = clamp(you.x * 0.55, -HW * 0.6, HW * 0.6);
@@ -369,6 +512,11 @@ function contact(p) {
     else action = G.touches[s] >= 3 ? 'over' : 'pass';
   }
 
+  // back-row players may only spike from behind the attack line
+  if (action === 'spike' && settings.mode === 6 && !isFront(p) && -p.z * t < attackLine()) {
+    action = 'over';
+    if (!aiControlled(p)) floatText('BACK ROW: HIT FROM BEHIND THE LINE', p.x, p.cy + p.rr + 0.6, p.z, '#ffd6d6', 1.4);
+  }
   if (action === 'spike') {
     let special = false;
     if (s === 0 && G.armed[0] && !aiControlled(p)) special = true;
@@ -383,30 +531,56 @@ function contact(p) {
   p.squash = 0.85;
 }
 
-function setterOf(s, p) {
+// Who sets after this first touch: the setter, or the opposite if the setter had to take the first ball.
+function designatedSetter(s, p) {
   const mates = G.sides[s].filter(q => q !== p);
-  const sc = q => Math.abs(q.homeZ) * 10 - q.homeX * toward(s); // nearest the net, then the right side
-  return mates.reduce((a, q) => (sc(q) < sc(a) ? q : a));
+  if (settings.mode === 2) return mates[0];
+  const [sx, sz] = setterSpot(), m = toward(s);
+  return mates.find(q => q.role === 'S') || mates.find(q => q.role === 'OPP' && isFront(q)) || mates.find(q => q.role === 'OPP')
+    || mates.reduce((a, q) => (Math.hypot(q.x * m - sx, q.z * m - sz) < Math.hypot(a.x * m - sx, a.z * m - sz) ? q : a));
 }
-function attackerOf(s, p) {
-  const mates = G.sides[s].filter(q => q !== p);
-  const you = mates.find(q => q.human && !AUTO);
-  if (you) return you;
-  const sc = x => x.r.pwr + x.r.jmp - Math.abs(x.homeZ) * 6;
-  return mates.reduce((a, q) => (sc(q) > sc(a) ? q : a));
+
+// The setter's options. Outside "4" set, middle quick, back set to the opposite, or the pipe to the back-row outside.
+function choosePlay(s, setter) {
+  const m = toward(s), [tx, tz] = setterSpot();
+  const passGood = Math.hypot(setter.x * m - tx, setter.z * m - tz) < 1.4;
+  const opts = [];
+  for (const q of G.sides[s]) {
+    if (q === setter) continue;
+    let o = null;
+    if (settings.mode === 2) o = { type: 'high', call: 'SET', ox: clamp(q.x * m, -0.6 * HW, 0.6 * HW), oz: -1.1, apex: NET_H + 2.6, w: 1 };
+    else if (isFront(q)) {
+      if (q.role === 'OH') o = { type: 'outside', call: 'OUTSIDE', ox: -0.72 * HW, oz: -1.0, apex: NET_H + 2.8, w: 1 };
+      else if (q.role === 'MB') o = { type: 'quick', call: 'QUICK', ox: setter.x * m - 1.1, oz: -0.8, apex: NET_H + 1.0, w: passGood ? 1.1 : 0.2 };
+      else o = { type: 'right', call: 'BACK SET', ox: 0.72 * HW, oz: -1.0, apex: NET_H + 2.6, w: 0.9 };
+    } else if (q.role === 'OH') o = { type: 'pipe', call: 'PIPE', ox: 0, oz: -(attackLine() + 0.7), apex: NET_H + 2.5, w: 0.5 };
+    if (o) { o.q = q; opts.push(o); }
+  }
+  let pick = null;
+  if (!aiControlled(setter)) { // you are setting: the arrow you hold picks the play
+    const want = keys.left ? 'outside' : keys.up ? 'quick' : keys.right ? 'right' : keys.down ? 'pipe' : null;
+    pick = opts.find(o => o.type === want) || null;
+  }
+  if (!pick) {
+    const wt = o => o.w * (o.q.r.pwr + o.q.r.jmp) * (o.q.human && !AUTO ? 3 : 1);
+    let x = Math.random() * opts.reduce((a, o) => a + wt(o), 0);
+    pick = opts.find(o => (x -= wt(o)) <= 0) || opts[0];
+  }
+  return { ...pick, tx: pick.ox * m, tz: pick.oz * m, ty: pick.q.apex + pick.q.rr * 2 };
 }
 
 function pass(p, incoming, wasSpecial, fromOpp) {
   const s = p.side, t = toward(s), b = G.ball;
   let target, tx, tz, ty, apexY, skill;
-  if (G.touches[s] === 1) {
-    target = setterOf(s, p);
-    tx = clamp(target.homeX * 0.5, -HW + 1, HW - 1); tz = -t * 1.3; ty = 1.3;
-    apexY = NET_H + 2.0; skill = p.r.def;
-  } else {
-    target = attackerOf(s, p);
-    tx = clamp(target.homeX, -HW + 0.8, HW - 0.8); tz = -t * rand(0.7, 1.2);
-    ty = target.apex + target.rr * 2; apexY = NET_H + 2.6 + rand(0, 0.5); skill = p.r.skl;
+  if (G.touches[s] === 1) { // pass to the setter's target spot
+    target = designatedSetter(s, p); G.setterNow[s] = target;
+    const [ox, oz] = setterSpot();
+    tx = ox * t; tz = oz * t; ty = 1.3; apexY = NET_H + 2.0; skill = p.r.def;
+  } else { // set one of the hitters
+    const play = choosePlay(s, p);
+    target = play.q; tx = play.tx; tz = play.tz; ty = play.ty; apexY = play.apex + rand(0, 0.3); skill = p.r.skl;
+    G.play[s] = play.type;
+    floatText(play.call, p.x, p.cy + p.rr + 0.6, p.z, '#ffe9a0', 0.9);
     p.stats.sets++;
   }
   const heat = clamp(incoming / 16, 0, 1.6) * (wasSpecial ? 1.8 : 1);
@@ -582,7 +756,10 @@ function awardPoint(w, label, sub, credit, key) {
   if (credit && key) credit.stats[key]++;
   G.meter[w] = Math.min(100, G.meter[w] + 10);
   G.longestRally = Math.max(G.longestRally, G.rally);
-  if (w !== G.serving) { G.serving = w; G.serverIdx[w]++; }
+  if (w !== G.serving) { // side out: the team that won the serve back rotates one zone clockwise
+    G.serving = w; G.rot[w].push(G.rot[w].shift());
+    floatText('ROTATE', 0, 2.6, -toward(w) * HL * 0.5, TEAM_COLORS[w], 1.4, 30);
+  }
   G.texts.push({ big: true, text: label, sub, color: TEAM_COLORS[w], t: 0, life: 1.6 });
   Sfx.whistle(); Sfx.point(w === 0);
   const won = G.score[w] >= settings.target && G.score[w] - G.score[1 - w] >= 2;
@@ -594,7 +771,9 @@ function awardPoint(w, label, sub, credit, key) {
 function chooseReceiver(s, lx, lz) {
   if (G.lastSide === s && G.touches[s] > 0 && G.intended[s]) return G.intended[s];
   const cands = G.sides[s].filter(p => !(G.lastSide === s && G.lastToucher === p && G.touches[s] > 0));
-  const cost = p => Math.hypot(p.x - lx, p.z - lz) / p.speed + (p.onGround ? 0 : 0.15);
+  const first = G.lastSide !== s, serve = G.lastAttack && G.lastAttack.type === 'serve';
+  const cost = p => Math.hypot(p.x - lx, p.z - lz) / p.speed + (p.onGround ? 0 : 0.15)
+    + (first && settings.mode === 6 && p.role === 'S' ? 0.35 : 0) + (first && serve && !isPasser(p) ? 0.4 : 0);
   let best = null;
   for (const p of cands) if (!best || cost(p) < cost(best)) best = p;
   // the ball is yours when it comes to you; teammates cover what you cannot reach
@@ -604,14 +783,6 @@ function chooseReceiver(s, lx, lz) {
   }
   return best;
 }
-function frontBlocker(s) {
-  const ais = G.sides[s].filter(aiControlled);
-  if (!ais.length) return null;
-  if (s === 0 && !AUTO && settings.mode === 2) return null; // in 2 v 2 your partner stays back to dig
-  const sc = p => Math.abs(p.homeZ) + Math.abs(p.homeX - G.ball.x) * 0.3;
-  return ais.reduce((a, p) => (sc(p) < sc(a) ? p : a));
-}
-
 function aiThink(dt) {
   const b = G.ball;
   for (let s = 0; s < 2; s++) {
@@ -620,19 +791,18 @@ function aiThink(dt) {
     let tc = timeToY(b, 1.0); if (tc == null) tc = timeToY(b, BR) || 0;
     const f = clamp(tc / 0.9, 0, 1);
     const lx = b.x + b.vx * tc + G.aiErr[s][0] * f, lz = b.z + b.vz * tc + G.aiErr[s][1] * f;
-    let receiver = null, blocker = null;
+    let receiver = null;
     if (ownSide(s, lz)) {
       const out = Math.abs(lx) > HW + 0.2 || Math.abs(lz) > HL + 0.2;
       const leave = out && G.lastSide !== s && G.leave[s];
       if (!leave) receiver = chooseReceiver(s, lx, lz);
-    } else if (G.lastSide === 1 - s && G.touches[1 - s] >= 1) {
-      blocker = frontBlocker(s);
     }
+    const blockers = new Map(G.blockers[s]);
     for (const p of G.sides[s]) {
       if (!aiControlled(p)) continue;
       if (p === receiver) aiReceive(p, lx, lz, pars);
-      else if (p === blocker) aiBlock(p, pars, dt);
-      else { moveToward(p, p.homeX, p.homeZ, 0.8 * pars.spd); p.ai.blockWait = -1; }
+      else if (blockers.has(p)) aiBlock(p, pars, dt, blockers.get(p) * toward(s));
+      else { moveToward(p, p.homeX, p.homeZ, 0.85 * pars.spd); p.ai.blockWait = -1; }
     }
   }
 }
@@ -644,7 +814,8 @@ function aiReceive(p, lx, lz, pars) {
     const cy = p.apex + p.rr * 2 + 0.05 + p.ai.jumpErr;
     const tc = timeToY(b, cy);
     if (tc != null) {
-      const tx = b.x + b.vx * tc, tz = b.z + b.vz * tc - t * p.rr * 0.5;
+      let tx = b.x + b.vx * tc, tz = b.z + b.vz * tc - t * p.rr * 0.5;
+      if (settings.mode === 6 && !isFront(p)) tz = -t * Math.max(-tz * t, attackLine() + 0.15); // take off behind the line
       if (p.onGround) {
         moveToward(p, tx, tz, pars.spd);
         if (tc <= p.jumpV / GP + 0.015 && Math.hypot(p.x - tx, p.z - tz) < p.rr + 0.35) jump(p);
@@ -655,14 +826,14 @@ function aiReceive(p, lx, lz, pars) {
   moveToward(p, lx, lz - t * 0.1, pars.spd);
 }
 
-function aiBlock(p, pars, dt) {
+function aiBlock(p, pars, dt, bxWorld) {
   const b = G.ball, s = p.side, t = toward(s);
-  const attacker = G.sides[1 - s].find(q => !q.onGround && Math.abs(q.z) < 3.2);
-  const bx = clamp(attacker ? attacker.x : b.x, -HW + 0.4, HW - 0.4), bz = -t * (p.rr + 0.3);
+  const attacker = G.sides[1 - s].find(q => !q.onGround && Math.abs(q.z) < 3.5);
+  const bx = clamp(bxWorld, -HW + 0.4, HW - 0.4), bz = -t * (p.rr + 0.3);
   moveToward(p, bx, bz, pars.spd);
   if (!p.onGround) return;
   const ballNear = Math.abs(b.z) < 4 && b.y > NET_H - 0.5;
-  if (attacker && ballNear && Math.hypot(p.x - bx, p.z - bz) < 0.6) {
+  if (attacker && ballNear && Math.hypot(p.x - bx, p.z - bz) < 0.8) {
     if (p.ai.blockWait < 0) p.ai.blockWait = pars.react * 0.8 + 0.04;
     else { p.ai.blockWait -= dt; if (p.ai.blockWait <= 0) { jump(p); p.ai.blockWait = -1; } }
   } else p.ai.blockWait = -1;
@@ -692,6 +863,7 @@ function update(dt) {
     if (G.meter[0] >= 100 && !G.armed[0]) { G.armed[0] = true; Sfx.tone(880, 0.2, 'sine', 0.05, 440); }
   }
 
+  updateFormation();
   const you = G.sides[0].find(p => p.human);
   if (G.phase === 'serve') {
     const sv = G.server, b = G.ball;
@@ -1026,7 +1198,7 @@ function drawCourt() {
   groundPoly([[-HW, -HL], [HW, -HL], [HW, HL], [-HW, HL]]); ctx.stroke();
   ctx.lineWidth = 3;
   groundLine(-HW, 0, HW, 0);
-  if (settings.mode === 6) { groundLine(-HW, -3, HW, -3); groundLine(-HW, 3, HW, 3); }
+  if (settings.mode === 6) { const a = attackLine(); groundLine(-HW, -a, HW, -a); groundLine(-HW, a, HW, a); } // attack lines
 }
 
 function drawNet() {
@@ -1185,7 +1357,7 @@ function drawHud() {
   }
   for (let s = 0; s < 2; s++) {
     const w = 96, x = s === 0 ? 8 : LW - 8 - w, y = LH - 12;
-    const lead = s === 0 ? G.sides[0].find(p => p.human) || G.sides[0][0] : G.serveOrder[1][0];
+    const lead = s === 0 ? G.sides[0].find(p => p.human) || G.sides[0][0] : G.sides[1].find(p => p.entry.captain) || G.sides[1][0];
     pxRect(x - 1, y - 1, w + 2, 8, '#10141f'); pxRect(x, y, w, 6, '#33405f');
     const fill = Math.floor((w * G.meter[s] / 100) / 4) * 4; // fills in 4 px steps
     pxRect(x, y, fill, 6, TYPE_COLORS[lead.mon.types[0]]);
@@ -1193,6 +1365,11 @@ function drawHud() {
     if (s === 0 && !AUTO) label = G.armed[0] ? 'ARMED!' : G.meter[0] >= 100 ? 'PRESS K' : 'TYPE SPIKE';
     const blink = G.meter[s] >= 100 && Math.floor(G.time * 4) % 2;
     pxText(label, s === 0 ? x : x + w, y - 11, blink ? '#ffe14a' : '#ffffff', 8, s === 0 ? 'left' : 'right');
+  }
+  const me = G.sides[0].find(p => p.human);
+  if (me && !AUTO) {
+    const where = settings.mode === 6 ? `  ZONE ${zoneOf(me)} ${isFront(me) ? 'FRONT' : 'BACK'} ROW` : '';
+    pxText(ROLES[me.role].name.toUpperCase() + where, cx, LH - 12, '#c9d4ee', 8);
   }
   if (G.phase === 'serve' && !aiControlled(G.server) && Math.floor(G.time * 2.5) % 2 === 0) {
     pxText('PRESS J TO SERVE', cx, 52, '#ffffff', 8);
@@ -1386,21 +1563,45 @@ function buildTeams() {
 }
 
 function renderMatchup() {
+  const n = settings.mode;
+  // your position
+  const pick = $('#opt-role'); pick.innerHTML = '';
+  for (const r of YOUR_ROLES[n]) {
+    const btn = el('button', '', ROLES[r].name);
+    btn.type = 'button'; btn.setAttribute('aria-pressed', String(settings.role[n] === r));
+    btn.addEventListener('click', () => { settings.role[n] = r; renderMatchup(); $('#opt-role [aria-pressed="true"]').focus(); });
+    pick.appendChild(btn);
+  }
+  $('#role-desc').textContent = ROLE_DESC[settings.role[n]];
   for (let s = 0; s < 2; s++) {
     const box = $(s === 0 ? '#mu-you' : '#mu-rival');
     box.innerHTML = '';
     box.appendChild(el('h3', '', `${teamName(s)} <span class="mu-ovr">${teamOvr(teams[s])}</span>`));
+    const lu = lineup(teams[s], s === 0 ? teams[0][0] : null, settings.role[n], n);
     const ul = el('ul', 'mu-list');
-    teams[s].forEach((e, i) => {
+    for (const { entry: e, role } of lu) {
       const li = el('li', '');
       li.appendChild(portrait(e.mon, 96, 64));
-      li.appendChild(el('div', 'ri-text', `<b>${e.mon.name}</b><span>${i === 0 ? (s === 0 ? 'You (captain)' : 'Captain') : e.mon.types.map(cap).join(' / ')}</span>`));
+      const who = s === 0 && e === teams[0][0] ? 'You' : e.mon.types.map(cap).join(' / ');
+      li.appendChild(el('div', 'ri-text', `<b>${e.mon.name}</b><span>${who}</span>`));
+      li.appendChild(el('span', 'role-tag', ROLES[role].short));
       li.appendChild(el('div', 'ri-ovr', String(e.ovr)));
       ul.appendChild(li);
-    });
+    }
     box.appendChild(ul);
+    if (n === 6) { // the starting rotation, seen from that team's side of the net
+      const court = el('div', 'rot-court');
+      court.appendChild(el('div', 'rot-net', 'NET'));
+      for (const z of [4, 3, 2, 5, 6, 1]) {
+        const { entry: e, role } = lu[z - 1];
+        const you = s === 0 && e === teams[0][0];
+        court.appendChild(el('div', 'rot-cell' + (you ? ' you' : ''), `<i>${z}</i><b>${ROLES[role].short}</b><span>${e.mon.name}</span>`));
+      }
+      box.appendChild(court);
+      box.appendChild(el('p', 'rot-note', 'Starting rotation. Zone 1 serves. When your team wins back the serve, everyone rotates one zone clockwise.'));
+    }
   }
-  $('#mu-meta').textContent = `${settings.mode} v ${settings.mode} · ${cap(settings.diff)} · first to ${settings.target}, win by 2`;
+  $('#mu-meta').textContent = `${n} v ${n} · ${cap(settings.diff)} · first to ${settings.target}, win by 2`;
 }
 $('#btn-play').addEventListener('click', startMatch);
 function startMatch() {

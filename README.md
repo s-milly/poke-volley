@@ -29,6 +29,23 @@ Phones get an on-screen pad.
 2. Each round shows 3 random Pokémon from the 151. Pick one. You get 2 rerolls per draft.
 3. The rival team is built to a similar rating, adjusted for the difficulty you chose.
 
+## Positions and rotations
+
+Before each match you pick your position on the matchup screen. Your teammates fill the other roles, each given to the Pokémon whose stats suit it best.
+
+**6 v 6** uses a 5-1 system: a Setter, two Outside hitters (OH), two Middle blockers (MB) and an Opposite (OPP).
+
+- Each team starts in the order zone 1 Setter, zone 2 OH, zone 3 MB, zone 4 OPP, zone 5 OH, zone 6 MB. Zones 4, 3 and 2 are the front row (left to right, facing the net) and 5, 6 and 1 are the back row. That puts each player opposite their partner: the two OHs, the two MBs, and the Setter and Opposite.
+- Zone 1 serves. When a team wins back the serve, it rotates one zone clockwise. The matchup screen shows the starting rotation, and during a match the bottom of the screen shows your role, zone and row.
+- **Serve receive:** three passers (both OHs and the back-row MB) stand in a W. The setter hides near the net and runs to the target once the ball is served.
+- **Switching:** once the ball is in play, everyone moves to their specialty spot. In the front row the OH goes left, the MB middle and the S or OPP right. In the back row the S or OPP goes right back, the OH middle back and the MB left back.
+- **Offense:** the first pass goes to the setter's target, just right of center at the net. The setter picks a play: the high OUTSIDE set to the left, the fast QUICK to the middle when the pass is good, the BACK SET to the opposite on the right, or the PIPE to the back-row OH. Players near the net close in behind the hitter to cover a blocked ball.
+- **Defense:** when the other team sets its hitter, the MB slides along the net to form a double block with the wing on that side. The other front-row player drops back for tips, and the back row spreads around the edge of the court, leaning toward the hitter.
+- **Back-row rule:** back-row players may only spike from behind the attack line (the inner lines, a third of the way back).
+- If you are the setter, the arrow you hold when you set picks the play: left for the outside, up for the quick, right for the back set, down for the pipe. Hold nothing and the play is picked for you.
+
+**2 v 2** uses beach roles. The **Blocker** takes the net on defense and blocks; the **Defender** stays back to dig. On serve receive both pass side by side, and whoever does not pass the first ball sets it.
+
 ## Ratings
 
 Each rating comes from the Pokémon's base stats.
