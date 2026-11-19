@@ -646,6 +646,10 @@ const CHARGE = 0.35;      // seconds from empty to full in a rally
 const RELEASE_WIN = 0.2;  // a release this long before contact still counts
 const SET_WIN = 1.6;      // a set call (E) is kept this long after you let go, so a quick tap still sets
 const holdWin = h => (h.kind === 'set' ? SET_WIN : RELEASE_WIN);
+// A press shorter than this is a tap (a trackpad's tap-to-click sends both at once). A tap counts as held
+// until the ball reaches you, and runs out once the meter is well past full. On a serve, tap to toss and tap again to hit.
+const TAP = 0.12;
+const tapGone = h => h.tap && holdLevel(h) > 1.6;
 const ZONES = [[0.4, -0.25, 'WEAK', '#ff8a8a', '#3a2630'], [0.65, 0.3, 'OK', '#c9d4ee', '#5d6b8a'], [0.85, 0.65, 'GOOD', '#7dffb0', '#2f9e63'], [1, 1, 'PERFECT', '#ffe14a', '#ffcf33']];
 const TOO_LONG = { q: -0.5, label: 'TOO LONG', color: '#ff5a5a' };
 function gradeL(L) {
@@ -1257,7 +1261,7 @@ function humanControl(p, dt) {
   } else {
     const k = Math.min(1, dt * 2.5); p.vx += (wx * 0.8 - p.vx) * k; p.vz += (wz * 0.8 - p.vz) * k; // a running jump keeps its momentum
     const b = G.ball; // holding hit in the air: you drift under the ball so the swing meets it
-    if (G.phase === 'rally' && keys.hit && b.z * toward(p.side) < 0.3) {
+    if (G.phase === 'rally' && (keys.hit || (G.hold && G.hold.tap)) && b.z * toward(p.side) < 0.3) {
       const dx = b.x - p.x, dz = b.z - p.z, d = Math.hypot(dx, dz);
       if (d > 0.15 && d < 1.8 && Math.abs(b.y - p.cy) < 2.2) { const m = Math.min(1, dt * 6), v = Math.min(3.5, d * 5); p.vx += (dx / d * v - p.vx) * m; p.vz += (dz / d * v - p.vz) * m; }
     }
@@ -1291,8 +1295,11 @@ function update(dt) {
   if (G.phase === 'rally' && you && !AUTO) { // the wind-up: press starts it, letting go freezes it
     if (input.hitQ && !(G.hold && G.hold.kind === 'set' && keys.set)) G.hold = { t0: evTime(input.downAt), tr: null, C: CHARGE, kind: 'hit' };
     if (input.setQ) G.hold = { t0: evTime(input.downAt), tr: null, C: SET_CHARGE, kind: 'set' };
-    if (G.hold && G.hold.tr == null && !keys[G.hold.kind]) G.hold.tr = Math.max(G.hold.t0, evTime(input.upAt));
-    if (G.hold && G.time - (G.hold.tr ?? G.time) > holdWin(G.hold)) G.hold = null;
+    if (G.hold && G.hold.tr == null && !G.hold.tap && !keys[G.hold.kind]) {
+      const tr = Math.max(G.hold.t0, evTime(input.upAt));
+      if (G.hold.kind === 'hit' && tr - G.hold.t0 < TAP) G.hold.tap = true; else G.hold.tr = tr;
+    }
+    if (G.hold && (G.time - (G.hold.tr ?? G.time) > holdWin(G.hold) || tapGone(G.hold))) G.hold = null;
   }
   if (G.phase !== 'rally') input.setQ = false;
   if (G.phase === 'serve') {
@@ -1316,8 +1323,13 @@ function update(dt) {
       } else {
         b.vy -= GB * dt; b.y += b.vy * dt;
         const h = G.hold;
-        if (h && !keys.hit) {
+        let hitNow = false;
+        if (h && h.tap) { if (input.hitQ) { input.hitQ = false; h.tr = Math.max(h.t0, evTime(input.downAt)); hitNow = true; } } // the second tap hits
+        else if (h && !keys.hit) {
           h.tr = Math.max(h.t0, evTime(input.upAt));
+          if (h.tr - h.t0 < TAP) { h.tap = true; h.tr = null; } else hitNow = true;
+        }
+        if (hitNow) {
           const gr = gradeL(holdLevel(h));
           floatText(gr.label, sv.x, sv.cy + sv.rr + 1.1, sv.z, gr.color, 0.7);
           G.meterShow = { p: sv, L: holdLevel(h), color: gr.color, t: G.time };
