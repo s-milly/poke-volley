@@ -539,8 +539,8 @@ function newMatch() {
     setterNow: [null, null], blockers: [[], []], play: [null, null], subs: [], started: false,
     serving: 0, server: null, phase: 'serve', timer: 0, time: 0,
     meter: [0, 0], armed: [false, false], react: [0, 0], aiErr: [[0, 0], [0, 0]], leave: [false, false],
-    particles: [], texts: [], shake: 0, netWobble: 0, paused: false, shown: false, rally: 0, longestRally: 0,
-    cam: { x: 0, y: CAM.y, z: -HL - CAM.back },
+    particles: [], rings: [], texts: [], shake: 0, netWobble: 0, paused: false, shown: false, rally: 0, longestRally: 0,
+    cam: { x: 0, y: CAM.y, z: -HL - CAM.back, yaw: 0, pitch: CAM.pitch },
   };
   startServe();
 }
@@ -607,6 +607,12 @@ function stepPlayer(p, h) {
     p.y = 0; p.vy = 0; p.onGround = true;
   }
   clampPlayer(p);
+  const sp = Math.hypot(p.vx, p.vz);
+  if (p.onGround && p.dive <= 0) { // running: a stride to bob on, and little puffs kicked up behind
+    p.run = (p.run || 0) + sp * h * 2.4;
+    if (sp > 2 && (p.puff = (p.puff || 0) - h) <= 0) { p.puff = 0.12; puff(p.x - p.vx * 0.05, p.z - p.vz * 0.05); }
+  }
+  p.lean = (p.lean || 0) + (clamp(p.vx * 0.03, -0.16, 0.16) * (p.onGround ? 1 : 0.5) - (p.lean || 0)) * Math.min(1, h * 12);
   const want = p.strafe && input.aim ? Math.sign(input.aim.x - p.x) * 0.75 : Math.abs(p.vx) > 0.6 ? Math.sign(p.vx) * 0.75 : 0;
   p.face += (want - p.face) * Math.min(1, h * 10);
   p.cool -= h;
@@ -1097,6 +1103,7 @@ function ballDown() {
   const b = G.ball;
   dust(b.x, b.z, 14, '#f3e2b5');
   const landSide = inCourt(b.x, b.z, 0) ? 0 : inCourt(b.x, b.z, 1) ? 1 : -1;
+  G.rings.push({ x: b.x, z: b.z, t: 0, c: landSide === -1 ? '#ff6b6b' : '#ffffff' }); // a ring spreads where it lands
   if (landSide === -1) {
     awardPoint(1 - G.lastSide, 'OUT', `${G.lastToucher ? G.lastToucher.mon.name : 'The block'} hit it out`, null, null);
     return;
@@ -1237,8 +1244,9 @@ function humanControl(p, dt) {
   if (p.dive > 0 || p.rec > 0) { input.jumpT0 = null; input.jumpQ = null; return; } // the slide carries you, then you get up
   const d = Math.hypot(ix, iz) || 1, sp = p.speed * (p.strafe ? 0.85 : 1);
   const wx = ix / d * sp, wz = iz / d * sp * toward(p.side);
-  if (p.onGround) { p.vx = wx; p.vz = wz; }
-  else {
+  if (p.onGround) { // quick to get going and quick to plant, but not instant, so a cut has a little weight
+    const k = Math.min(1, dt * (ix || iz ? 15 : 20)); p.vx += (wx - p.vx) * k; p.vz += (wz - p.vz) * k;
+  } else {
     const k = Math.min(1, dt * 2.5); p.vx += (wx * 0.8 - p.vx) * k; p.vz += (wz * 0.8 - p.vz) * k; // a running jump keeps its momentum
     const b = G.ball; // holding hit in the air: you drift under the ball so the swing meets it
     if (G.phase === 'rally' && keys.hit && b.z * toward(p.side) < 0.3) {
@@ -1260,6 +1268,8 @@ function update(dt) {
   for (const p of G.players) p.squash += (1 - p.squash) * Math.min(1, dt * 12);
   for (const q of G.particles) { q.vy -= 6 * dt; q.x += q.vx * dt; q.y += q.vy * dt; q.z += q.vz * dt; q.life -= dt; }
   G.particles = G.particles.filter(q => q.life > 0);
+  for (const r of G.rings) r.t += dt;
+  G.rings = G.rings.filter(r => r.t < 0.6);
   for (const tx of G.texts) tx.t += dt;
   G.texts = G.texts.filter(tx => tx.t < tx.life);
 
@@ -1339,7 +1349,8 @@ function update(dt) {
   const b = G.ball;
   if (G.phase === 'rally') {
     b.trail.push({ x: b.x, y: b.y, z: b.z, c: b.special });
-    if (b.trail.length > (b.special ? 14 : 6)) b.trail.shift();
+    const fast = Math.hypot(b.vx, b.vy, b.vz) > 11;
+    if (b.trail.length > (b.special ? 14 : fast ? 11 : 6)) b.trail.shift();
   } else b.trail.length = 0;
 
   if (TUT) tutTick(dt, you);
@@ -1349,14 +1360,34 @@ function update(dt) {
   G.cam.x += (cw.x - G.cam.x) * Math.min(1, dt * 2.5);
   G.cam.z += (cw.z - G.cam.z) * Math.min(1, dt * 3);
   G.cam.y += (cw.y - G.cam.y) * Math.min(1, dt * 4);
+  G.cam.yaw += (cw.yaw - G.cam.yaw) * Math.min(1, dt * 2.2);
+  G.cam.pitch += (cw.pitch - G.cam.pitch) * Math.min(1, dt * 2);
 }
 // Where the camera wants to be. Zoom slides it along its own line of sight, so the court stays framed the same way.
+// In follow mode it also frames you and the ball together: it turns toward the play, pulls back as the two
+// spread apart or the ball climbs, and tilts up to keep a high ball in the shot.
 function camWant(focus, ball) {
-  const fixed = settings.camMode === 'fixed', d = settings.zoom;
-  const x = fixed ? 0 : clamp(focus.x * 0.55 + (ball ? G.ball.x * 0.15 : 0), -HW * 0.6, HW * 0.6);
+  const fixed = settings.camMode === 'fixed', b = G.ball;
+  const x = fixed ? 0 : clamp(focus.x * 0.55 + (ball ? b.x * 0.15 : 0), -HW * 0.6, HW * 0.6);
   const z0 = fixed ? -(HL + 0.8) - 6.6 : Math.min(-HL - CAM.back, focus.z - 6.6); // back up when you go deep or serve
-  const piv = CAM.y / Math.tan(CAM.pitch);
-  return { x, z: z0 + piv * (1 - d), y: CAM.y * d };
+  let d = settings.zoom, yaw = 0, pitch = CAM.pitch;
+  if (!fixed && ball) {
+    const bx = clamp(b.x, -HW - 2, HW + 2), bz = clamp(b.z, -HL - 2, HL + 2);
+    const mx = focus.x * 0.6 + bx * 0.4, mz = focus.z * 0.6 + bz * 0.4;
+    yaw = clamp(Math.atan2(mx - x, Math.max(2, mz - z0)) * 0.85, -0.12, 0.12);
+    const spread = Math.hypot(focus.x - bx, focus.z - bz) + Math.max(0, b.y - 3) * 0.6;
+    d *= 1 + clamp((spread - 3.5) * 0.02, -0.05, 0.14);
+    pitch -= clamp((b.y - 3.2) * 0.022, 0, 0.07);
+  }
+  const piv = CAM.y / Math.tan(CAM.pitch), cam = { x, z: z0 + piv * (1 - d), y: CAM.y * d, yaw, pitch };
+  // never tilt so far that your own feet drop toward the bottom edge of the screen
+  for (let i = 0; i < 6 && cam.pitch < CAM.pitch && screenYAt(cam, focus.x, 0, focus.z) > H * 0.86; i++) cam.pitch = Math.min(CAM.pitch, cam.pitch + 0.015);
+  return cam;
+}
+function screenYAt(cam, x, y, z) { // proj()'s vertical, for a camera that is not G.cam
+  const ex = x - cam.x, ez = z - cam.z, dz = ex * Math.sin(cam.yaw) + ez * Math.cos(cam.yaw), dy = y - cam.y;
+  const c = Math.cos(cam.pitch), s = Math.sin(cam.pitch);
+  return CAM.cy - (dy * c + dz * s) * CAM.F / Math.max(0.3, -dy * s + dz * c);
 }
 const ZOOMS = [1, 0.86, 1.12], ZOOM_NAMES = { 1: 'NORMAL', 0.86: 'CLOSE', 1.12: 'WIDE' };
 function cycleCam() {
@@ -1387,6 +1418,9 @@ function quickChat(k) {
 // ===================== effects =====================
 function dust(x, z, n, color) {
   for (let i = 0; i < n; i++) G.particles.push({ x, y: 0.05, z, vx: rand(-1.2, 1.2), vy: rand(0.6, 2.4), vz: rand(-1.2, 1.2), life: rand(0.3, 0.6), r: rand(0.03, 0.06), color });
+}
+function puff(x, z) {
+  for (let i = 0; i < 2; i++) G.particles.push({ x: x + rand(-0.1, 0.1), y: 0.05, z: z + rand(-0.1, 0.1), vx: rand(-0.4, 0.4), vy: rand(0.4, 1.1), vz: rand(-0.4, 0.4), life: rand(0.22, 0.34), r: rand(0.04, 0.07), color: '#f6f1e3' });
 }
 function burst(x, y, z, color, n) {
   for (let i = 0; i < n; i++) {
@@ -1564,14 +1598,18 @@ function star(ctx, x, y, s) {
 // ===================== camera and projection =====================
 const canvas = $('#court'), ctx = canvas.getContext('2d');
 const CAM = { y: 8.6, back: 3.6, pitch: 0.47, F: (H / 2) / Math.tan(31 * Math.PI / 180), cy: H * 0.56 };
+// The camera turns (yaw) and tilts (pitch) as it follows the play. Painted backdrops are built at the resting pitch.
+const camPitch = () => (G && G.cam.pitch != null ? G.cam.pitch : CAM.pitch);
 function proj(x, y, z) {
-  const dx = x - G.cam.x, dy = y - G.cam.y, dz = z - G.cam.z;
-  const c = Math.cos(CAM.pitch), s = Math.sin(CAM.pitch);
+  const ex = x - G.cam.x, dy = y - G.cam.y, ez = z - G.cam.z, yw = G.cam.yaw || 0;
+  const cy = Math.cos(yw), sy = Math.sin(yw), dx = ex * cy - ez * sy, dz = ex * sy + ez * cy;
+  const pt = camPitch(), c = Math.cos(pt), s = Math.sin(pt);
   const Y = dy * c + dz * s, Z = Math.max(0.3, -dy * s + dz * c);
   const k = CAM.F / Z;
   return { x: W / 2 + dx * k, y: CAM.cy - Y * k, k, Z };
 }
-function horizonY() { return CAM.cy - Math.tan(CAM.pitch) * CAM.F; }
+function horizonY() { return CAM.cy - Math.tan(CAM.pitch) * CAM.F; }   // resting horizon, for the painted backdrops
+function horizonNow() { return CAM.cy - Math.tan(camPitch()) * CAM.F; }
 
 function groundPoly(pts) {
   ctx.beginPath();
@@ -1693,10 +1731,21 @@ function buildBeachNight() {
 
 // Animated sky and sea details, drawn over the backdrop on the UI grid every frame.
 const STARS = (() => { const r = seeded(9); return Array.from({ length: 40 }, () => [Math.floor(r() * UW), Math.floor(r() * 30), r() * 6.28]); })();
+// The painted backdrop is drawn a little larger than the screen, so it can slide with the camera's turn and tilt.
+const BG_S = 1.16, BG = { s: 1, x: 0, y: 0 };
+let skyTop = null;
+function drawBackdrop() {
+  const img = skyCache || (skyCache = backdropFor());
+  if (!skyTop) { const [r, g, b] = img.getContext('2d').getImageData(1, 0, 1, 1).data; skyTop = `rgb(${r},${g},${b})`; }
+  const hb = horizonY(), hn = horizonNow();
+  BG.s = BG_S; BG.x = W / 2 - (W / 2) * BG_S - (G.cam.yaw || 0) * CAM.F; BG.y = hn - hb * BG_S;
+  if (BG.y > 0) { ctx.fillStyle = skyTop; ctx.fillRect(0, 0, W, BG.y + 1); }
+  ctx.drawImage(img, BG.x, BG.y, W * BG_S, H * BG_S);
+}
 function drawSkyFx() {
   if (venue().mode !== 2) return;
   const tod = settings.time, hy = Math.round(horizonY() * US), t = G.time;
-  ctx.save(); ctx.setTransform(U, 0, 0, U, 0, 0);
+  ctx.save(); ctx.setTransform(U * BG.s, 0, 0, U * BG.s, BG.x * S, BG.y * S);
   if (tod === 'night') {
     for (const [x, y, ph] of STARS) if (y < hy - 14 && Math.sin(t * 2 + ph) > 0.3) { ctx.fillStyle = '#ffffff'; ctx.fillRect(x, y, 1, 1); }
     const lx = LIGHT_X, ly = lighthouseBase(hy) - 16, a = t * 1.2, reach = Math.cos(a) * 140; // lighthouse beam sweeps around
@@ -2194,6 +2243,17 @@ function drawNet() {
 }
 
 function drawBall(b) {
+  if (b.trail.length > 2 && Math.hypot(b.vx, b.vy, b.vz) > 11) { // a hard hit leaves a streak, thickest at the ball
+    ctx.lineCap = 'round';
+    for (let i = 1; i < b.trail.length; i++) {
+      const a = proj(b.trail[i - 1].x, b.trail[i - 1].y, b.trail[i - 1].z), c = proj(b.trail[i].x, b.trail[i].y, b.trail[i].z), f = i / b.trail.length;
+      const lw = Math.max(2, BR * 2 * c.k * f);
+      ctx.globalAlpha = f * 0.5; ctx.strokeStyle = '#10141f'; ctx.lineWidth = lw + 4;
+      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(c.x, c.y); ctx.stroke();
+      ctx.globalAlpha = f * 0.9; ctx.strokeStyle = b.trail[i].c || '#ffffff'; ctx.lineWidth = lw; ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  }
   for (let i = 0; i < b.trail.length; i++) {
     const q = b.trail[i], a = (i + 1) / b.trail.length, p = proj(q.x, q.y, q.z), s = Math.max(4, BR * 2.2 * p.k * (0.4 + a * 0.6));
     ctx.globalAlpha = a * (q.c ? 0.8 : 0.4); ctx.fillStyle = q.c || '#ffffff';
@@ -2326,6 +2386,10 @@ function drawPlayer(p) {
       if (Math.abs(side) > 0.35) ctx.rotate(Math.sign(side) * 1.25 * down);
       else ctx.scale(1 + 0.35 * down, 1 - 0.45 * down);
     }
+    else { // lean into the run and bounce on the stride
+      ctx.rotate(p.lean || 0);
+      if (p.onGround && Math.hypot(p.vx, p.vz) > 1) ctx.translate(0, -Math.abs(Math.sin(p.run || 0)) * h * 0.06);
+    }
     if (p.flip) ctx.scale(-1, 1);
     ctx.drawImage(img, sx, sy, sw, sh, -w / 2, -h, w, h);
     ctx.restore();
@@ -2342,7 +2406,7 @@ function render() {
   ctx.imageSmoothingEnabled = false;
   ctx.save();
   if (G.shake > 0) ctx.translate(Math.round(rand(-1, 1) * 3 * G.shake) / S, Math.round(rand(-1, 1) * 3 * G.shake) / S);
-  ctx.drawImage(skyCache || (skyCache = backdropFor()), 0, 0, W, H);
+  drawBackdrop();
   drawSkyFx();
   drawArenaWall();
   drawStands();
@@ -2357,6 +2421,12 @@ function render() {
     ctx.strokeStyle = p.human ? '#ffe14a' : p.role === 'L' ? '#c48bff' : TEAM_COLORS[p.side]; ctx.lineWidth = p.human || p.role === 'L' ? 5 : 3;
     groundEllipse(p.x, p.z, p.rr * 1.2, p.rr * 0.95); ctx.stroke();
   }
+  for (const r of G.rings) { // landing rings
+    const k = r.t / 0.6, rad = 0.3 + k * 1.1;
+    ctx.globalAlpha = 1 - k; ctx.strokeStyle = r.c; ctx.lineWidth = 4 * (1 - k) + 1;
+    groundEllipse(r.x, r.z, rad, rad); ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
   ctx.fillStyle = `rgba(60,40,20,${0.45 - clamp(b.y / 8, 0, 0.25)})`;
   groundEllipse(b.x, b.z, BR * 1.5, BR * 1.2); ctx.fill();
   if (G.phase === 'rally') { // a faint ring on the floor right under the ball, wherever it is now
@@ -2585,10 +2655,10 @@ function aimAt(e) {
   if (!G) return;
   const r = canvas.getBoundingClientRect();
   const u = (CAM.cy - (e.clientY - r.top) / r.height * H) / CAM.F, v = ((e.clientX - r.left) / r.width * W - W / 2) / CAM.F;
-  const c = Math.cos(CAM.pitch), sn = Math.sin(CAM.pitch), den = sn - u * c;
+  const pt = camPitch(), c = Math.cos(pt), sn = Math.sin(pt), den = sn - u * c;
   if (den <= 0.02) return; // at or above the horizon
-  const dz = G.cam.y * (c + u * sn) / den, Z = G.cam.y * sn + dz * c;
-  input.aim = { x: G.cam.x + v * Z, z: G.cam.z + dz };
+  const t = G.cam.y / den, rx = v * t, rz = t * (u * sn + c), yw = G.cam.yaw || 0; // in the camera's turned frame
+  input.aim = { x: G.cam.x + rx * Math.cos(yw) + rz * Math.sin(yw), z: G.cam.z - rx * Math.sin(yw) + rz * Math.cos(yw) };
 }
 // The cursor's floor point, pulled inside the other team's court with a margin, or null without a mouse.
 function aimInto(s, margin = 0.5) {
@@ -3358,7 +3428,7 @@ function matchFormat() {
 $('#btn-play').addEventListener('click', startMatch);
 function startMatch() {
   Sfx.init();
-  newMatch(); skyCache = null; crowdCache = null; palmCache = null; show('stage'); sizeCanvas();
+  newMatch(); skyCache = null; skyTop = null; crowdCache = null; palmCache = null; show('stage'); sizeCanvas();
   for (const p of G.players) spriteImg(p.mon.id, p.side === 0);
   if (document.fonts) document.fonts.load(`8px ${PX_FONT}`);
   for (const k in keys) keys[k] = false;
