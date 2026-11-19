@@ -2391,7 +2391,7 @@ function sceneStands(g, V, C) {
   const row = (h, z) => sp(0, h, z).y / 2;                  // stage px are 2 canvas px
   const P = (x, h, z) => { const q = sp(x, h, z); return [cx + q.x / 2, q.y / 2]; };
   const poly = (pts, col) => { g.fillStyle = col; g.beginPath(); pts.forEach(([x, h, z], i) => g[i ? 'lineTo' : 'moveTo'](...P(x, h, z))); g.closePath(); g.fill(); };
-  const gap = 3.4, z0 = C.hl + gap, X = C.hw / 2 + gap, zNear = -12, rise = 1, depth = 0.8, topRow = sceneTop; // the bowl tops out just under the subtitle
+  const gap = 6.5, z0 = C.hl + gap, X = C.hw / 2 + gap, zNear = -12, rise = 1, depth = 0.8, topRow = sceneTop; // the bowl tops out just under the subtitle
   let N = 1; while (row(rise * N, z0 + depth * N) > topRow && N < 60) N++;
   const top = Math.round(row(rise * N, z0 + depth * N));
   g.fillStyle = night ? '#05070d' : '#0f1424'; g.fillRect(0, 0, SCENE_W, top);   // the roof
