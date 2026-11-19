@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>VolleyDex: Gen 1 Draft Volleyball</title>
 <meta name="description" content="Pick a Gen 1 Pokémon, draft teammates by their stats, and play arcade volleyball in the browser.">
-<link rel="stylesheet" href="style.css?v=14">
+<link rel="stylesheet" href="style.css?v=15">
 </head>
 <body class="on-title">
 <main id="menu">
@@ -57,11 +57,12 @@
       <ul class="keys">
         <li><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> or arrow keys<span>Move around the court</span></li>
         <li><kbd>Space</kbd><span>Jump</span></li>
-        <li><kbd>J</kbd> or click<span>Serve. In the air: spike. On the ground: tip it over.</span></li>
+        <li>Left click<span>Hit. Click to toss your serve and again as it drops. In the air above the net: spike. On the third touch: tip it over. Any other touch: time your pass or set.</span></li>
+        <li>Right click<span>Dive for a low or wide ball, then get back up</span></li>
         <li><kbd>K</kbd> or <kbd>Shift</kbd><span>Arm your Type Spike when the meter is full</span></li>
         <li><kbd>P</kbd><span>Pause</span> <kbd>M</kbd><span>Sound</span></li>
       </ul>
-      <p>The camera sits behind your team, looking at the net. Touch the ball without pressing anything and you pass it to a teammate automatically. Each side gets 3 touches. An orange ring on the sand shows where the ball will land, and when a teammate sets you a green ring shows where to jump. When you spike, it goes to the open spot on its own; hold left or right to aim across, forward for a short shot or back to hit deep. To block, stand at the net and jump just after the other team's hitter jumps. A red ring at the net shows where, and flashes JUMP when it is time. Before the draft you choose your position, and you get three Pokémon suited to it to pick from: Setter, Outside hitter, Middle blocker, Opposite or Libero in 6 v 6 (with real rotations and the overlap rule: stand on the green YOUR SPOT ring when the ball is served), or Blocker or Defender in 2 v 2.</p>
+      <p>The camera sits behind your team, looking at the net. When a ball comes to you, a timing meter appears over your head. Its marker runs to the gold end as the ball reaches you: click in the gold for a PERFECT touch, the green for GOOD. A well timed click makes your pass or set land on target and your spikes and serves hit harder, a click that is too early sprays it. If you do not click you still pass it, just less cleanly. Each side gets 3 touches. Four orange carets on the sand close in on where the ball will land, and when a teammate sets you a green ring shows where to jump. When you spike, it goes to the open spot on its own; hold left or right to aim across, forward for a short shot or back to hit deep. To block, stand at the net and jump just after the other team's hitter jumps. A red ring at the net shows where, and flashes JUMP when it is time. Before the draft you choose your position, and you get three Pokémon suited to it to pick from: Setter, Outside hitter, Middle blocker, Opposite or Libero in 6 v 6 (with real rotations and the overlap rule: stand on the green YOUR SPOT ring when the ball is served), or Blocker or Defender in 2 v 2.</p>
       <p>Ratings come from each Pokémon's base stats: <b>SPD</b> from Speed, <b>JMP</b> from Speed and Attack (heavy Pokémon jump lower), <b>PWR</b> from Attack and Sp. Atk, <b>DEF</b> from HP and Defense, <b>SKL</b> from Sp. Atk and Sp. Def.</p>
     </details>
   </section>
@@ -240,14 +241,15 @@
     </div>
     <div class="pad">
       <button type="button" data-act="special" class="small" aria-label="Type Spike">K</button>
+      <button type="button" data-act="dive" class="small" aria-label="Dive">Dive</button>
       <button type="button" data-act="jump" aria-label="Jump">Jump</button>
       <button type="button" data-act="hit" aria-label="Hit">Hit</button>
     </div>
   </div>
 </div>
 
-<script src="data.js?v=14"></script>
-<script src="sprites.js?v=14"></script>
-<script src="game.js?v=14"></script>
+<script src="data.js?v=15"></script>
+<script src="sprites.js?v=15"></script>
+<script src="game.js?v=15"></script>
 </body>
 </html>
