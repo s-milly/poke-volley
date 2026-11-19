@@ -6,6 +6,8 @@ Draft-based volleyball with Gen 1 Pok√©mon, played in the browser. Pick the Pok√
 
 Open `index.html` in a browser, or serve the folder (for example `python3 -m http.server`) and go to `http://localhost:8000`. There is no build step and nothing to install. It also works on GitHub Pages.
 
+New to it? Open **How to play** on the title screen and start the **Tutorial**: pick 2 v 2 or 6 v 6 and you play through every position of that mode (Blocker and Defender, or Setter, Outside hitter, Middle blocker, Opposite and Libero), one drill at a time. A coach panel shows each drill and ticks it off when you do it. The rival plays on Easy, your team does not rotate and the game does not end; you can skip a drill or stop at any time.
+
 | Key | Action |
 | --- | --- |
 | W A S D | Move. Manual: the cursor does not walk for you |

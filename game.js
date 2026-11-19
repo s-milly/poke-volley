@@ -195,6 +195,7 @@ function press(action, down) {
 }
 addEventListener('keydown', e => {
   if (!G || $('#stage').hidden) return;
+  if (e.target.closest && e.target.closest('#coach, #pause') && (e.code === 'Enter' || e.code === 'Space')) return;
   if (e.code === 'KeyP' || e.code === 'Escape') { togglePause(); e.preventDefault(); return; }
   if (e.code === 'KeyM') { Sfx.muted = !Sfx.muted; return; }
   if (/^Digit[1-4]$/.test(e.code)) { if (!e.repeat) quickChat(+e.code[5] - 1); e.preventDefault(); return; }
@@ -211,6 +212,7 @@ let draft = null;   // { starter, picks: [mon], offers: [mon], rerolls }
 let capPick = null; // { role, offers: [mon], rerolls }: your own Pokémon, offered for your position
 let teams = null;   // [[entry], [entry]], entry 0 of team 0 is you
 let G = null;       // live match
+let TUT = null;     // the tutorial, while it runs: { mode, roles, ri, steps, si, saved, ... }
 
 class Player {
   constructor(entry, side, human, size) {
@@ -543,6 +545,7 @@ function nextSet() { // fresh score; the team that received first last set serve
 }
 
 function startServe() {
+  tutServe();
   const s = G.serving;
   if (!G.started) { for (let k = 0; k < 2; k++) applyLibero(k); G.started = true; }
   else for (const job of G.subs) { // never start a serve mid-swap
@@ -552,7 +555,7 @@ function startServe() {
   }
   G.subs = [];
   G.players = [...G.sides[0], ...G.sides[1]];
-  G.server = G.sides[s][0];
+  G.server = tutServer() || G.sides[s][0];
   Object.assign(G.ball, { vx: 0, vy: 0, vz: 0, gs: 1, trail: [], special: null, noHit: 0 });
   G.touches = [0, 0]; G.lastSide = -1; G.lastToucher = null; G.intended = [null, null]; G.lastAttack = null;
   G.setterNow = [null, null]; G.play = [null, null];
@@ -712,7 +715,7 @@ const serveY = p => p.y + p.rr * 2 + 0.6; // where your hand meets the toss
 function doServe(p, q = null) {
   const s = p.side, t = toward(s);
   for (const k of [1 - s, s]) {
-    if (overlaps(k).length) { // out of rotation order when the ball is served
+    if (!TUT && overlaps(k).length) { // out of rotation order when the ball is served
       G.phase = 'rally';
       awardPoint(1 - k, 'OVERLAP', `${teamName(k)} was out of rotation order`, null, null);
       return;
@@ -838,6 +841,7 @@ function contact(p) {
   if (action === 'pass' || action === 'set') pass(p, incoming, wasSpecial, fromOpp, q, dove, action === 'set' ? tm : null);
   else if (action === 'over') { over(p); G.lastAttack = { p, type: 'over' }; }
   else if (action === 'tip') { tip(p); G.lastAttack = { p, type: 'tip' }; }
+  if (human) tutEvent(action, { q, tm, first: fromOpp, dove, to: G.intended[s] });
 
   rerollAI();
   p.squash = 0.85;
@@ -883,7 +887,7 @@ function choosePlay(s, setter, tm = null) {
     pick = aimedOption(opts) || opts.find(o => o.type === G.setPick) || null; G.setPick = null;
   }
   if (!pick) {
-    const callMe = G.chat && G.chat.k === 1 && G.time - G.chat.t < 4; // you called for the ball
+    const callMe = (G.chat && G.chat.k === 1 && G.time - G.chat.t < 4) || !!(tutStep() && tutStep().callMe); // you called for the ball
     const wt = o => o.w * (o.q.r.pwr + o.q.r.jmp) * (o.q.human && !AUTO ? (callMe ? 12 : 3) : 1);
     let x = Math.random() * opts.reduce((a, o) => a + wt(o), 0);
     pick = opts.find(o => (x -= wt(o)) <= 0) || opts[0];
@@ -1013,6 +1017,7 @@ function doBlock(p, wasSpecial) {
   const roll = Math.random(), stuff = roll < clamp(chance, human ? 0.15 : 0.08, human ? 0.8 : 0.75);
   // a computer blocker can be beaten clean; when you get there in time you always get a hand on it
   if (!human && !stuff && roll < clamp(chance, 0.08, 0.75) + 0.4) { p.cool = 0.5; return; }
+  if (human) tutEvent('block', { stuff });
   p.cool = 0.3; b.noHit = 0.08; b.special = null; b.gs = 1; G.tid++;
   G.lastToucher = null; G.lastSide = s; G.touches[s] = 0; G.intended[s] = null; G.intended[1 - s] = null;
   if (stuff) {
@@ -1106,6 +1111,7 @@ function awardPoint(w, label, sub, credit, key) {
   G.meter[w] = Math.min(100, G.meter[w] + 10);
   G.cheer = 1; // the crowd jumps up
   G.longestRally = Math.max(G.longestRally, G.rally);
+  if (TUT) { G.texts.push({ big: true, text: label, sub, color: TEAM_COLORS[w], t: 0, life: 1.6 }); Sfx.whistle(); G.phase = 'point'; G.timer = 1.6; return; }
   if (w !== G.serving) { // side out: the team that won the serve back rotates one zone clockwise
     G.serving = w; G.rot[w].push(G.rot[w].shift());
     planSubs(w); planSubs(1 - w); G.players = [...G.sides[0], ...G.sides[1]];
@@ -1134,6 +1140,7 @@ function chooseReceiver(s, lx, lz) {
   // you called it: teammates leave this ball to you
   const you = cands.find(p => p.human);
   if (you && !AUTO && s === 0 && G.chat && G.chat.k === 0 && G.time - G.chat.t < 3 && G.chat.tid >= G.tid - 1) return you;
+  if (you && first && s === 0 && tutStep() && tutStep().mine && Math.hypot(you.x - lx, you.z - lz) < 5) return you; // tutorial: the first ball is yours
   // the ball is yours when it comes to you; teammates cover what you cannot reach
   if (best && best.human && !AUTO && Math.hypot(best.x - lx, best.z - lz) > 2.4) {
     const ais = cands.filter(p => !p.human);
@@ -1202,7 +1209,10 @@ function humanControl(p, dt) {
   p.strafe = keys.strafe && !!input.aim;
   if (input.diveQ) { // right click: a dive on the ground, a block in the air
     input.diveQ = false;
-    if (G.phase === 'rally') { if (p.onGround) startDive(p, ix, iz); else if (p.role !== 'L') p.blockUp = true; }
+    if (G.phase === 'rally') {
+      if (p.onGround) { startDive(p, ix, iz); if (p.dive > 0) tutEvent('dive'); }
+      else if (p.role !== 'L') { p.blockUp = true; tutEvent('blockup', { net: Math.abs(p.z) < p.rr + 1.2 }); }
+    }
   }
   if (p.dive > 0 || p.rec > 0) { input.jumpT0 = null; input.jumpQ = null; return; } // the slide carries you, then you get up
   const d = Math.hypot(ix, iz) || 1, sp = p.speed * (p.strafe ? 0.85 : 1);
@@ -1210,7 +1220,7 @@ function humanControl(p, dt) {
   if (p.onGround) { p.vx = wx; p.vz = wz; }
   else { const k = Math.min(1, dt * 2.5); p.vx += (wx * 0.8 - p.vx) * k; p.vz += (wz * 0.8 - p.vz) * k; } // a running jump keeps its momentum
   if (input.jumpT0 != null && p.onGround) p.squash = Math.min(p.squash, 1 - 0.14 * clamp((performance.now() - input.jumpT0) / 1000 / JUMP_CHARGE, 0, 1)); // crouch while charging
-  if (input.jumpQ != null) { if (p.onGround) jump(p, input.jumpQ); input.jumpQ = null; }
+  if (input.jumpQ != null) { if (p.onGround) { jump(p, input.jumpQ); tutEvent('jump', { c: input.jumpQ }); } input.jumpQ = null; }
 }
 
 // ===================== main update =====================
@@ -1264,7 +1274,7 @@ function update(dt) {
           const gr = gradeL(holdLevel(h));
           floatText(gr.label, sv.x, sv.cy + sv.rr + 1.1, sv.z, gr.color, 0.7);
           G.meterShow = { p: sv, L: holdLevel(h), color: gr.color, t: G.time };
-          G.hold = null; doServe(sv, gr.q);
+          G.hold = null; doServe(sv, gr.q); tutEvent('serve', { q: gr.q });
         } else if (b.vy < 0 && b.y < hy - 0.4) { floatText(TOO_LONG.label, sv.x, sv.cy + sv.rr + 1.1, sv.z, TOO_LONG.color, 0.7); G.meterShow = { p: sv, L: 1.2, color: TOO_LONG.color, t: G.time }; G.hold = null; doServe(sv, -0.4); }
       }
     } else {
@@ -1299,6 +1309,8 @@ function update(dt) {
     if (b.trail.length > (b.special ? 14 : 6)) b.trail.shift();
   } else b.trail.length = 0;
 
+  if (TUT) tutTick(dt, you);
+
   // the camera drifts to keep you in view (or holds still in fixed mode), and dollies in or out with the zoom
   const cw = camWant(you || G.sides[0][0], true);
   G.cam.x += (cw.x - G.cam.x) * Math.min(1, dt * 2.5);
@@ -1316,16 +1328,16 @@ function camWant(focus, ball) {
 const ZOOMS = [1, 0.86, 1.12], ZOOM_NAMES = { 1: 'NORMAL', 0.86: 'CLOSE', 1.12: 'WIDE' };
 function cycleCam() {
   settings.camMode = settings.camMode === 'fixed' ? 'follow' : 'fixed'; saveSettings();
-  toast(`CAMERA: ${settings.camMode === 'fixed' ? 'FIXED' : 'FOLLOW'}`);
+  toast(`CAMERA: ${settings.camMode === 'fixed' ? 'FIXED' : 'FOLLOW'}`); tutEvent('cam');
 }
 function cycleZoom() {
   const i = ZOOMS.indexOf(settings.zoom);
   settings.zoom = ZOOMS[(i + 1) % ZOOMS.length]; saveSettings();
-  toast(`ZOOM: ${ZOOM_NAMES[settings.zoom]}`);
+  toast(`ZOOM: ${ZOOM_NAMES[settings.zoom]}`); tutEvent('cam');
 }
 function wheelZoom(dy) {
   settings.zoom = Math.round(clamp(settings.zoom * Math.exp(dy * 0.0012), 0.84, 1.14) * 100) / 100; saveSettings();
-  toast(`ZOOM ${Math.round(100 / settings.zoom)}%`);
+  toast(`ZOOM ${Math.round(100 / settings.zoom)}%`); tutEvent('cam');
 }
 function toast(text) { if (G) G.toast = { text, t: G.time }; }
 
@@ -1335,6 +1347,7 @@ function quickChat(k) {
   const you = G && G.sides[0].find(p => p.human);
   if (!you || AUTO || G.paused) return;
   G.chat = { k, t: G.time, tid: G.tid };
+  tutEvent('chat', { k });
   Sfx.tone([660, 880, 990, 440][k], 0.06, 'square', 0.025);
 }
 
@@ -2430,11 +2443,11 @@ function drawHud() {
   if (me && !AUTO) {
     const where = settings.mode === 6 ? `  ZONE ${zoneOf(me)} ${isFront(me) ? 'FRONT' : 'BACK'} ROW` : '';
     pxText(ROLES[me.role].name.toUpperCase() + where, cx, UH - 12, '#c9d4ee', 8);
-    if (G.phase === 'serve' && me !== G.server && overlaps(0).includes(me) && Math.floor(G.time * 4) % 2 === 0) pxText('OVERLAP! GET TO YOUR SPOT', cx, 76, '#ff8a8a', 8);
+    if (G.phase === 'serve' && !TUT && me !== G.server && overlaps(0).includes(me) && Math.floor(G.time * 4) % 2 === 0) pxText('OVERLAP! GET TO YOUR SPOT', cx, 76, '#ff8a8a', 8);
   }
   if (G.phase === 'serve' && !aiControlled(G.server) && Math.floor(G.time * 2.5) % 2 === 0) {
     pxText(G.toss ? 'LET GO AS IT DROPS' : 'HOLD CLICK TO TOSS', cx, 52, '#ffffff', 8);
-    pxText('WASD AIMS', cx, 63, '#c9d4ee', 8);
+    pxText(input.aim ? 'THE CURSOR AIMS' : 'WASD AIMS', cx, 63, '#c9d4ee', 8);
   }
   for (const t of G.texts) if (t.big && t.t >= 0) {
     const k = t.t / t.life;
@@ -2487,7 +2500,7 @@ function drawScoreboard() {
   }
   pxRect(x0 + logoW, y0 + rowH + 1, W - logoW, 1, '#c5ccd9');
   // set and target, in a dark tab under the board
-  const info = multi ? `SET ${G.setNo} · TO ${setTarget()}` : `TO ${setTarget()} · WIN BY 2`;
+  const info = TUT ? 'TUTORIAL' : multi ? `SET ${G.setNo} · TO ${setTarget()}` : `TO ${setTarget()} · WIN BY 2`;
   const tw = info.length * 8 + 8;
   pxRect(x0, y0 + H, tw, 12, '#141c33');
   pxText(info, x0 + 4, y0 + H + 2, '#c9d4ee', 8, 'left', null);
@@ -2611,7 +2624,10 @@ function seg(group, key) {
 seg('#opt-diff', 'diff'); seg('#opt-target', 'target'); seg('#opt-sets', 'sets');
 // Settings are kept between visits (not in test mode). Anything stale or unknown falls back to the default.
 const SAVE_KEY = 'volleydex-settings';
-function saveSettings() { if (!AUTO) try { localStorage.setItem(SAVE_KEY, JSON.stringify(settings)); } catch (e) {} }
+function saveSettings() { // during the tutorial, save the player's own settings (plus any camera change), not the tutorial's
+  const s = TUT ? { ...TUT.saved, camMode: settings.camMode, zoom: settings.zoom } : settings;
+  if (!AUTO) try { localStorage.setItem(SAVE_KEY, JSON.stringify(s)); } catch (e) {}
+}
 function loadSettings() {
   let o; try { o = JSON.parse(localStorage.getItem(SAVE_KEY)); } catch (e) { return; }
   if (!o || typeof o !== 'object') return;
@@ -3107,14 +3123,15 @@ $('#btn-team-next').addEventListener('click', () => { renderSummary(); renderVen
 renderSummary();
 $('#btn-start').addEventListener('click', () => { Sfx.init(); saveSettings(); buildPick(); show('scr-pick'); });
 // Quick match: the best fit of your three captain offers, then the strongest Pokémon of each draft round.
-$('#btn-quick').addEventListener('click', () => {
-  Sfx.init(); buildPick();
+function quickTeams() {
+  buildPick();
   const fit = ROLES[capPick.role].fit, best = (list, f) => list.reduce((a, b) => (f(b) > f(a) ? b : a));
   draft = { starter: best(capPick.offers, m => fit(makeEntry(m, true).r)), picks: [], offers: [], rerolls: 2 };
   makeOffers();
   while (draft.picks.length < teamSize() - 1) { draft.picks.push(best(draft.offers, m => m.ovr)); makeOffers(); }
-  buildTeams(); renderMatchup(); show('scr-matchup');
-});
+  buildTeams();
+}
+$('#btn-quick').addEventListener('click', () => { Sfx.init(); quickTeams(); renderMatchup(); show('scr-matchup'); });
 
 // ---------- pick your position, then your Pokémon ----------
 // Three random Pokémon from those best suited to the position (top third of the dex by that role's fit).
@@ -3297,16 +3314,161 @@ function startMatch() {
   updateTouchUI();
 }
 
+// ---------- tutorial ----------
+// A run through every position of one game mode. Each position is a real point-by-point game with the rival on Easy,
+// no rotations and no end; a coach panel lists the drills and ticks each one off when you do it.
+// Step fields: text, ev (the event that counts), test (optional check on it), serve ('you', 'us' or 'them': who serves while
+// this drill is on), mine (teammates leave the first ball to you), callMe (your setter looks for you).
+const TUT_BASICS = [
+  { title: 'Move', text: 'Move with W A S D. You only move while you hold them.', ev: 'move' },
+  { title: 'Jump', text: 'Hold Space to crouch and charge, let go to jump. Charge it all the way for a full-height jump.', ev: 'jump', test: d => d.c >= 0.95 },
+  { title: 'Camera', text: 'Press C to switch between a camera that follows you and one that holds still. V or the mouse wheel zooms.', ev: 'cam' },
+];
+const T_SERVE = { title: 'Serve', text: 'Hold left click to toss, then let go as the ball drops back to your hand. The serve goes where the cursor points.', ev: 'serve', test: d => d.q > 0, serve: 'you' };
+const T_PASS = { title: 'Receive', text: 'Their serve is yours: get under the orange carets, hold left click as the ball comes in and let go to pass.', ev: 'pass', test: d => d.first, mine: true };
+const T_PERFECT = { title: 'Perfect pass', text: 'Pass again, and let go with the meter in the gold notch at the top for a PERFECT pass.', ev: 'pass', test: d => d.first && d.q >= 1, mine: true };
+const T_DIVE = { title: 'Dive', text: 'Right click on the ground to dive. Hold a direction to dive that way; hold none and you dive at the ball.', ev: 'dive' };
+const T_BLOCKUP = { title: 'Block', text: 'When they attack, stand at the net, jump just after their hitter jumps and right click in the air to put your block up.', ev: 'blockup', test: d => d.net, serve: 'us' };
+const T_BLOCK = { title: 'Touch a spike', text: 'Now get a hand on one of their spikes. The red ring at the net shows where to stand. A block does not use one of your 3 touches.', ev: 'block', serve: 'us' };
+const T_SPIKE = { title: 'Spike', text: 'Your setter is looking for you. Follow the green ring, jump as the ball comes down and hold left click; let go to swing.', ev: 'spike', callMe: true };
+const TUT_ROLE = {
+  B: [T_SERVE, T_BLOCKUP, T_BLOCK, T_SPIKE],
+  D: [T_PASS, T_PERFECT, T_DIVE,
+    { title: 'Set', text: 'When your partner passes and the ball comes to you, press E to set them.', ev: 'set', test: d => d.tm && d.tm.set }],
+  S: [T_SERVE,
+    { title: 'Set', text: 'Your team passes to you. Point the cursor at a hitter (the gold tag shows who) and press E as the ball reaches you.', ev: 'set', test: d => d.tm && d.tm.set },
+    { title: 'Quick set', text: 'Hold E early, so the blue meter is full when you touch the ball: a low, fast QUICK SET.', ev: 'set', test: d => d.tm && d.tm.quick },
+    { title: 'Spread it', text: 'Set two different hitters: move the cursor to a new one before you press E.', ev: 'set', test: (d, T) => { if (d.to) T.hitters.add(d.to); return T.hitters.size >= 2; } }],
+  OH: [T_PASS,
+    { title: 'Call for it', text: 'Press 2 to call SET ME! Your setter looks for you for a few seconds after.', ev: 'chat', test: d => d.k === 1 },
+    T_SPIKE,
+    { title: 'Big swing', text: 'Spike again with the meter at GOOD or PERFECT when you meet the ball, for a harder hit.', ev: 'spike', test: d => d.q >= 0.65, callMe: true }],
+  MB: [T_BLOCKUP, T_BLOCK,
+    { ...T_SPIKE, text: 'Middles hit quick sets: be at the net and in the air early, as the setter touches the ball, and hold left click.' }],
+  OPP: [T_SERVE, T_SPIKE, T_BLOCKUP],
+  L: [T_PASS, T_PERFECT, T_DIVE,
+    { title: 'Call it', text: 'Press 1 to call MINE! and your teammates leave the next ball to you.', ev: 'chat', test: d => d.k === 0 }],
+};
+const tutStep = () => (TUT && !TUT.wait ? TUT.steps[TUT.si] || null : null);
+function tutServe() { // who serves follows the drill
+  const st = tutStep();
+  if (st) G.serving = st.serve === 'you' || st.serve === 'us' ? 0 : 1;
+}
+function tutServer() {
+  const st = tutStep(), me = G && G.all[0].find(p => p.human);
+  if (!st || !me || G.serving !== 0) return null;
+  if (st.serve === 'you' && G.sides[0].includes(me)) return me;
+  return G.sides[0].find(p => p !== me) || null; // a teammate serves, so you are free to set up at the net
+}
+function tutEvent(ev, d = {}) {
+  const st = tutStep();
+  if (!st || st.ev !== ev || (st.test && !st.test(d, TUT))) return;
+  tutNext(true);
+}
+function tutNext(done) {
+  const st = tutStep(); if (!st) return;
+  TUT.marks[TUT.si] = done ? 'done' : 'skipped';
+  TUT.si++;
+  if (done) { toast(`${st.title.toUpperCase()}: DONE`); Sfx.tone(880, 0.08, 'square', 0.03); Sfx.tone(1320, 0.12, 'square', 0.03, 0, 0.08); }
+  if (TUT.si >= TUT.steps.length) TUT.endAt = G.time + 1.4; // let the play finish, then the card
+  else if (G.phase === 'serve' && !G.toss && G.timer < 0.9) { // a new drill can change who serves: set the serve up again
+    const before = G.server; tutServe(); if ((tutServer() || G.sides[G.serving][0]) !== before) startServe();
+  }
+  renderCoach();
+}
+function tutTick(dt, me) {
+  if (TUT.wait) return;
+  if (TUT.endAt != null && G.time >= TUT.endAt) { TUT.endAt = null; tutRoleDone(); return; }
+  const st = tutStep();
+  if (st && st.ev === 'move' && me && (keys.left || keys.right || keys.up || keys.down)) {
+    TUT.moved += Math.hypot(me.vx, me.vz) * dt;
+    if (TUT.moved > 4) tutNext(true);
+  }
+}
+function startTutorial(mode) {
+  Sfx.init();
+  TUT = { mode, roles: YOUR_ROLES[mode], ri: 0, saved: JSON.parse(JSON.stringify(settings)) };
+  Object.assign(settings, { mode, diff: 'easy', target: 25, sets: 1 });
+  tutRole();
+}
+function tutRole() {
+  const role = TUT.roles[TUT.ri];
+  settings.role[TUT.mode] = role;
+  quickTeams();
+  Object.assign(TUT, { steps: [...(TUT.ri === 0 ? TUT_BASICS : []), ...TUT_ROLE[role]], si: 0, marks: [], moved: 0, hitters: new Set(), wait: false, endAt: null });
+  startMatch();
+  renderCoach();
+}
+function tutRoleDone() {
+  TUT.wait = true; G.paused = true;
+  renderCoach();
+  const b = $('#coach .cta'); if (b) b.focus({ preventScroll: true });
+}
+function endTutorial() {
+  if (!TUT) return;
+  const cam = { camMode: settings.camMode, zoom: settings.zoom };
+  Object.assign(settings, TUT.saved, cam);
+  TUT = null; G = null;
+  $('#coach').hidden = true;
+  saveSettings(); renderSummary(); show('scr-title');
+}
+function renderCoach() {
+  const box = $('#coach');
+  box.hidden = !TUT;
+  if (!TUT) return;
+  const role = TUT.roles[TUT.ri], n = TUT.roles.length, mode = `${TUT.mode} v ${TUT.mode}`;
+  const steps = TUT.steps.map((st, i) => {
+    const m = TUT.marks[i], cur = i === TUT.si && !TUT.wait;
+    const tag = m === 'done' ? '<i aria-hidden="true">✓</i>' : m === 'skipped' ? '<i aria-hidden="true">-</i>' : `<i aria-hidden="true">${i + 1}</i>`;
+    const state = m === 'done' ? ' (done)' : m === 'skipped' ? ' (skipped)' : cur ? ' (now)' : '';
+    return `<li class="${m || ''}${cur ? ' now' : ''}">${tag}<span>${st.title}<span class="vh">${state}</span></span></li>`;
+  }).join('');
+  let body;
+  if (TUT.wait) {
+    const last = TUT.ri >= n - 1, next = last ? null : TUT.roles[TUT.ri + 1];
+    body = `<p class="coach-done">${ROLES[role].name}: done</p>`
+      + (last ? `<p>That is every position in ${mode}. You are ready for a real match.</p>
+           <div class="coach-actions"><button type="button" class="cta small" data-tut="menu">Back to menu</button></div>`
+        : `<p>Up next, <b>${ROLES[next].name}</b>. ${ROLE_DESC[next]}</p>
+           <div class="coach-actions"><button type="button" class="cta small" data-tut="next">Next: ${ROLES[next].name} <span aria-hidden="true">▶</span></button>
+           <button type="button" class="ghost small" data-tut="quit">End tutorial</button></div>`);
+  } else {
+    const st = TUT.steps[TUT.si];
+    body = st ? `<p class="coach-now">${st.text}</p>` : '<p class="coach-now">Nice work. Finishing the point...</p>';
+    body += `<div class="coach-actions"><button type="button" class="ghost small" data-tut="skip"${st ? '' : ' disabled'}>Skip step</button>
+      <button type="button" class="ghost small" data-tut="quit">End tutorial</button></div>`;
+  }
+  box.innerHTML = `<p class="coach-kicker">Tutorial · ${mode} · Position ${TUT.ri + 1} of ${n}</p>
+    <h2>${ROLES[role].name}</h2><ol class="coach-steps">${steps}</ol>${body}`;
+}
+$('#coach').addEventListener('click', e => {
+  const b = e.target.closest('button[data-tut]'); if (!b || !TUT) return;
+  if (e.detail) b.blur(); // a mouse click: give the keys back to the game (Space must not press this button again)
+  const a = b.dataset.tut;
+  if (a === 'skip') tutNext(false);
+  else if (a === 'next') { TUT.ri++; tutRole(); }
+  else endTutorial();
+});
+// the tutorial's own mode picker, in How to play
+let tutMode = settings.mode;
+function renderTutPick() {
+  for (const b of document.querySelectorAll('#tut-mode button')) b.setAttribute('aria-pressed', String(Number(b.dataset.v) === tutMode));
+  $('#tut-roles').textContent = `Positions: ${YOUR_ROLES[tutMode].map(r => ROLES[r].name).join(', ')}.`;
+}
+$('#tut-mode').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; tutMode = Number(b.dataset.v); renderTutPick(); });
+$('#btn-tut').addEventListener('click', () => startTutorial(tutMode));
+renderTutPick();
+
 // ---------- pause and result ----------
 function togglePause() {
-  if (!G || G.phase === 'over') return;
+  if (!G || G.phase === 'over' || (TUT && TUT.wait)) return;
   G.paused = !G.paused;
   $('#pause').hidden = !G.paused;
   if (G.paused) $('#btn-resume').focus();
 }
 $('#btn-resume').addEventListener('click', togglePause);
 $('#btn-pause').addEventListener('click', togglePause);
-$('#btn-quit').addEventListener('click', () => { G.paused = false; $('#pause').hidden = true; G = null; show('scr-title'); });
+$('#btn-quit').addEventListener('click', () => { G.paused = false; $('#pause').hidden = true; G = null; if (TUT) endTutorial(); else show('scr-title'); });
 
 function showResult() {
   const w = G.winner;

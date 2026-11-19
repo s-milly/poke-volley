@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>VolleyDex: Gen 1 Draft Volleyball</title>
 <meta name="description" content="Pick a Gen 1 Pokémon, draft teammates by their stats, and play arcade volleyball in the browser.">
-<link rel="stylesheet" href="style.css?v=19">
+<link rel="stylesheet" href="style.css?v=20">
 </head>
 <body class="on-title">
 <main id="menu">
@@ -54,6 +54,20 @@
 
     <details class="howto">
       <summary><h2>How to play</h2></summary>
+      <section class="tut" aria-labelledby="tut-h">
+        <h3 id="tut-h">Tutorial</h3>
+        <p>Learn the game by playing every position in a mode, one drill at a time. A coach panel shows what to do next and ticks off each drill when you do it. Nothing counts here: the rival plays on Easy, your team does not rotate and the game does not end. You can skip a drill or stop at any time.</p>
+        <fieldset>
+          <legend>Tutorial mode</legend>
+          <div class="seg" id="tut-mode">
+            <button type="button" data-v="2" aria-pressed="true">2 v 2</button>
+            <button type="button" data-v="6" aria-pressed="false">6 v 6</button>
+          </div>
+        </fieldset>
+        <p class="tut-roles" id="tut-roles" aria-live="polite"></p>
+        <button type="button" class="cta" id="btn-tut">Start tutorial <span aria-hidden="true">▶</span></button>
+      </section>
+      <h3 class="keys-h">Controls</h3>
       <ul class="keys">
         <li><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd><span>Move. You only move when you press them: the cursor never walks for you.</span></li>
         <li>Mouse<span>Aim. Your serves, spikes, tips and over-balls go where the cursor points (the white ring on the other court), and as setter you set the hitter it points at.</span></li>
@@ -229,6 +243,7 @@
   <div class="canvas-wrap">
     <canvas id="court" width="1280" height="720" aria-label="Volleyball match"></canvas>
     <button type="button" class="icon-btn" id="btn-pause" aria-label="Pause">II</button>
+    <aside id="coach" class="coach" aria-live="polite" aria-label="Tutorial coach" hidden></aside>
     <div id="pause" class="overlay" hidden>
       <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="pause-h">
         <h2 id="pause-h">Paused</h2>
@@ -254,8 +269,8 @@
   </div>
 </div>
 
-<script src="data.js?v=19"></script>
-<script src="sprites.js?v=19"></script>
-<script src="game.js?v=19"></script>
+<script src="data.js?v=20"></script>
+<script src="sprites.js?v=20"></script>
+<script src="game.js?v=20"></script>
 </body>
 </html>
