@@ -998,8 +998,8 @@ function spike(p, q = null) {
   // Each spike is timed rather than given a raw speed: harder hitters land it sooner,
   // but there is always enough time to react and run to the landing ring.
   const power = q == null ? 1 : 1.1 - q * 0.3; // your timing: a perfect swing lands about 20% sooner
-  // your own spike is a kill shot: it is on the floor in about a third of a second
-  const flight = human ? clamp(0.5 - p.r.pwr * 0.0015, 0.36, 0.48) * power
+  // your own spike, and any perfect spike, is a kill shot: it is on the floor in about a third of a second
+  const flight = human || special ? clamp(0.5 - p.r.pwr * 0.0015, 0.36, 0.48) * power
     : clamp(1.3 - p.r.pwr * 0.005, 0.8, 1.15) * (settings.mode === 6 ? 0.75 : 1) * power; // 6 v 6 has more defenders to beat
   const aims = [[tx, tz]];
   for (let i = 0; i < 5; i++) aims.push([rand(-HW * 0.8, HW * 0.8), t * rand(1.5, HL - 1)]);
@@ -1015,7 +1015,7 @@ function spike(p, q = null) {
     if (!inCourt(lx, lz, 1 - s) || Math.abs(lz) < 0.5) continue;
     b.vx = vx; b.vy = vy; b.vz = vz; b.gs = g / GB;
     G.lastAttack = { p, type: 'spike' };
-    if (human) G.shake = Math.max(G.shake, 0.18);
+    if (human || special) G.shake = Math.max(G.shake, 0.18);
     if (special) {
       const ty = p.mon.types[0];
       b.special = ty;
