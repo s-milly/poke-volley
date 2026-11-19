@@ -2300,10 +2300,12 @@ function renderSummary() {
 // ---- Title scene: the chosen venue's sky over a full court, a net and two teams of Pokémon in a rally. ----
 // Everything on the stage goes through one camera: a pinhole standing behind your end line, looking across the net.
 // World units match the game (x across, z toward the far end, net at z = 0, your side z < 0). Stage units are CSS px,
-// x from the stage centre and y from its top. The backdrop is a 560x220 canvas drawn at 2x behind a 440 px stage.
+// x from the stage centre and y from its top. The backdrop is a 560x220 canvas drawn at 2x behind a 440 px stage,
+// and the whole stage is then scaled by stageF (CSS --sf) to fill the window.
 const SCENE_W = 560, SCENE_H = 220, SCENE_SKY = 110;
 const ST = { hor: SCENE_SKY * 2, camH: 4.5, back: 14.7, F: 359 }; // horizon y, camera height, camera to net, focal length
 let stageK = 1;                                                    // horizontal squeeze on narrow screens
+let stageF = 1;                                                    // stage size: 1 = the 440 px stage, scaled up to fit the window
 function sp(x, h, z) { // world point -> stage px; k is px per world unit at that depth
   const k = ST.F / (z + ST.back);
   return { x: x * k * stageK, y: ST.hor + (ST.camH - h) * k, k };
@@ -2403,7 +2405,12 @@ function sceneTint(url) {
 }
 function renderScene() {
   const scene = $('#scene'), C = STAGE[settings.mode];
-  stageK = Math.min(1, (Math.min(innerWidth, 1120) - 40) / 600); // pull everything in on narrow screens
+  // Grow the whole stage with the window: tall enough to fill the screen above the mode picker, never smaller
+  // than 2x pixels, and no bigger than the width allows. Everything inside scales together, so the court keeps its shape.
+  const below = innerWidth > 860 && innerHeight >= 700 ? 250 : 330; // room kept for the mode picker
+  stageF = Math.max(1, Math.min(1.8, (innerHeight - below) / 440, innerWidth / 300));
+  document.documentElement.style.setProperty('--sf', stageF.toFixed(3));
+  stageK = Math.min(1, (innerWidth - 40) / (600 * stageF)); // pull everything in on narrow screens
   const bd = sceneBackdrop();
   $('#title-hero').style.backgroundImage = `url(${bd}), var(--v-edge, none)`;
   sceneTint(bd);
@@ -2607,8 +2614,10 @@ const Rally = (() => {
     run,
   };
 })();
-let sceneW = innerWidth;
-addEventListener('resize', () => { if (Math.abs(innerWidth - sceneW) > 40 && !$('#scr-title').hidden) { sceneW = innerWidth; renderScene(); } });
+let sceneW = innerWidth, sceneH = innerHeight;
+addEventListener('resize', () => {
+  if ((Math.abs(innerWidth - sceneW) > 40 || Math.abs(innerHeight - sceneH) > 60) && !$('#scr-title').hidden) { sceneW = innerWidth; sceneH = innerHeight; renderScene(); }
+});
 $('#scr-title').classList.add('intro');
 setTimeout(() => $('#scr-title').classList.remove('intro'), 1200);
 // Picking a mode only selects it (and switches the stage to that mode's venue); Continue moves on.

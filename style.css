@@ -45,11 +45,13 @@ button { color: inherit; cursor: pointer; -webkit-tap-highlight-color: transpare
 }
 
 /* ---------- title ---------- */
-/* The stage: a 560x220 pixel scene drawn at 2x, with sprites, net and ball laid over it. */
+/* The stage: a 560x220 pixel scene drawn at 2x, with sprites, net and ball laid over it, then scaled by --sf
+   (set by renderScene in game.js) so it fills the window above the mode picker. */
+:root { --sf: 1; --stage-h: calc(440px * var(--sf)); }
 .title-hero {
-  position: relative; height: 440px; overflow: hidden;
+  position: relative; height: var(--stage-h); overflow: hidden;
   /* the stage art, then its two edge columns stretched out to the sides of the window */
-  background: #3c9fe4 center top / auto 440px no-repeat; background-size: auto 440px, 100% 440px;
+  background: #3c9fe4 center top / auto var(--stage-h) no-repeat; background-size: auto var(--stage-h), 100% var(--stage-h);
   background-position: center top, 0 0; image-rendering: pixelated;
   margin-inline: calc(50% - 50vw); border-bottom: 3px solid var(--ink);
 }
@@ -58,8 +60,8 @@ button { color: inherit; cursor: pointer; -webkit-tap-highlight-color: transpare
 body.on-title {
   overflow-x: clip;
   background:
-    linear-gradient(color-mix(in srgb, var(--bg) 30%, transparent) 440px, color-mix(in srgb, var(--bg) 82%, transparent) 640px, var(--bg) 820px) 0 0 / 100% 100% no-repeat,
-    var(--v-tile, none) 50% 440px / 64px 64px repeat,
+    linear-gradient(color-mix(in srgb, var(--bg) 30%, transparent) var(--stage-h), color-mix(in srgb, var(--bg) 82%, transparent) calc(var(--stage-h) + 200px), var(--bg) calc(var(--stage-h) + 380px)) 0 0 / 100% 100% no-repeat,
+    var(--v-tile, none) 50% var(--stage-h) / calc(64px * var(--sf)) calc(64px * var(--sf)) repeat,
     var(--v-floor, var(--bg));
   image-rendering: pixelated;
 }
@@ -70,7 +72,7 @@ body.on-title #menu { padding-top: 0; }
 .hero-copy h1 span { color: var(--accent); }
 .lede { color: #fbfcff; font-size: 26px; max-width: 44ch; text-wrap: balance; margin: 14px auto 0; text-shadow: 2px 2px 0 var(--ink), -1px -1px 0 var(--ink), 1px -1px 0 var(--ink), -1px 1px 0 var(--ink); }
 
-.scene { position: absolute; inset: 0; pointer-events: none; }
+.scene { position: absolute; inset: 0 0 auto; height: 440px; pointer-events: none; transform: scale(var(--sf)); transform-origin: 50% 0; }
 .mon { position: absolute; left: 50%; top: 0; transform-origin: 0 0; }
 .mon img { display: block; image-rendering: pixelated; }
 .far .mon { z-index: 1; }
@@ -150,6 +152,12 @@ body.on-title #menu { padding-top: 0; }
 .mode-pick b { font-size: 18px; }
 .mode-pick span { font: 20px/1 var(--body); }
 @media (min-width: 861px) { .mode-pick button { min-height: 150px; } }
+/* on wide, tall-enough screens the picker is one row (two cards and Continue), so the stage above can be bigger */
+@media (min-width: 861px) and (min-height: 700px) {
+  .setup { display: grid; grid-template-columns: 1fr 240px; gap: 14px; align-items: end; padding-block: 16px 18px; }
+  .mode-pick button { height: 116px; min-height: 0; padding-block: 12px; gap: 8px; }
+  #btn-mode-next { max-width: none; margin: 0; height: 116px; }
+}
 .quick-row { display: flex; align-items: center; gap: 14px; }
 #btn-quick { flex: none; white-space: nowrap; }
 .cta.big { width: 100%; font-size: 15px; min-height: 60px; }
