@@ -552,7 +552,7 @@ function startServe() {
   }
   const sv = G.server;
   sv.x = clamp(0.5 * HW, -HW + 0.6, HW - 0.6) * toward(s); sv.z = -toward(s) * (HL + 0.8); // serve from the right, behind the end line
-  input.hitQ = input.diveQ = false; G.toss = false; G.hold = null; G.setPick = null; G.tid = (G.tid || 0) + 1;
+  input.hitQ = input.diveQ = false; G.toss = false; G.hold = null; G.setPick = null; G.meterShow = null; G.tid = (G.tid || 0) + 1;
   const you = G.sides[0].find(p => p.human) || G.sides[0][0];
   G.cam.z = Math.min(-HL - CAM.back, you.z - 6.6); G.cam.x = clamp(you.x * 0.55, -HW * 0.6, HW * 0.6);
 }
@@ -745,6 +745,7 @@ function contact(p) {
   const wasSpecial = b.special;
   const human = !aiControlled(p);
   const tm = human ? holdGrade() : null; // your wind-up for this ball
+  if (human && tm) G.meterShow = { p, L: holdLevel(G.hold), color: tm.color, t: G.time };
   if (human) G.hold = null;
   const q = tm ? tm.q : null, dove = p.dive > 0;
   if (tm) {
@@ -1208,8 +1209,9 @@ function update(dt) {
         if (h && !keys.hit) {
           const gr = gradeL(holdLevel(h));
           floatText(gr.label, sv.x, sv.cy + sv.rr + 1.1, sv.z, gr.color, 0.7);
+          G.meterShow = { p: sv, L: holdLevel(h), color: gr.color, t: G.time };
           G.hold = null; doServe(sv, gr.q);
-        } else if (b.vy < 0 && b.y < hy - 0.4) { floatText(TOO_LONG.label, sv.x, sv.cy + sv.rr + 1.1, sv.z, TOO_LONG.color, 0.7); G.hold = null; doServe(sv, -0.4); }
+        } else if (b.vy < 0 && b.y < hy - 0.4) { floatText(TOO_LONG.label, sv.x, sv.cy + sv.rr + 1.1, sv.z, TOO_LONG.color, 0.7); G.meterShow = { p: sv, L: 1.2, color: TOO_LONG.color, t: G.time }; G.hold = null; doServe(sv, -0.4); }
       }
     } else {
       b.y = sv.y + sv.rr * 2 + 0.35 + Math.sin(G.time * 4) * 0.05;
@@ -2095,22 +2097,26 @@ function drawLandingCarets(lx, lz, tl) {
 
 // The wind-up meter over your head. It fills left to right while you hold; gold is the last stretch before full.
 // Past full the whole bar turns red. The white tick shows how full it will be when the ball reaches you.
-function drawTimingMeter(p, L, kind, tick, dim) {
-  const top = proj(p.x, p.y + p.rr * 2 + 0.25, p.z), w = 44, h = 5;
-  const x = Math.round(top.x * US - w / 2), y = Math.round(top.y * US - 16);
-  const fx = l => x + Math.round(w * clamp(l, 0, 1));
-  const held = L != null, over = held && L > 1, gr = held ? gradeL(L) : null;
-  ctx.save(); ctx.globalAlpha = dim ? 0.5 : 1;
-  pxRect(x - 1, y - 1, w + 2, h + 2, '#10141f');
-  let lo = 0;
-  for (const z of ZONES) { pxRect(fx(lo), y, fx(z[0]) - fx(lo), h, over ? '#d8343a' : z[4]); lo = z[0]; }
-  if (held && !over) { pxRect(x, y + 1, fx(L) - x, h - 2, 'rgba(255,255,255,0.55)'); pxRect(fx(L) - 1, y - 2, 2, h + 4, '#ffffff'); }
-  if (tick != null) {
-    const tx = fx(tick), red = tick > 1;
-    pxRect(tx - 1, y + h + 1, 2, 3, red ? '#ff5a5a' : '#eef3ff');
+// A thin vertical meter beside your Pokemon, in the style of a basketball shot meter.
+// It fills upward while you hold; the gold notch at the top is the PERFECT window.
+// Past the top it turns red. After a release it freezes in the grade colour and fades.
+function drawTimingMeter(p, L, tick, dim, result) {
+  const bx = p.box || { ...proj(p.x, p.y, p.z), w: 40, h: 60 };
+  const w = 3, h = 32, x = Math.round((bx.x + bx.w / 2) * US + 4), y = Math.round((bx.y - bx.h * 0.55) * US - h / 2);
+  const ly = l => y + h - Math.round(h * clamp(l, 0, 1));
+  const over = L != null && L > 1, gold = ZONES[2][0];
+  ctx.save(); ctx.globalAlpha = result ? result.a : dim ? 0.45 : 1;
+  pxRect(x - 1, y - 1, w + 2, h + 2, 'rgba(10,14,24,0.85)');
+  pxRect(x, y, w, h, over ? '#d8343a' : 'rgba(255,255,255,0.12)');
+  if (!over) {
+    pxRect(x, ly(1), w, ly(gold) - ly(1), 'rgba(255,207,51,0.35)');
+    pxRect(x - 2, ly(gold), w + 4, 1, '#ffcf33');
+    if (L != null) {
+      const col = result ? result.color : L > gold ? '#ffcf33' : '#ffffff';
+      pxRect(x, ly(L), w, y + h - ly(L), col);
+    }
   }
-  const label = over ? TOO_LONG.label : held && G.hold && G.hold.tr != null ? gr.label : kind;
-  pxText(label, x + w / 2, y - 12, over ? TOO_LONG.color : held && G.hold && G.hold.tr != null ? gr.color : '#eef3ff', 8);
+  if (tick != null && !result) pxRect(x - 4, ly(tick) - 1, 2, 2, tick > 1 ? '#ff5a5a' : '#eef3ff');
   ctx.restore();
 }
 
@@ -2134,8 +2140,8 @@ function drawSetButtons() {
     G.setBtns.push({ x, y, w, h, type });
   };
   // a number badge over each hitter, nudged up where two would overlap
-  const you = G.sides[0].find(p => p.human), mt = proj(you.x, you.y + you.rr * 2 + 0.25, you.z);
-  const placed = [{ x: mt.x * US - 22, y: mt.y * US - 28, w: 44, h: 22 }]; // your own meter
+  const you = G.sides[0].find(p => p.human), bx = you.box || { ...proj(you.x, you.y, you.z), w: 40, h: 60 };
+  const placed = [{ x: (bx.x + bx.w / 2) * US, y: (bx.y - bx.h * 0.55) * US - 18, w: 12, h: 36 }]; // your own meter
   const hits = (x, y) => placed.some(r => x < r.x + r.w + 3 && x + 17 > r.x && y < r.y + r.h + 3 && y + 17 > r.y);
   opts.forEach((o, i) => {
     const q = o.q, top = proj(q.x, q.y + q.rr * 2 + 0.3, q.z);
@@ -2161,6 +2167,7 @@ function drawPlayer(p) {
     const [sx, sy, sw, sh] = back ? box.slice(4) : box.slice(0, 4);
     const k = p.rr * 3.3 * (back ? 1 : 1.3) * f.k / sh; // the far team is drawn a bit larger so it reads at a distance
     const h = sh * k * p.squash, w = sw * k * (1 + (1 - p.squash) * 0.6);
+    p.box = { x: f.x, y: f.y, w: sw * k, h: sh * k }; // on-screen sprite size, for the meter
     ctx.save(); ctx.translate(f.x, f.y);
     const down = p.dive > 0 ? 1 : p.rec > 0 ? clamp(p.rec / 0.2, 0, 1) : 0; // laid out on a dive, then back up
     if (down) {
@@ -2257,14 +2264,15 @@ function render() {
   for (const l of labels) pxText(l[0], l[1], l[2], l[3]);
   G.setBtns = [];
   if (you && !AUTO) {
-    if (G.phase === 'serve' && G.toss && G.server === you && G.hold) drawTimingMeter(you, holdLevel(G.hold), 'SERVE', null, false);
+    const m = G.meterShow, mk = m && m.p === you ? 1 - (G.time - m.t) / 0.45 : 0;
+    if (mk > 0) drawTimingMeter(you, m.L, null, false, { color: m.color, a: Math.min(1, mk * 2) });
+    else if (G.phase === 'serve' && G.toss && G.server === you && G.hold) drawTimingMeter(you, holdLevel(G.hold), null, false);
     else if (G.phase === 'rally') {
       const pr = predictContact(you), h = G.hold, L = h ? holdLevel(h) : null;
       const tick = pr && pr.reach ? (h && h.tr != null ? null : (L || 0) + pr.T / CHARGE) : null;
-      if (h || (pr && pr.T <= CHARGE * 1.6)) {
-        const kind = !you.onGround && b.y > NET_H - 0.2 ? 'SPIKE' : G.lastSide === 0 && G.touches[0] === 1 ? 'SET' : G.lastSide === 0 && G.touches[0] >= 2 ? 'ATTACK' : 'PASS';
-        drawTimingMeter(you, L, kind, tick, !h && !(pr && pr.reach));
-      }
+      if (h || (pr && pr.T <= CHARGE * 1.6)) drawTimingMeter(you, L, tick, !h && !(pr && pr.reach));
+    }
+    if (G.phase === 'rally') {
       drawSetButtons();
     }
   }
