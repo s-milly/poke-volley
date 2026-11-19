@@ -2081,17 +2081,24 @@ function drawBall(b) {
   if (b.special) { ctx.strokeStyle = b.special; ctx.lineWidth = 5; ctx.strokeRect(p.x - r - 7, p.y - r - 7, r * 2 + 14, r * 2 + 14); }
 }
 
-// Where the ball will land: four small carets on the diagonals, pointing in, closing as it drops.
+// Where the ball will land: four small carets painted flat on the floor at the corners of a square,
+// each pointing at the spot, closing in as the ball drops.
 function drawLandingCarets(lx, lz, tl) {
-  const r = 0.38 + 0.45 * clamp(tl / 1.2, 0, 1), c = proj(lx, 0, lz);
+  const r = 0.38 + 0.45 * clamp(tl / 1.2, 0, 1), L = 0.3;
   for (const [sx, sz] of [[1, 1], [-1, 1], [-1, -1], [1, -1]]) {
-    const q = proj(lx + sx * r, 0, lz + sz * r * 1.6); // the camera squashes depth, so spread them further along z
-    const ang = Math.atan2(c.y - q.y, c.x - q.x), L = Math.max(7, 0.2 * q.k);
-    const pts = [[-0.75, -0.9], [0, 0], [-0.75, 0.9]].map(([u, v]) => [q.x + (Math.cos(ang) * u - Math.sin(ang) * v) * L, q.y + (Math.sin(ang) * u + Math.cos(ang) * v) * L]);
-    for (const [col, lw] of [['#2a1606', 8], ['#ff8c28', 4.5]]) {
+    const cx = lx + sx * r, cz = lz + sz * r;
+    // lay a local frame on the ground at this corner: one world metre along x and along z, in canvas px
+    const o = proj(cx, 0, cz), ex = proj(cx + 0.1, 0, cz), ez = proj(cx, 0, cz + 0.1);
+    const dx = -sx / Math.SQRT2, dz = -sz / Math.SQRT2, nx = -dz, nz = dx; // d points at the spot
+    const pt = (u, v) => [(dx * u + nx * v) * L, (dz * u + nz * v) * L];
+    ctx.save();
+    ctx.transform((ex.x - o.x) * 10, (ex.y - o.y) * 10, (ez.x - o.x) * 10, (ez.y - o.y) * 10, o.x, o.y);
+    const pts = [pt(-0.75, -0.9), pt(0, 0), pt(-0.75, 0.9)];
+    for (const [col, lw] of [['#2a1606', 0.15], ['#ff8c28', 0.08]]) {
       ctx.strokeStyle = col; ctx.lineWidth = lw; ctx.lineJoin = 'miter'; ctx.lineCap = 'square';
       ctx.beginPath(); ctx.moveTo(...pts[0]); ctx.lineTo(...pts[1]); ctx.lineTo(...pts[2]); ctx.stroke();
     }
+    ctx.restore();
   }
 }
 
