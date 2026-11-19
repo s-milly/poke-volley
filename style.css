@@ -74,28 +74,27 @@ body.on-title #menu { padding-top: 0; }
 .lede { color: #fbfcff; font-size: 26px; max-width: 44ch; text-wrap: balance; margin: 14px auto 0; text-shadow: 2px 2px 0 var(--ink), -1px -1px 0 var(--ink), 1px -1px 0 var(--ink), -1px 1px 0 var(--ink); }
 
 .scene { position: absolute; inset: 0; pointer-events: none; }
-.mon { position: absolute; }
+.mon { position: absolute; left: 50%; top: 0; transform-origin: 0 0; }
 .mon img { display: block; image-rendering: pixelated; }
-.far .mon { bottom: calc(128px - var(--gap)); z-index: 1; }
-.near .mon { bottom: calc(-16px - var(--gap)); z-index: 3; }
+.far .mon { z-index: 1; }
+.near .mon { z-index: 3; }
+/* the net is placed by renderScene in game.js, from the same camera as the court */
 .net {
-  position: absolute; z-index: 2; top: 296px; left: calc(50% - 290px); width: 580px; height: 24px;
+  position: absolute; z-index: 2;
   background:
     repeating-linear-gradient(90deg, rgba(16, 20, 31, 0.6) 0 2px, transparent 2px 6px),
     repeating-linear-gradient(0deg, rgba(16, 20, 31, 0.6) 0 2px, transparent 2px 6px);
   border-top: 4px solid #fbfcff; border-bottom: 2px solid #fbfcff; box-shadow: 0 -2px 0 var(--ink);
 }
-.net i { position: absolute; top: -10px; left: -8px; width: 8px; height: 58px; background: #d8dde8; border: 2px solid var(--ink); }
+.net i { position: absolute; top: -6px; left: -8px; width: 8px; height: var(--post, 50px); background: #d8dde8; border: 2px solid var(--ink); }
 .net i + i { left: auto; right: -8px; }
 .ball-x, .ball-shadow { position: absolute; left: 50%; top: 0; }
-.ball-x { z-index: 4; translate: calc((var(--ax) + var(--bx)) / 2) 313px; }
-.ball-y { translate: 0 -44px; }
-.ball { display: block; width: 24px; height: 24px; margin: -12px 0 0 -12px; background: var(--ball) 0 0 / 100% 100% no-repeat; image-rendering: pixelated; scale: 0.8; }
-.ball-shadow { z-index: 2; width: 22px; height: 6px; margin: -3px 0 0 -11px; border-radius: 50%; background: rgba(10, 14, 24, 0.35); translate: calc((var(--ax) + var(--bx)) / 2) 376px; scale: 0.78; }
+.ball-x { z-index: 4; }
+.ball { display: block; width: 24px; height: 24px; margin: -12px 0 0 -12px; background: var(--ball) 0 0 / 100% 100% no-repeat; image-rendering: pixelated; }
+.ball-shadow { z-index: 2; width: 22px; height: 6px; margin: -3px 0 0 -11px; border-radius: 50%; background: rgba(10, 14, 24, 0.35); }
 /* the demo rally (game.js, Rally) moves the ball and players from script; this keeps the ball spinning */
 @media (prefers-reduced-motion: no-preference) { .live .ball { animation: ball-spin 0.48s steps(4) infinite; } }
 @keyframes ball-spin { to { rotate: 360deg; } }
-.live .ball-y { translate: none; }
 .burst { position: absolute; left: 50%; top: 0; z-index: 2; width: 44px; height: 14px; margin: -7px 0 0 -22px; opacity: 0; border: 3px solid #fbfcff; border-radius: 50%; }
 
 /* broadcast scoreboard on the stage, the same design as the one in a match */
@@ -140,7 +139,13 @@ body.on-title #menu { padding-top: 0; }
 }
 @media (hover: hover) { .mode-pick button:hover { background: #2b3a5e; box-shadow: var(--shadow), inset 0 0 0 3px var(--accent); } }
 .mode-pick button:active { translate: 4px 4px; box-shadow: 0 0 0 var(--ink), inset 0 0 0 3px var(--accent); }
-.mode-pick em { position: absolute; right: 14px; top: 50%; translate: 0 -50%; font-style: normal; font-size: 14px; color: var(--accent); }
+.mode-pick button[aria-pressed="true"] { background: #2b3a5e; color: #fbfcff; box-shadow: var(--shadow), inset 0 0 0 3px var(--accent); }
+.mode-pick button[aria-pressed="true"]::after { /* a pixel check in the corner, so the choice does not rest on colour alone */
+  content: "✓"; position: absolute; top: 8px; right: 8px; display: grid; place-items: center; width: 24px; height: 24px;
+  font: 12px/1 var(--px); color: #231b00; background: var(--accent); box-shadow: 2px 2px 0 var(--ink);
+}
+#btn-mode-next { display: block; max-width: 460px; margin: 20px auto 0; }
+#btn-mode-next span { margin: 0 0 0 10px; }
 .mode-pick button { display: grid; gap: 10px; justify-items: center; align-content: center; padding: 16px 12px 14px; min-width: 0; }
 .mode-pick svg { width: 64px; height: 36px; fill: currentColor; stroke: currentColor; stroke-width: 2; }
 .mode-pick svg rect, .mode-pick svg path { fill: none; }

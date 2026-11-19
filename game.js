@@ -237,7 +237,7 @@ const ROLE_DESC = {
   OPP: 'Hits from the right side, blocks the other team\'s outside hitter, and sets if the setter has to dig.',
   B: 'Takes the net on defense: block the other team\'s hitter.',
   D: 'Stays back on defense to dig spikes and chase tips.',
-  L: 'Back-row defensive specialist: passes serves, digs and serves in zone 1. Always plays in place of whichever middle blocker is in the back row, so you stay on court the whole match. A libero cannot block or attack a ball above the net.',
+  L: 'Back-row defensive specialist: passes serves and digs. Plays in place of the middle blocker in the back row, and comes off when that middle rotates to the front row or is due to serve. While you are on the bench, you control the middle who took your place. A libero cannot serve, block or attack a ball above the net.',
 };
 const ROSTER_6 = ['S', 'OH', 'MB', 'OPP', 'OH', 'MB'];   // who starts in zones 1 to 6
 const ZONE_X = [0.62, 0.62, 0, -0.62, -0.62, 0];          // zones 1 to 6, as a share of the half width; your right is +
@@ -392,31 +392,54 @@ function overlaps(s) {
 const benchSpot = s => [-(HW + 1.6), -0.3 * HL * toward(s)];
 const subZone = s => [-(HW + 0.5), -attackLine() * 0.5 * toward(s)]; // the sub zone: on the sideline between the 10 foot (attack) line and the net, on that team's half
 
-// The libero always replaces the middle blocker who is in the back row (zones 1, 5 and 6). There is always
-// exactly one back-row middle, so the libero stays on and the two middles take turns on the bench.
+// The libero plays in place of the middle blocker who is in the back row (zones 1, 5 and 6), as in real volleyball.
+// It comes off when that middle is due to serve (a libero does not serve here) and goes back on for them after the
+// side out. When the middle it replaced rotates to the front row, the libero comes off and that middle returns,
+// so the libero is never in the front row. Off court, the libero waits on the bench.
 const backMiddle = s => G.rot[s].find((p, i) => p.role === 'MB' && (i === 0 || i === 4 || i === 5)) || null;
-function applyLibero(s) { // instant version, for the first serve of a match
-  const L = G.libero[s];
-  if (!L) { G.sides[s] = G.rot[s].slice(); G.bench[s] = []; return; }
+function libTarget(s) { // the middle the libero should be playing for right now, or null for off court
   const mb = backMiddle(s);
-  G.libSub[s] = mb;
-  G.sides[s] = G.rot[s].map(p => (p === mb ? L : p));
-  G.bench[s] = mb ? [mb] : [];
+  return mb && G.serving === s && G.rot[s][0] === mb ? null : mb;
+}
+function sideFromRot(s) { G.sides[s] = G.rot[s].map(p => (p === G.libSub[s] ? G.libero[s] : p)); }
+function benchFor(s) { G.bench[s] = G.libero[s] ? [G.libSub[s] || G.libero[s]] : []; }
+function applyLibero(s) { // instant version, for the first serve of a set
+  G.libSub[s] = G.libero[s] ? libTarget(s) : null;
+  if (G.libero[s] && !G.libSub[s]) G.libOff[s] = backMiddle(s);
+  sideFromRot(s); benchFor(s);
   const [bx, bz] = benchSpot(s);
   G.bench[s].forEach(p => { p.x = bx; p.z = bz; p.y = 0; p.vx = p.vz = p.vy = 0; p.onGround = true; });
+  handControl();
 }
-
-// After a side out, put the court back in zone order and, if the back-row middle changed, start a substitution:
-// the player coming off and the player coming on both walk to the sub zone, pause, swap, then go to their spots.
+// If your own player is on the bench, you play as whoever took their place until they come back on.
+function handControl() {
+  const me = G.me; if (!me || AUTO) return;
+  const stand = me.side === 0 && !G.sides[0].includes(me)
+    ? (me.role === 'L' ? G.libOff[0] : G.libero[0]) : null;
+  for (const p of G.all[0]) p.human = p === (stand || me);
+}
+// Between rallies: put the court in zone order and, if the libero should come on or off, start a substitution.
+// The player coming off and the player coming on both walk to the sub zone, pause, swap, then go to their spots.
 function planSubs(s) {
   const L = G.libero[s];
   if (!L) { G.sides[s] = G.rot[s].slice(); return; }
-  G.sides[s] = G.rot[s].map(p => (p === G.libSub[s] ? L : p)); // the new rotation, before any swap
-  const mb = backMiddle(s);
-  if (mb === G.libSub[s]) return;
-  const out = mb, inn = G.libSub[s]; // the middle now in the back row comes off; the one rotating to the front comes on
-  G.subs.push({ s, out, inn, stage: 'walk', t: 0 });
+  const want = libTarget(s), cur = G.libSub[s];
+  if (want === cur) { sideFromRot(s); return; }
+  if (cur && want) { // the libero moves straight from one middle to the other (cannot happen in a normal rotation)
+    G.libSub[s] = want; sideFromRot(s); benchFor(s); handControl(); return;
+  }
+  sideFromRot(s); // the new rotation, before the swap
+  const out = cur ? L : want, inn = cur ? cur : L;
+  G.subs.push({ s, out, inn, want, stage: 'walk', t: 0 });
   out.subbing = inn.subbing = true;
+}
+function finishSub(job) { // the swap itself
+  const { s, inn, want } = job;
+  if (!want) G.libOff[s] = G.libSub[s]; // remember who came back on for the libero
+  G.libSub[s] = want; sideFromRot(s); benchFor(s);
+  G.players = [...G.sides[0], ...G.sides[1]];
+  handControl();
+  return inn;
 }
 function runSubs(dt) {
   for (const job of G.subs) {
@@ -433,9 +456,7 @@ function runSubs(dt) {
     } else if (job.stage === 'pause') {
       if (job.t > 0.7) { // swap
         job.stage = 'leave'; job.t = 0;
-        const i = G.sides[s].indexOf(out);
-        G.sides[s][i] = inn; G.bench[s] = [out]; G.libSub[s] = out;
-        G.players = [...G.sides[0], ...G.sides[1]];
+        finishSub(job);
       }
     } else if (job.stage === 'leave') { // off to the bench, on to the court
       const [bx, bz] = benchSpot(s);
@@ -486,7 +507,7 @@ function newMatch() {
     }
   }
   G = {
-    sides, players: [...sides[0], ...sides[1]], rot, all, libero, libSub: [null, null], bench: [[], []],
+    sides, players: [...sides[0], ...sides[1]], rot, all, libero, me: all[0].find(p => p.human) || null, libSub: [null, null], libOff: [null, null], bench: [[], []],
     ball: { x: 0, y: 1, z: 0, vx: 0, vy: 0, vz: 0, spin: 0, trail: [], special: null, noHit: 0 },
     score: [0, 0], sets: [0, 0], setNo: 1, setLog: [], setDone: false, firstServe: 0, touches: [0, 0], lastSide: -1, lastToucher: null, intended: [null, null], lastAttack: null,
     setterNow: [null, null], blockers: [[], []], play: [null, null], subs: [], started: false,
@@ -502,13 +523,15 @@ function nextSet() { // fresh score; the team that received first last set serve
   G.setDone = false; G.setNo++; G.score = [0, 0];
   G.firstServe = 1 - G.firstServe; G.serving = G.firstServe;
   G.meter = [0, 0]; G.armed = [false, false];
+  for (let k = 0; k < 2; k++) applyLibero(k); // the server changes, so the libero may need to come on or off
+  G.players = [...G.sides[0], ...G.sides[1]];
 }
 
 function startServe() {
   const s = G.serving;
   if (!G.started) { for (let k = 0; k < 2; k++) applyLibero(k); G.started = true; }
   else for (const job of G.subs) { // never start a serve mid-swap
-    if (job.stage !== 'leave') { const i = G.sides[job.s].indexOf(job.out); if (i >= 0) G.sides[job.s][i] = job.inn; G.bench[job.s] = [job.out]; G.libSub[job.s] = job.out; }
+    if (job.stage !== 'leave') finishSub(job);
     job.out.subbing = job.inn.subbing = false;
     const [bx, bz] = benchSpot(job.s); job.out.x = bx; job.out.z = bz;
   }
@@ -953,7 +976,7 @@ function awardPoint(w, label, sub, credit, key) {
   G.longestRally = Math.max(G.longestRally, G.rally);
   if (w !== G.serving) { // side out: the team that won the serve back rotates one zone clockwise
     G.serving = w; G.rot[w].push(G.rot[w].shift());
-    planSubs(w); G.players = [...G.sides[0], ...G.sides[1]];
+    planSubs(w); planSubs(1 - w); G.players = [...G.sides[0], ...G.sides[1]];
     floatText('ROTATE', 0, 2.6, -toward(w) * HL * 0.5, TEAM_COLORS[w], 1.4, 30);
   }
   G.texts.push({ big: true, text: label, sub, color: TEAM_COLORS[w], t: 0, life: 1.6 });
@@ -2274,24 +2297,36 @@ function renderSummary() {
   renderScene();
 }
 
-// ---- Title scene: the chosen venue's sky over a court, a net and two teams of Pokémon in a rally. ----
-// Drawn at 2x: a 560x220 canvas behind a 440 px tall stage, with the sprites, net and ball laid over it in CSS px.
-const SCENE_W = 560, SCENE_H = 220, SCENE_SKY = 110, SCENE_COURT = 150;
+// ---- Title scene: the chosen venue's sky over a full court, a net and two teams of Pokémon in a rally. ----
+// Everything on the stage goes through one camera: a pinhole standing behind your end line, looking across the net.
+// World units match the game (x across, z toward the far end, net at z = 0, your side z < 0). Stage units are CSS px,
+// x from the stage centre and y from its top. The backdrop is a 560x220 canvas drawn at 2x behind a 440 px stage.
+const SCENE_W = 560, SCENE_H = 220, SCENE_SKY = 110;
+const ST = { hor: SCENE_SKY * 2, camH: 4.5, back: 14.7, F: 359 }; // horizon y, camera height, camera to net, focal length
+let stageK = 1;                                                    // horizontal squeeze on narrow screens
+function sp(x, h, z) { // world point -> stage px; k is px per world unit at that depth
+  const k = ST.F / (z + ST.back);
+  return { x: x * k * stageK, y: ST.hor + (ST.camH - h) * k, k };
+}
+const groundZ = y => ST.camH * ST.F / (y - ST.hor) - ST.back; // stage y on the ground -> world z
+// Court size and the home spot [x, z] of each player on the stage, per mode.
+const STAGE = {
+  2: { hw: 8, hl: 12, near: [[-4.6, -6.6], [4.4, -6.9]], far: [[4.8, 5.2], [-4.4, 6.4]] },
+  6: { hw: 9.5, hl: 14, near: [[-7.2, -6.6], [0.6, -7.1], [6.8, -6.4]], far: [[-5.8, 4.6], [0.4, 7.6], [5.8, 5.2]] },
+};
 const SCENE_BALL = [
   '....oooo....', '..oowwyyoo..', '.owwwwyyyyo.', '.owwwwwyyyo.', 'owbbwwwwyyyo', 'obbbbwwwwyyo',
   'obbbbbwwwwwo', 'owbbbbwwwwwo', '.owbbbwwwwo.', '.owwbbwwwwo.', '..oowwwwoo..', '....oooo....'];
-// x offsets from the centre in CSS px for each player on the stage.
-const SCENE_LAYOUT = { 2: { far: [110, -100], near: [-230, 230] }, 6: { far: [110, -210, -50], near: [-230, -420, 260] } };
-const scenePicks = (() => { // a fresh cast each visit: six of yours from behind, six rivals facing you
+const scenePicks = (() => { // a fresh cast each visit: three of yours from behind, three rivals facing you
   const ids = DEX.map(m => m.id).sort(() => Math.random() - 0.5);
   return { near: ids.slice(0, 3), far: ids.slice(3, 6) };
 })();
 const sceneCache = {};
 function sceneBackdrop() {
-  const vid = settings.venue[settings.mode], key = vid; // the title stage is always in daylight, whatever time the match is set for
+  const vid = settings.venue[settings.mode], C = STAGE[settings.mode], key = `${vid}:${stageK.toFixed(2)}`;
   if (sceneCache[key]) return sceneCache[key];
-  const time = settings.time; settings.time = 'day';
-  const bd = backdropFor(); settings.time = time;
+  const mode = settings.mode, time = settings.time; settings.time = 'day'; // the title stage is always in daylight
+  const bd = backdropFor(); settings.time = time; settings.mode = mode;
   const V = VENUES[vid], hy = Math.round(horizonY() * US), ox = (SCENE_W - UW) / 2;
   const c = document.createElement('canvas'); c.width = SCENE_W; c.height = SCENE_H; const g = c.getContext('2d');
   g.imageSmoothingEnabled = false;
@@ -2303,14 +2338,32 @@ function sceneBackdrop() {
   g.drawImage(mid, ox, 0, ox, SCENE_H, -ox, 0, ox, SCENE_H);
   g.drawImage(mid, UW, 0, ox, SCENE_H, -(2 * ox + UW), 0, ox, SCENE_H);
   g.restore();
-  // the court in perspective: narrow at the net, wide at your feet
-  const sand = V.court === 'sand', line = sand ? '#2f6bd6' : '#f4f1e8', cx = SCENE_W / 2;
-  for (let y = SCENE_COURT; y < SCENE_H; y++) {
-    const t = (y - SCENE_COURT) / (SCENE_H - SCENE_COURT), hw = Math.round(120 + 130 * t);
-    if (!sand) { g.fillStyle = y % 3 ? V.court : shade(V.court, -0.06); g.fillRect(cx - hw, y, hw * 2, 1); }
-    g.fillStyle = line; g.fillRect(cx - hw - 1, y, 2, 1); g.fillRect(cx + hw - 1, y, 2, 1);
+  const sand = V.court === 'sand', cx = SCENE_W / 2;
+  if (sand) { // rake the sand flat: the backdrop's diagonal rake marks fight with the court lines
+    const img = g.getImageData(0, SCENE_SKY, SCENE_W, SCENE_H - SCENE_SKY), d = img.data, count = {};
+    for (let i = (SCENE_H - SCENE_SKY - 40) * SCENE_W * 4; i < d.length; i += 4) { const k = (d[i] << 16) | (d[i + 1] << 8) | d[i + 2]; count[k] = (count[k] || 0) + 1; }
+    const top = Number(Object.keys(count).sort((a, b2) => count[b2] - count[a])[0]), sr = top >> 16, sg = (top >> 8) & 255, sb = top & 255;
+    for (let i = 0; i < d.length; i += 4) {
+      if (Math.abs(d[i] - sr) + Math.abs(d[i + 1] - sg) + Math.abs(d[i + 2] - sb) < 70) { d[i] = sr; d[i + 1] = sg; d[i + 2] = sb; }
+    }
+    g.putImageData(img, 0, SCENE_SKY);
   }
-  g.fillStyle = line; g.fillRect(cx - 120, SCENE_COURT, 240, 1); g.fillRect(cx - 136, SCENE_COURT + 32, 272, 1); // end line, attack line
+  // the court in perspective, row by row: both halves, from the far end line down past the bottom of the stage
+  const line = sand ? '#2f6bd6' : '#f4f1e8', lineW = 0.16;
+  for (let row = SCENE_SKY + 1; row < SCENE_H; row++) {
+    const z = groundZ(row * 2 + 1); if (z > C.hl + lineW) continue;
+    const k = ST.F / (z + ST.back), hw = C.hw * k * stageK / 2, lw = Math.max(1, Math.round(lineW * k * stageK / 2));
+    if (!sand && z <= C.hl) { g.fillStyle = row % 3 ? V.court : shade(V.court, -0.06); g.fillRect(Math.round(cx - hw), row, Math.round(hw * 2), 1); }
+    g.fillStyle = line; g.fillRect(Math.round(cx - hw - lw / 2), row, lw, 1); g.fillRect(Math.round(cx + hw - lw / 2), row, lw, 1);
+  }
+  const across = z => { // a line across the court at depth z, at least one pixel thick
+    const a = sp(0, 0, z + lineW / 2), b2 = sp(0, 0, z - lineW / 2), hw = C.hw * a.k * stageK / 2;
+    const y0 = Math.floor(a.y / 2), y1 = Math.max(y0 + 1, Math.round(b2.y / 2));
+    if (y0 >= SCENE_H) return;
+    g.fillStyle = line; g.fillRect(Math.round(cx - hw), y0, Math.round(hw * 2), y1 - y0);
+  };
+  across(C.hl);
+  if (!sand) { across(0); across(C.hl / 3); across(-C.hl / 3); } // centre line and both attack lines
   return (sceneCache[key] = c.toDataURL());
 }
 let sceneBallUrl = null;
@@ -2321,14 +2374,13 @@ function sceneBall() {
   SCENE_BALL.forEach((row, y) => [...row].forEach((ch, x) => { if (col[ch]) { g.fillStyle = col[ch]; g.fillRect(x, y, 1, 1); } }));
   return (sceneBallUrl = c.toDataURL());
 }
-function sceneMon(id, x, back) {
+// A player sprite. Its feet (the bottom centre of the drawn pixels) are the point the stage places on the court.
+function sceneMon(id, back) {
   const b = SPRITE_BOX[id], s = back ? 2 : 1, [vx, vy, vw, vh] = back ? b.slice(4) : b.slice(0, 4);
   const m = el('span', 'mon');
-  m.style.left = `calc(50% + ${x - (vx + vw / 2) * s}px)`;
-  m.style.setProperty('--gap', `${(96 - vy - vh) * s}px`);
   const img = new Image(); img.src = `sprites/${back ? 'back' : 'front'}/${id}.png`; img.alt = ''; img.decoding = 'async';
   img.width = img.height = 96 * s; m.appendChild(img);
-  return m;
+  return { el: m, fx: (vx + vw / 2) * s, fy: (vy + vh) * s };
 }
 // Hand the venue's sky and floor colours to the page, so the title screen's background matches the stage.
 const tintCache = {};
@@ -2348,54 +2400,139 @@ function sceneTint(url) {
   img.src = url;
 }
 function renderScene() {
-  const scene = $('#scene'), base = SCENE_LAYOUT[settings.mode];
-  const k = Math.min(1, (Math.min(innerWidth, 1120) - 40) / 600); // pull the players in on narrow screens
-  const L = { k, far: base.far.map(x => Math.round(x * k)), near: base.near.map(x => Math.round(x * k)) };
+  const scene = $('#scene'), C = STAGE[settings.mode];
+  stageK = Math.min(1, (Math.min(innerWidth, 1120) - 40) / 600); // pull everything in on narrow screens
   const bd = sceneBackdrop();
   $('#title-hero').style.backgroundImage = `url(${bd}), var(--v-edge, none)`;
   sceneTint(bd);
   scene.style.setProperty('--ball', `url(${sceneBall()})`);
   $('#bug-logo').src = scoreLogo().toDataURL();
-  for (const side of ['far', 'near']) {
+  const cast = [[], []];
+  ['near', 'far'].forEach((side, t) => {
     const box = $(`#scene-${side}`); box.innerHTML = '';
-    L[side].forEach((x, i) => {
-      box.appendChild(sceneMon(scenePicks[side][i], x, side === 'near'));
+    C[side].forEach(([x, z], i) => {
+      const m = sceneMon(scenePicks[side][i], !t);
+      box.appendChild(m.el);
+      cast[t].push(Object.assign(m, { hx: x, hz: z, x, z, k0: sp(x, 0, z).k, air: 0, move: null, jump: null }));
     });
-  }
-  scene.style.setProperty('--ax', `${L.near[0] + 14}px`);
-  scene.style.setProperty('--bx', `${L.far[0]}px`);
-  Rally.cast(L);
+  });
+  // the net: tape at NET_H, a mesh band under it, posts just outside the sidelines
+  const L = sp(-(C.hw + 0.6), NET_H, 0), R = sp(C.hw + 0.6, NET_H, 0), lo = sp(0, NET_H - 0.8, 0), foot = sp(0, 0, 0);
+  const net = scene.querySelector('.net');
+  net.style.left = `calc(50% + ${L.x}px)`; net.style.width = `${R.x - L.x}px`;
+  net.style.top = `${L.y}px`; net.style.height = `${lo.y - L.y}px`;
+  net.style.setProperty('--post', `${foot.y - L.y + 6}px`);
+  Rally.cast(C, cast);
 }
 
-// ---- Attract mode: the stage plays a demo rally. Passes go back and forth, then someone spikes it in and the
-// scoreboard counts the point. Runs only while the title is on screen and the reader has not asked for reduced motion.
+// ---- Attract mode: the stage plays a demo rally the way volleyball is played. A serve from behind the end line,
+// then each side passes to its setter, the setter puts it up, and a hitter runs in, jumps and spikes it over.
+// The other side digs it and plays it back, until a spike hits the sand and the scoreboard counts the point.
+// Runs only while the title is on screen and the reader has not asked for reduced motion; otherwise a still frame.
 const Rally = (() => {
-  const ground = d => 314 + 124 * d;   // screen y of the sand at depth d (0 = rival line by the net, 1 = your feet)
-  const lift = d => 32 + 61 * d;       // ball height above the sand at a head-height touch
-  const lerp = (a, b, t) => a + (b - a) * t;
   const reduce = matchMedia('(prefers-reduced-motion: reduce)');
-  let L = null, mons = [[], []], leg = null, wait = 0, touches = 0, rallyLen = 3, side = 0, score = [0, 0], serve = 0;
+  const lerp = (a, b, t) => a + (b - a) * t, ease = t => t * t * (3 - 2 * t);
+  let C = null, P = [[], []], ball = { x: 0, h: 2.6, z: -3 }, leg = null, wait = 0, held = null;
+  let touches = 0, rallyLen = 3, score = [0, 0], serve = 0, server = [0, 0];
   let raf = 0, last = 0, on = false;
   const els = {};
-  const spot = (k, i) => ({ x: (k ? L.far : L.near)[i] + (k ? 0 : 14), d: k ? 0 : 1 });
-  function hop(k, i, h) {
-    const m = mons[k][i]; if (!m) return;
-    m.animate([{ translate: '0 0' }, { translate: `0 -${h}px` }, { translate: '0 0' }], { duration: 320, easing: 'ease-out' });
+  const dir = t => (t ? 1 : -1); // which way is "into my own court" for team t (0 = near, 1 = far)
+
+  function moveTo(p, x, z, dur) { p.move = { x0: p.x, z0: p.z, x1: x, z1: z, t: 0, dur: Math.max(0.05, dur) }; }
+  function jump(p, H, dur, delay = 0) { p.jump = { t: -delay, dur, H }; }
+  function home(t, dur = 0.9) { for (const p of P[t]) moveTo(p, p.hx, p.hz, dur); }
+  // A flight of the ball. Height is a parabola in time (gravity), x and z move at a steady rate. `peak` is how high
+  // the arc rises above a straight line; it is raised if needed so the ball clears the tape by `clear`.
+  function fly(to, dur, peak, then, clear) {
+    const a = { ...ball };
+    let c = peak;
+    if (clear !== undefined && (a.z < 0) !== (to.z < 0)) {
+      const u = -a.z / (to.z - a.z), base = lerp(a.h, to.h, u);
+      c = Math.max(c, (NET_H + clear - base) / (4 * u * (1 - u)));
+    }
+    leg = { a, b: to, c, dur, t: 0, then };
   }
-  function pass(fromK, fromI) { // a touch over to a random player on the other side
-    const to = 1 - fromK, toI = Math.floor(Math.random() * mons[to].length), a = spot(fromK, fromI), b = spot(to, toI);
-    leg = { kind: 'pass', a, b, h0: lift(a.d), h1: lift(b.d), H: rand(46, 70), dur: rand(1.05, 1.35), t: 0, to, toI };
-    hop(fromK, fromI, 10);
+  const reach = (p, h) => ({ x: p.x, h, z: p.z });
+  // the spot a player will be standing on when the ball gets there
+  const spotOf = p => (p.move ? { x: p.move.x1, z: p.move.z1 } : { x: p.x, z: p.z });
+
+  function startRally() {
+    touches = 0; rallyLen = 1 + Math.floor(Math.random() * 4);
+    const t = serve, s = P[t][server[t] % P[t].length];
+    const sz = t ? C.hl + 0.9 : -(C.hl * 0.5 + 1.4); // far server stands behind the end line; yours steps back off screen
+    moveTo(s, s.hx * 0.7, sz, 1.0);
+    held = s; ball = reach(s, 1.0);
+    wait = 1.2;
+    leg = { idle: true, then: () => toss(t, s) };
   }
-  function spike(fromK, fromI) { // a hard, flat hit into the open court
-    const a = spot(fromK, fromI), toD = fromK ? rand(0.35, 0.85) : rand(-0.09, -0.02);
-    const b = { x: Math.round(rand(-150, 150) * (L.k || 1)), d: toD };
-    leg = { kind: 'spike', a, b, h0: lift(a.d) + 14, h1: 0, H: 6, dur: 0.42, t: 0, by: fromK };
-    hop(fromK, fromI, 20);
+  function toss(t, s) {
+    held = null;
+    fly(reach(s, 3.0), 0.75, 0.5, () => serveOver(t, s));
+    jump(s, 0.9, 0.6, 0.35);
   }
-  function burst(x, y) {
-    els.burst.style.translate = `${x}px ${y}px`;
-    els.burst.animate([{ opacity: 1, scale: 0.4 }, { opacity: 0, scale: 1.4 }], { duration: 420, easing: 'ease-out' });
+  function serveOver(t, s) {
+    const o = 1 - t, r = P[o][Math.floor(Math.random() * P[o].length)];
+    const x = clamp(r.hx + rand(-1.6, 1.6), -C.hw + 0.8, C.hw - 0.8), z = r.hz + rand(-1, 1.2) * dir(o);
+    moveTo(r, x, z, 1.0);
+    fly({ x, h: 0.9, z }, 1.35, 1.6, () => receive(o, r), 0.6);
+    server[t]++;
+    setTimeout(() => moveTo(s, s.hx, s.hz, 1.2), 500);
+  }
+  // first touch: a forearm pass up to the setter by the net
+  function receive(t, r) {
+    touches++;
+    const mates = P[t].filter(p => p !== r);
+    const setter = mates.reduce((a, b) => (Math.abs(a.hx) < Math.abs(b.hx) ? a : b)); // whoever plays nearest the middle
+    const x = clamp(setter.hx * 0.35, -C.hw * 0.4, C.hw * 0.4), z = 1.4 * dir(t);
+    moveTo(setter, x, z, 0.85);
+    jump(r, 0.15, 0.25);
+    fly({ x, h: 2.4, z }, 1.05, 1.6, () => set(t, setter, r));
+  }
+  // second touch: the setter puts it up in front of a hitter, who runs in and jumps
+  function set(t, setter, passer) {
+    const pool = P[t].filter(p => p !== setter), hitter = settings.mode === 2 ? passer : pool[Math.floor(Math.random() * pool.length)];
+    const x = clamp(hitter.hx * 0.75, -C.hw + 1.2, C.hw - 1.2), z = 2.2 * dir(t);
+    moveTo(hitter, x, z, 0.75);
+    jump(setter, 0.25, 0.3);
+    jump(hitter, 0.9, 0.7, 0.95 - 0.35);
+    fly({ x, h: 3.1, z }, 0.95, 1.0, () => spike(t, hitter, setter));
+  }
+  // third touch: the spike, either dug by the other side or into the sand for a point
+  function spike(t, hitter, setter) {
+    const o = 1 - t, dug = touches < rallyLen * 3 && Math.random() < 0.8;
+    touches++;
+    setTimeout(() => home(t, 0.9), 250);
+    if (dug) {
+      const d = P[o][Math.floor(Math.random() * P[o].length)], at = spotOf(d);
+      const x = clamp(at.x + rand(-1.2, 1.2), -C.hw + 0.6, C.hw - 0.6), z = at.z + rand(-0.8, 0.8);
+      moveTo(d, x, z, 0.35);
+      fly({ x, h: 0.6, z }, 0.42, 0.05, () => receive(o, d), 0.15);
+    } else {
+      let best = null, bd = -1; // the open spot furthest from every defender
+      for (let i = 0; i < 12; i++) {
+        const x = rand(-C.hw + 1, C.hw - 1), z = rand(1.8, C.hl - 1.5) * dir(o);
+        const dd = Math.min(...P[o].map(p => Math.hypot(p.x - x, (p.z - z) * 0.7)));
+        if (dd > bd) { bd = dd; best = { x, z }; }
+      }
+      const d = P[o].reduce((a, b) => (Math.hypot(a.x - best.x, a.z - best.z) < Math.hypot(b.x - best.x, b.z - best.z) ? a : b));
+      moveTo(d, lerp(d.x, best.x, 0.4), lerp(d.z, best.z, 0.4), 0.4); // a lunge that comes up short
+      fly({ x: best.x, h: 0, z: best.z }, 0.45, 0.05, () => kill(t, best), 0.15);
+    }
+  }
+  function kill(t, at) {
+    burst(at.x, at.z); point(t);
+    const away = dir(1 - t);
+    fly({ x: at.x + rand(-1, 1), h: 0, z: at.z + away * 2.2 }, 0.5, 0.7, () => {
+      leg = null; wait = 1.0;
+      home(0, 1.0); home(1, 1.0);
+      if (Math.max(...score) >= settings.target) setTimeout(() => { score = [0, 0]; document.querySelectorAll('#bug em').forEach(e => (e.textContent = '0')); }, 900);
+    });
+  }
+  function burst(x, z) {
+    const p = sp(x, 0, z);
+    els.burst.style.translate = `${p.x}px ${p.y}px`;
+    els.burst.style.zIndex = z > 0 ? 1 : 2;
+    els.burst.animate([{ opacity: 1, scale: 0.4 }, { opacity: 0, scale: 1.4 * p.k / 30 }], { duration: 420, easing: 'ease-out' });
   }
   function point(k) {
     score[k]++;
@@ -2405,51 +2542,65 @@ const Rally = (() => {
     serve = k; markServe();
   }
   function markServe() { document.querySelectorAll('#bug .bug-row').forEach((r, k) => r.classList.toggle('serving', k === serve)); }
-  function draw(x, d, h, sc) {
-    els.bx.style.translate = `${x}px ${ground(d) - h}px`;
-    els.ball.style.scale = sc;
-    els.sh.style.translate = `${x}px ${ground(d)}px`;
-    els.sh.style.scale = String(lerp(0.55, 1, Math.max(0, d)));
+
+  function draw() {
+    for (const team of P) for (const p of team) {
+      const f = sp(p.x, p.air, p.z), sc = f.k / p.k0;
+      p.el.style.transform = `translate(${(f.x - p.fx * sc).toFixed(1)}px, ${(f.y - p.fy * sc).toFixed(1)}px) scale(${sc.toFixed(3)})`;
+    }
+    const b = sp(ball.x, ball.h, ball.z), g = sp(ball.x, 0, ball.z), far = ball.z > 0;
+    els.bx.style.translate = `${b.x.toFixed(1)}px ${b.y.toFixed(1)}px`;
+    els.bx.style.zIndex = far ? 1 : 4; // behind the net on the far side, in front of it on yours
+    els.ball.style.scale = clamp(b.k / 30, 0.4, 1.6).toFixed(3);
+    els.sh.style.translate = `${g.x.toFixed(1)}px ${g.y.toFixed(1)}px`;
+    els.sh.style.zIndex = far ? 1 : 2;
+    els.sh.style.scale = clamp(g.k / 34, 0.3, 1.5).toFixed(3);
   }
   function step(dt) {
-    if (wait > 0) { wait -= dt; if (wait <= 0) { wait = 0; touches = 0; rallyLen = 2 + Math.floor(Math.random() * 5); pass(serve, 0); } return; }
-    if (!leg) return;
-    leg.t = Math.min(1, leg.t + dt / leg.dur);
-    const t = leg.t, d = lerp(leg.a.d, leg.b.d, t), x = lerp(leg.a.x, leg.b.x, t);
-    const h = lerp(leg.h0, leg.h1, t) + leg.H * 4 * t * (1 - t);
-    draw(x, d, h, lerp(0.6, 1, Math.max(0, Math.min(1, d))));
-    if (t < 1) return;
-    if (leg.kind === 'pass') {
-      touches++;
-      if (touches >= rallyLen) spike(leg.to, leg.toI); else pass(leg.to, leg.toI);
-    } else if (leg.kind === 'spike') {
-      burst(x, ground(d)); point(leg.by);
-      leg = { kind: 'bounce', a: leg.b, b: { x: leg.b.x + (leg.by ? 30 : -18), d: leg.b.d + (leg.by ? 0.12 : -0.01) }, h0: 0, h1: 0, H: 20, dur: 0.45, t: 0 };
-    } else {
-      leg = null; wait = 1.1;
-      if (Math.max(...score) >= settings.target) setTimeout(() => { score = [0, 0]; document.querySelectorAll('#bug em').forEach(e => (e.textContent = '0')); }, 900);
+    for (const team of P) for (const p of team) {
+      if (p.move) {
+        const m = p.move; m.t = Math.min(1, m.t + dt / m.dur); const e = ease(m.t);
+        p.x = lerp(m.x0, m.x1, e); p.z = lerp(m.z0, m.z1, e); if (m.t >= 1) p.move = null;
+      }
+      if (p.jump) {
+        const j = p.jump; j.t += dt; const u = j.t / j.dur;
+        p.air = u <= 0 ? 0 : u >= 1 ? 0 : j.H * 4 * u * (1 - u); if (u >= 1) p.jump = null;
+      }
     }
+    if (held) ball = reach(held, 1.0 + held.air);
+    if (wait > 0) { wait -= dt; if (wait <= 0) { wait = 0; if (leg && leg.idle) { const f = leg.then; leg = null; f(); } else startRally(); } return; }
+    if (!leg) { startRally(); return; }
+    if (leg.idle) return;
+    leg.t = Math.min(1, leg.t + dt / leg.dur);
+    const t = leg.t;
+    ball = { x: lerp(leg.a.x, leg.b.x, t), z: lerp(leg.a.z, leg.b.z, t), h: lerp(leg.a.h, leg.b.h, t) + leg.c * 4 * t * (1 - t) };
+    if (t >= 1) { const f = leg.then; leg = null; f && f(); }
   }
   function loop(now) {
     const dt = Math.min(0.05, (now - last) / 1000); last = now;
-    step(dt);
+    step(dt); draw();
     raf = requestAnimationFrame(loop);
+  }
+  function still() { // the frame shown with reduced motion: a set hanging over your side of the net
+    for (const team of P) for (const p of team) { p.x = p.hx; p.z = p.hz; p.air = 0; p.move = p.jump = null; }
+    const h = P[0][0];
+    ball = { x: clamp(h.hx * 0.75, -C.hw + 1.2, C.hw - 1.2), h: 3.0, z: -2.2 };
+    draw();
   }
   function run(want) {
     want = want && !reduce.matches;
     if (want === on) return;
     on = want; $('#scene').classList.toggle('live', on);
     cancelAnimationFrame(raf);
-    if (on) { last = performance.now(); if (!leg && !wait) wait = 0.6; raf = requestAnimationFrame(loop); }
-    else for (const e of [els.bx, els.ball, els.sh]) if (e) { e.style.translate = ''; e.style.scale = ''; } // back to the still frame
+    if (on) { last = performance.now(); raf = requestAnimationFrame(loop); } else if (C) still();
   }
   reduce.addEventListener('change', () => run(!$('#scr-title').hidden));
   return {
-    cast(layout) { // new players: start a fresh rally with them
-      L = layout;
-      mons = [[...document.querySelectorAll('#scene-near .mon')], [...document.querySelectorAll('#scene-far .mon')]];
+    cast(layout, players) { // new players: start a fresh rally with them
+      C = layout; P = players;
       Object.assign(els, { bx: $('#scene .ball-x'), ball: $('#scene .ball'), sh: $('#scene .ball-shadow'), burst: $('#scene .burst') });
-      leg = null; wait = 0.6; markServe();
+      leg = null; held = null; wait = 0.6; server = [0, 0]; markServe();
+      still();
     },
     run,
   };
@@ -2458,11 +2609,16 @@ let sceneW = innerWidth;
 addEventListener('resize', () => { if (Math.abs(innerWidth - sceneW) > 40 && !$('#scr-title').hidden) { sceneW = innerWidth; renderScene(); } });
 $('#scr-title').classList.add('intro');
 setTimeout(() => $('#scr-title').classList.remove('intro'), 1200);
+// Picking a mode only selects it (and switches the stage to that mode's venue); Continue moves on.
+function markMode() { for (const b of document.querySelectorAll('#opt-mode button')) b.setAttribute('aria-pressed', String(Number(b.dataset.v) === settings.mode)); }
 $('#opt-mode').addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b) return;
-  Sfx.init(); settings.mode = Number(b.dataset.v); saveSettings();
-  renderClubPick(); show('scr-team');
+  Sfx.init();
+  if (Number(b.dataset.v) !== settings.mode) { settings.mode = Number(b.dataset.v); saveSettings(); renderScene(); }
+  markMode();
 });
+$('#btn-mode-next').addEventListener('click', () => { Sfx.init(); renderClubPick(); show('scr-team'); });
+markMode();
 $('#btn-team-next').addEventListener('click', () => { renderSummary(); renderVenuePick(); show('scr-venue'); });
 renderSummary();
 $('#btn-start').addEventListener('click', () => { Sfx.init(); saveSettings(); buildPick(); show('scr-pick'); });
@@ -2637,7 +2793,7 @@ function renderMatchup() {
         court.appendChild(el('div', 'rot-cell' + (you ? ' you' : '') + (role === 'L' ? ' lib' : ''), `<i>${z}</i><b>${ROLES[role].short}</b><span>${e.mon.name}</span>`));
       }
       box.appendChild(court);
-      box.appendChild(el('p', 'rot-note', `Starting rotation. Zone 1 serves, and the team rotates one zone clockwise each time it wins back the serve. The libero (${lib.entry.mon.name}) always plays for the middle blocker in the back row, so only one middle is on court at a time; ${lu[subbed].entry.mon.name} starts on the bench.`));
+      box.appendChild(el('p', 'rot-note', `Starting rotation. Zone 1 serves, and the team rotates one zone clockwise each time it wins back the serve. The libero (${lib.entry.mon.name}) plays for the middle blocker in the back row and comes off when that middle rotates to the front or is due to serve; ${lu[subbed].entry.mon.name} starts on the bench.`));
     }
   }
   $('#mu-meta').textContent = `${n} v ${n} · You play ${ROLES[settings.role[n]].name} · ${cap(settings.diff)} · ${matchFormat()}`;

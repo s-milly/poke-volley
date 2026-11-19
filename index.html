@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>VolleyDex: Gen 1 Draft Volleyball</title>
 <meta name="description" content="Pick a Gen 1 Pokémon, draft teammates by their stats, and play arcade volleyball in the browser.">
-<link rel="stylesheet" href="style.css?v=5">
+<link rel="stylesheet" href="style.css?v=6">
 </head>
 <body class="on-title">
 <main id="menu">
@@ -30,7 +30,7 @@
         <div class="net"><i></i><i></i></div>
         <div class="ball-shadow"></div>
         <div class="near" id="scene-near"></div>
-        <div class="ball-x"><div class="ball-y"><span class="ball"></span></div></div>
+        <div class="ball-x"><span class="ball"></span></div>
         <span class="burst"></span>
       </div>
     </div>
@@ -39,16 +39,17 @@
       <fieldset>
         <legend>Choose a game mode</legend>
         <div class="mode-pick" id="opt-mode">
-          <button type="button" data-v="2" data-autofocus>
+          <button type="button" data-v="2" aria-pressed="true">
             <svg viewBox="0 0 64 36" aria-hidden="true"><rect x="2" y="2" width="60" height="32"/><path d="M32 0v36"/><circle cx="14" cy="12" r="3"/><circle cx="20" cy="24" r="3"/><circle cx="44" cy="12" r="3"/><circle cx="50" cy="24" r="3"/></svg>
-            <b>2 v 2</b><span>On the sand</span><em aria-hidden="true">▶</em>
+            <b>2 v 2</b><span>On the sand</span>
           </button>
-          <button type="button" data-v="6">
+          <button type="button" data-v="6" aria-pressed="false">
             <svg viewBox="0 0 64 36" aria-hidden="true"><rect x="2" y="2" width="60" height="32"/><path d="M32 0v36"/><circle cx="11" cy="9" r="2.5"/><circle cx="11" cy="18" r="2.5"/><circle cx="11" cy="27" r="2.5"/><circle cx="23" cy="9" r="2.5"/><circle cx="23" cy="18" r="2.5"/><circle cx="23" cy="27" r="2.5"/><circle cx="41" cy="9" r="2.5"/><circle cx="41" cy="18" r="2.5"/><circle cx="41" cy="27" r="2.5"/><circle cx="53" cy="9" r="2.5"/><circle cx="53" cy="18" r="2.5"/><circle cx="53" cy="27" r="2.5"/></svg>
-            <b>6 v 6</b><span>In the arena</span><em aria-hidden="true">▶</em>
+            <b>6 v 6</b><span>In the arena</span>
           </button>
         </div>
       </fieldset>
+      <button type="button" class="cta big" id="btn-mode-next" data-autofocus>Continue<span aria-hidden="true">▶</span></button>
     </div>
 
     <details class="howto">
@@ -245,8 +246,8 @@
   </div>
 </div>
 
-<script src="data.js?v=5"></script>
-<script src="sprites.js?v=5"></script>
-<script src="game.js?v=5"></script>
+<script src="data.js?v=6"></script>
+<script src="sprites.js?v=6"></script>
+<script src="game.js?v=6"></script>
 </body>
 </html>
