@@ -167,7 +167,7 @@ const Sfx = {
 
 // ===================== input =====================
 const keys = { left: false, right: false, up: false, down: false, hit: false };
-const input = { jumpBuf: 0, hitQ: false, clickQ: false, diveQ: false, specialQ: false };
+const input = { jumpBuf: 0, hitQ: false, diveQ: false, specialQ: false };
 const KEYMAP = {
   ArrowLeft: 'left', KeyA: 'left', ArrowRight: 'right', KeyD: 'right',
   ArrowUp: 'up', KeyW: 'up', ArrowDown: 'down', KeyS: 'down',
@@ -176,7 +176,7 @@ const KEYMAP = {
 function press(action, down) {
   Sfx.init();
   if (action === 'jump') { if (down) input.jumpBuf = 0.12; }
-  else if (action === 'hit') { if (down && !keys.hit) { input.hitQ = true; input.clickQ = true; } keys.hit = down; }
+  else if (action === 'hit') { if (down && !keys.hit) input.hitQ = true; keys.hit = down; }
   else if (action === 'dive') { if (down) input.diveQ = true; }
   else if (action === 'special') { if (down) input.specialQ = true; }
   else if (action in keys) keys[action] = down;
@@ -185,6 +185,7 @@ addEventListener('keydown', e => {
   if (!G || $('#stage').hidden) return;
   if (e.code === 'KeyP' || e.code === 'Escape') { togglePause(); e.preventDefault(); return; }
   if (e.code === 'KeyM') { Sfx.muted = !Sfx.muted; return; }
+  if (/^Digit[1-4]$/.test(e.code)) { pickSet(+e.code[5] - 1); e.preventDefault(); return; }
   const a = KEYMAP[e.code];
   if (a) { e.preventDefault(); if (!e.repeat) press(a, true); }
 });
@@ -208,7 +209,7 @@ class Player {
     this.jumpV = Math.sqrt(2 * GP * this.apex);
     this.x = 0; this.y = 0; this.z = 0; this.vx = 0; this.vy = 0; this.vz = 0; this.onGround = true;
     this.face = 0; this.cool = 0; this.squash = 1; this.homeX = 0; this.homeZ = 0;
-    this.dive = 0; this.rec = 0; this.diveDir = [0, 1]; this.timing = null;
+    this.dive = 0; this.rec = 0; this.diveDir = [0, 1];
     this.ai = { jumpErr: 0, blockWait: -1 };
     this.stats = { kills: 0, aces: 0, blocks: 0, digs: 0, sets: 0 };
   }
@@ -547,11 +548,11 @@ function startServe() {
   updateFormation();
   for (const p of G.players) {
     p.x = p.homeX; p.z = p.homeZ; p.y = 0; p.vx = p.vy = p.vz = 0; p.onGround = true; p.cool = 0; p.ai.blockWait = -1;
-    p.dive = p.rec = 0; p.timing = null;
+    p.dive = p.rec = 0;
   }
   const sv = G.server;
   sv.x = clamp(0.5 * HW, -HW + 0.6, HW - 0.6) * toward(s); sv.z = -toward(s) * (HL + 0.8); // serve from the right, behind the end line
-  input.hitQ = input.clickQ = input.diveQ = false; G.toss = false; G.tid = (G.tid || 0) + 1;
+  input.hitQ = input.diveQ = false; G.toss = false; G.hold = null; G.setPick = null; G.tid = (G.tid || 0) + 1;
   const you = G.sides[0].find(p => p.human) || G.sides[0][0];
   G.cam.z = Math.min(-HL - CAM.back, you.z - 6.6); G.cam.x = clamp(you.x * 0.55, -HW * 0.6, HW * 0.6);
 }
@@ -607,13 +608,22 @@ function startDive(p, ix, iz) {
 }
 
 // ===================== timing meter =====================
-// Your contacts happen at the sweet moment: the ball's closest point to you while in reach.
-// Click shortly before it and the grade (from how early you clicked) sets pass accuracy and spike power.
-const METER_T = 0.55; // seconds of meter before the sweet moment
-const GRADES = [[0.07, 1, 'PERFECT', '#ffe14a'], [0.15, 0.65, 'GOOD', '#7dffb0'], [0.26, 0.3, 'OK', '#c9d4ee']];
-function gradeT(T) {
-  for (const [t, q, label, color] of GRADES) if (T <= t) return { q, label, color };
-  return { q: -0.25, label: 'EARLY', color: '#ff8a8a' };
+// Hold the hit button to wind up. The meter fills over CHARGE seconds; your touch is graded by how full it is
+// when you meet the ball (or when you let go, if that was just before). Hold past full and it goes red: a bad hit.
+const CHARGE = 0.5;       // seconds from empty to full in a rally
+const RELEASE_WIN = 0.2;  // a release this long before contact still counts
+const ZONES = [[0.4, -0.25, 'WEAK', '#ff8a8a', '#3a2630'], [0.65, 0.3, 'OK', '#c9d4ee', '#5d6b8a'], [0.85, 0.65, 'GOOD', '#7dffb0', '#2f9e63'], [1, 1, 'PERFECT', '#ffe14a', '#ffcf33']];
+const TOO_LONG = { q: -0.5, label: 'TOO LONG', color: '#ff5a5a' };
+function gradeL(L) {
+  for (const [top, q, label, color] of ZONES) if (L <= top) return { q, label, color };
+  return TOO_LONG;
+}
+const holdLevel = h => ((h.tr ?? G.time) - h.t0) / h.C;
+// Your wind-up for the touch you are about to make, or null if you are not holding (or let go too soon).
+function holdGrade() {
+  const h = G.hold;
+  if (!h || (h.tr != null && G.time - h.tr > RELEASE_WIN)) return null;
+  return gradeL(holdLevel(h));
 }
 const contactY = p => (p.dive > 0 ? p.y + p.rr * 0.55 : p.cy);
 const reachOf = p => p.rr + BR + (aiControlled(p) ? 0.22 : 0.45) + (p.dive > 0 ? 0.55 : 0);
@@ -626,7 +636,7 @@ function predictContact(p) {
   if (p.cool > 0.5 || (G.lastToucher === p && G.lastSide === p.side && G.touches[p.side] > 0)) return null;
   const g = GB * (b.gs || 1), R = reachOf(p), core = (p.rr + BR) * 0.85;
   let x = b.x, y = b.y, z = b.z, vx = b.vx, vy = b.vy, vz = b.vz, py = p.y, pvy = p.onGround ? 0 : p.vy, best = Infinity, bestT = 0;
-  for (let k = 0; k <= 110; k++) {
+  for (let k = 0; k <= 130; k++) {
     const tt = k * STEP, cy = py + (p.dive > 0 ? p.rr * 0.55 : p.rr);
     const dx = x - p.x, dy = y - cy, dz = z - p.z, d = Math.hypot(dx, dy, dz);
     if (z * t <= 0.7) {
@@ -638,14 +648,6 @@ function predictContact(p) {
     if (py > 0 || pvy) { pvy -= GP * STEP; py += pvy * STEP; if (py <= 0) { py = 0; pvy = 0; } }
   }
   return best < R + 1.2 ? { T: bestT, reach: false } : null;
-}
-function timingClick(p) {
-  if (p.timing && p.timing.tid === G.tid) return; // one click per ball
-  const pr = predictContact(p);
-  if (!pr || pr.T > METER_T) return;
-  const gr = gradeT(pr.T);
-  p.timing = { ...gr, T: pr.T, tid: G.tid };
-  if (gr.q >= 1) Sfx.tone(1320, 0.06, 'square', 0.03);
 }
 function jump(p) {
   if (!p.onGround) return;
@@ -688,11 +690,6 @@ function lob(tx, tz, apexY) {
 
 // ===================== serving =====================
 const serveY = p => p.y + p.rr * 2 + 0.6; // where your hand meets the toss
-function serveT(p) { // seconds until the toss drops to your hand; negative once it is past
-  const b = G.ball, hy = serveY(p);
-  if (b.vy < 0 && b.y < hy) return -(hy - b.y) / Math.max(1, -b.vy);
-  return timeToY(b, hy) ?? 0;
-}
 function doServe(p, q = null) {
   const s = p.side, t = toward(s);
   for (const k of [1 - s, s]) {
@@ -746,8 +743,14 @@ function contact(p) {
   const incoming = Math.hypot(b.vx, b.vy, b.vz);
   const fromOpp = G.lastSide !== s;
   const wasSpecial = b.special;
-  const tm = p.timing && p.timing.tid === G.tid ? p.timing : null; // your click for this ball
+  const human = !aiControlled(p);
+  const tm = human ? holdGrade() : null; // your wind-up for this ball
+  if (human) G.hold = null;
   const q = tm ? tm.q : null, dove = p.dive > 0;
+  if (tm) {
+    floatText(tm.label, p.x, p.cy + p.rr + 1.1, p.z, tm.color, 0.7);
+    if (tm.q >= 1) Sfx.tone(1320, 0.06, 'square', 0.03);
+  }
 
   // block at the net (a libero may not block)
   if (p.role !== 'L' && !p.onGround && !p.dive && Math.abs(p.z) < p.rr + 0.9 && fromOpp && b.vz * t < 0 && b.y > NET_H - 0.3 && G.lastSide !== -1) {
@@ -780,7 +783,7 @@ function contact(p) {
   let action;
   if (!aiControlled(p)) {
     // left click is the attack: in the air above the net it spikes; on the third touch it tips.
-    // Otherwise a click times your pass or set. No click still passes, just less cleanly.
+    // Otherwise the hold times your pass or set. No hold still passes, just less cleanly.
     if (tm && airborne && highEnough && !dove) action = 'spike';
     else if (G.touches[s] >= 3) action = tm ? 'tip' : 'over';
     else action = 'pass';
@@ -824,7 +827,7 @@ function designatedSetter(s, p) {
 }
 
 // The setter's options. Outside "4" set, middle quick, back set to the opposite, or the pipe to the back-row outside.
-function choosePlay(s, setter) {
+function playOptions(s, setter) {
   const m = toward(s), [tx, tz] = setterSpot();
   const passGood = Math.hypot(setter.x * m - tx, setter.z * m - tz) < 1.4;
   const opts = [];
@@ -839,11 +842,12 @@ function choosePlay(s, setter) {
     } else if (q.role === 'OH') o = { type: 'pipe', call: 'PIPE', ox: 0, oz: -(attackLine() + 0.7), apex: NET_H + 2.5, w: 0.5 };
     if (o) { o.q = q; opts.push(o); }
   }
+  return opts;
+}
+function choosePlay(s, setter) {
+  const m = toward(s), opts = playOptions(s, setter);
   let pick = null;
-  if (!aiControlled(setter)) { // you are setting: the arrow you hold picks the play
-    const want = keys.left ? 'outside' : keys.up ? 'quick' : keys.right ? 'right' : keys.down ? 'pipe' : null;
-    pick = opts.find(o => o.type === want) || null;
-  }
+  if (!aiControlled(setter) && s === 0) { pick = opts.find(o => o.type === G.setPick) || null; G.setPick = null; } // the button you picked
   if (!pick) {
     const wt = o => o.w * (o.q.r.pwr + o.q.r.jmp) * (o.q.human && !AUTO ? 3 : 1);
     let x = Math.random() * opts.reduce((a, o) => a + wt(o), 0);
@@ -1175,7 +1179,11 @@ function update(dt) {
 
   updateFormation();
   const you = G.sides[0].find(p => p.human);
-  if (input.clickQ) { input.clickQ = false; if (G.phase === 'rally' && you && !AUTO) timingClick(you); }
+  if (G.phase === 'rally' && you && !AUTO) { // the wind-up: press starts it, letting go freezes it
+    if (input.hitQ) G.hold = { t0: G.time, tr: null, C: CHARGE };
+    if (G.hold && G.hold.tr == null && !keys.hit) G.hold.tr = G.time;
+    if (G.hold && G.time - (G.hold.tr ?? G.time) > RELEASE_WIN) G.hold = null;
+  }
   if (G.phase === 'serve') {
     const sv = G.server, b = G.ball;
     G.timer += dt;
@@ -1186,20 +1194,22 @@ function update(dt) {
       stepPlayer(p, dt);
     }
     b.x = sv.x + 0.15; b.z = sv.z + toward(sv.side) * 0.15;
-    if (!aiControlled(sv)) { // click to toss, click again as it drops to your hand height
+    if (!aiControlled(sv)) { // press to toss and hold; let go as the ball drops back to your hand
       const hy = serveY(sv);
       if (!G.toss) {
         b.y = sv.y + sv.rr * 2 + 0.35 + Math.sin(G.time * 4) * 0.05;
-        if (input.hitQ) { input.hitQ = false; G.toss = true; b.vy = 4.6; sv.squash = 1.1; Sfx.tone(520, 0.05, 'triangle', 0.03, 160); }
+        if (input.hitQ) {
+          input.hitQ = false; G.toss = true; b.vy = 4.6; sv.squash = 1.1; Sfx.tone(520, 0.05, 'triangle', 0.03, 160);
+          G.hold = { t0: G.time, tr: null, C: Math.max(0.3, timeToY({ ...b, vx: 0, vz: 0 }, hy) ?? 0.9) }; // full as it reaches your hand
+        }
       } else {
         b.vy -= GB * dt; b.y += b.vy * dt;
-        const T = serveT(sv);
-        if (input.hitQ) {
-          input.hitQ = false;
-          const gr = T >= 0 ? gradeT(T) : { ...gradeT(-T * 1.6), label: gradeT(-T * 1.6).q < 0 ? 'LATE' : gradeT(-T * 1.6).label };
+        const h = G.hold;
+        if (h && !keys.hit) {
+          const gr = gradeL(holdLevel(h));
           floatText(gr.label, sv.x, sv.cy + sv.rr + 1.1, sv.z, gr.color, 0.7);
-          doServe(sv, gr.q);
-        } else if (b.vy < 0 && b.y < hy - 0.4) { floatText('LATE', sv.x, sv.cy + sv.rr + 1.1, sv.z, '#ff8a8a', 0.7); doServe(sv, -0.3); }
+          G.hold = null; doServe(sv, gr.q);
+        } else if (b.vy < 0 && b.y < hy - 0.4) { floatText(TOO_LONG.label, sv.x, sv.cy + sv.rr + 1.1, sv.z, TOO_LONG.color, 0.7); G.hold = null; doServe(sv, -0.4); }
       }
     } else {
       b.y = sv.y + sv.rr * 2 + 0.35 + Math.sin(G.time * 4) * 0.05;
@@ -2083,24 +2093,65 @@ function drawLandingCarets(lx, lz, tl) {
   }
 }
 
-// The timing meter over your head: the marker runs to the gold end as the ball reaches its sweet spot.
-function drawTimingMeter(p, T, kind, dim) {
+// The wind-up meter over your head. It fills left to right while you hold; gold is the last stretch before full.
+// Past full the whole bar turns red. The white tick shows how full it will be when the ball reaches you.
+function drawTimingMeter(p, L, kind, tick, dim) {
   const top = proj(p.x, p.y + p.rr * 2 + 0.25, p.z), w = 44, h = 5;
   const x = Math.round(top.x * US - w / 2), y = Math.round(top.y * US - 16);
-  const fx = t => x + Math.round(w * (1 - clamp(t, 0, METER_T) / METER_T));
-  const a = dim ? 0.5 : 1;
-  ctx.save(); ctx.globalAlpha = a;
+  const fx = l => x + Math.round(w * clamp(l, 0, 1));
+  const held = L != null, over = held && L > 1, gr = held ? gradeL(L) : null;
+  ctx.save(); ctx.globalAlpha = dim ? 0.5 : 1;
   pxRect(x - 1, y - 1, w + 2, h + 2, '#10141f');
-  pxRect(x, y, w, h, '#3a2630');
-  pxRect(fx(GRADES[2][0]), y, fx(GRADES[1][0]) - fx(GRADES[2][0]), h, '#5d6b8a');
-  pxRect(fx(GRADES[1][0]), y, fx(GRADES[0][0]) - fx(GRADES[1][0]), h, '#2f9e63');
-  pxRect(fx(GRADES[0][0]), y, x + w - fx(GRADES[0][0]), h, '#ffcf33');
-  const tm = p.timing && p.timing.tid === G.tid ? p.timing : null;
-  const mx = fx(tm ? tm.T : T);
-  pxRect(mx - 2, y - 3, 4, h + 6, '#10141f'); pxRect(mx - 1, y - 2, 2, h + 4, tm ? tm.color : '#ffffff');
-  pxText(tm ? tm.label : kind, x + w / 2, y - 12, tm ? tm.color : '#eef3ff', 8);
+  let lo = 0;
+  for (const z of ZONES) { pxRect(fx(lo), y, fx(z[0]) - fx(lo), h, over ? '#d8343a' : z[4]); lo = z[0]; }
+  if (held && !over) { pxRect(x, y + 1, fx(L) - x, h - 2, 'rgba(255,255,255,0.55)'); pxRect(fx(L) - 1, y - 2, 2, h + 4, '#ffffff'); }
+  if (tick != null) {
+    const tx = fx(tick), red = tick > 1;
+    pxRect(tx - 1, y + h + 1, 2, 3, red ? '#ff5a5a' : '#eef3ff');
+  }
+  const label = over ? TOO_LONG.label : held && G.hold && G.hold.tr != null ? gr.label : kind;
+  pxText(label, x + w / 2, y - 12, over ? TOO_LONG.color : held && G.hold && G.hold.tr != null ? gr.color : '#eef3ff', 8);
   ctx.restore();
 }
+
+// 6 v 6, when the pass is coming to you as setter: a button over each hitter you can set.
+// Click one (or press its number) to pick the set; pressing on it also starts your wind-up.
+function setChoices() {
+  const you = G.sides[0].find(p => p.human);
+  if (settings.mode !== 6 || AUTO || !you || G.phase !== 'rally' || G.lastSide !== 0 || G.touches[0] !== 1 || G.intended[0] !== you) return null;
+  return playOptions(0, you).sort((a, b) => proj(a.q.x, 0, a.q.z).x - proj(b.q.x, 0, b.q.z).x);
+}
+function drawSetButtons() {
+  G.setBtns = [];
+  const opts = setChoices();
+  if (!opts) return;
+  const chip = (x, y, w, text, on, type) => {
+    const h = 14;
+    pxRect(x - 1, y - 1, w + 2, h + 2, '#10141f');
+    pxRect(x, y, w, h, on ? '#ffcf33' : '#2b3a5e');
+    pxRect(x, y + h - 2, w, 2, on ? '#c48a10' : '#1b2640');
+    pxText(text, x + w / 2, y + 3, on ? '#141c33' : '#ffffff', 8, 'center', null);
+    G.setBtns.push({ x, y, w, h, type });
+  };
+  // a number badge over each hitter, nudged up where two would overlap
+  const you = G.sides[0].find(p => p.human), mt = proj(you.x, you.y + you.rr * 2 + 0.25, you.z);
+  const placed = [{ x: mt.x * US - 22, y: mt.y * US - 28, w: 44, h: 22 }]; // your own meter
+  const hits = (x, y) => placed.some(r => x < r.x + r.w + 3 && x + 17 > r.x && y < r.y + r.h + 3 && y + 17 > r.y);
+  opts.forEach((o, i) => {
+    const q = o.q, top = proj(q.x, q.y + q.rr * 2 + 0.3, q.z);
+    let x = Math.round(top.x * US - 7), y = Math.round(top.y * US - 20);
+    while (hits(x, y)) y -= 17;
+    placed.push({ x, y, w: 14, h: 14 });
+    chip(clamp(x, 2, UW - 16), clamp(y, 2, UH - 16), 14, String(i + 1), G.setPick === o.type, o.type);
+  });
+  // and the same choices as a row of buttons, left to right in the order they stand
+  const items = opts.map((o, i) => ({ o, text: `${i + 1} ${o.call}` })), gap = 6;
+  const total = items.reduce((a, it) => a + it.text.length * 8 + 8, 0) + gap * (items.length - 1);
+  let x = Math.round(UW / 2 - total / 2);
+  pxText('SET TO', UW / 2, UH - 64, '#c9d4ee', 8);
+  for (const it of items) { const w = it.text.length * 8 + 8; chip(x, UH - 52, w, it.text, G.setPick === it.o.type, it.o.type); x += w + gap; }
+}
+function pickSet(i) { const opts = setChoices(); if (opts && opts[i]) { G.setPick = opts[i].type; Sfx.tone(700, 0.04, 'square', 0.025); } }
 
 function drawPlayer(p) {
   const back = p.side === 0, f = proj(p.x, p.y, p.z);
@@ -2204,14 +2255,17 @@ function render() {
   if (bp.y < 0) { ctx.setTransform(1, 0, 0, 1, 0, 0); pxRect(bp.x * US - 3, 2, 6, 3, '#ffffff'); pxRect(bp.x * US - 1, 5, 2, 2, '#ffffff'); }
   ctx.setTransform(S, 0, 0, S, 0, 0); drawVenueLights();
   for (const l of labels) pxText(l[0], l[1], l[2], l[3]);
+  G.setBtns = [];
   if (you && !AUTO) {
-    if (G.phase === 'serve' && G.toss && G.server === you) drawTimingMeter(you, serveT(you), 'SERVE', false);
+    if (G.phase === 'serve' && G.toss && G.server === you && G.hold) drawTimingMeter(you, holdLevel(G.hold), 'SERVE', null, false);
     else if (G.phase === 'rally') {
-      const pr = predictContact(you);
-      if (pr && pr.T <= METER_T + 0.2) {
+      const pr = predictContact(you), h = G.hold, L = h ? holdLevel(h) : null;
+      const tick = pr && pr.reach ? (h && h.tr != null ? null : (L || 0) + pr.T / CHARGE) : null;
+      if (h || (pr && pr.T <= CHARGE * 1.6)) {
         const kind = !you.onGround && b.y > NET_H - 0.2 ? 'SPIKE' : G.lastSide === 0 && G.touches[0] === 1 ? 'SET' : G.lastSide === 0 && G.touches[0] >= 2 ? 'ATTACK' : 'PASS';
-        drawTimingMeter(you, pr.T, kind, !pr.reach);
+        drawTimingMeter(you, L, kind, tick, !h && !(pr && pr.reach));
       }
+      drawSetButtons();
     }
   }
   for (const t of G.texts) if (!t.big) {
@@ -2244,7 +2298,7 @@ function drawHud() {
     if (G.phase === 'serve' && me !== G.server && overlaps(0).includes(me) && Math.floor(G.time * 4) % 2 === 0) pxText('OVERLAP! GET TO YOUR SPOT', cx, 76, '#ff8a8a', 8);
   }
   if (G.phase === 'serve' && !aiControlled(G.server) && Math.floor(G.time * 2.5) % 2 === 0) {
-    pxText(G.toss ? 'CLICK AS IT DROPS' : 'CLICK TO TOSS', cx, 52, '#ffffff', 8);
+    pxText(G.toss ? 'LET GO AS IT DROPS' : 'HOLD CLICK TO TOSS', cx, 52, '#ffffff', 8);
     pxText('WASD AIMS', cx, 63, '#c9d4ee', 8);
   }
   for (const t of G.texts) if (t.big && t.t >= 0) {
@@ -2321,13 +2375,21 @@ function frame(now) {
   requestAnimationFrame(frame);
 }
 // mouse: left button hits (serve, pass, set, spike), right button dives
+function setButtonAt(e) { // a setter button under the pointer, if any
+  if (!G || !G.setBtns || !G.setBtns.length) return null;
+  const r = canvas.getBoundingClientRect(), ux = (e.clientX - r.left) / r.width * UW, uy = (e.clientY - r.top) / r.height * UH;
+  return G.setBtns.find(b => ux >= b.x - 2 && ux <= b.x + b.w + 2 && uy >= b.y - 2 && uy <= b.y + b.h + 2) || null;
+}
 canvas.addEventListener('pointerdown', e => {
-  if (e.pointerType === 'touch') return;
-  if (e.button === 0) { press('hit', true); press('hit', false); }
+  const btn = setButtonAt(e);
+  if (btn) { G.setPick = btn.type; Sfx.tone(700, 0.04, 'square', 0.025); }
+  if (e.pointerType === 'touch') { if (btn) e.preventDefault(); return; }
+  if (e.button === 0) press('hit', true); // held until the button comes back up
   else if (e.button === 2) { press('dive', true); press('dive', false); }
   else return;
   e.preventDefault();
 });
+addEventListener('pointerup', e => { if (e.pointerType !== 'touch' && e.button === 0 && keys.hit) press('hit', false); });
 canvas.addEventListener('contextmenu', e => e.preventDefault());
 
 // ===================== screens =====================
