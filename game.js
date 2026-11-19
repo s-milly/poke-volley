@@ -220,7 +220,7 @@ class Player {
   constructor(entry, side, human, size) {
     this.entry = entry; this.mon = entry.mon; this.r = entry.r; this.side = side; this.human = human;
     this.rr = clamp(0.24 + Math.sqrt(this.mon.h) * 0.075, 0.3, 0.72) * size; // body radius
-    this.speed = 5.2 + this.r.spd * 0.065;
+    this.speed = 4.4 + this.r.spd * 0.055;
     this.apex = 0.85 + this.r.jmp * 0.013;
     this.jumpV = jumpVFor(this.apex); this.tUp = timeUp(this.jumpV);
     this.x = 0; this.y = 0; this.z = 0; this.vx = 0; this.vy = 0; this.vz = 0; this.onGround = true;
@@ -662,7 +662,7 @@ function holdGrade() {
   return gradeL(holdLevel(h));
 }
 const contactY = p => (p.dive > 0 ? p.y + p.rr * 0.55 : p.cy);
-const reachOf = p => p.rr + BR + (aiControlled(p) ? 0.22 : p.onGround ? 0.45 : 0.6) + (p.dive > 0 ? 0.55 : 0);
+const reachOf = p => p.rr + BR + (aiControlled(p) ? 0.22 : p.onGround ? 0.45 : 1.05) + (p.dive > 0 ? 0.55 : 0);
 // The ball is at its sweet spot: past the closest approach, deep in the body, or about to hit the floor.
 function sweetSpot(dx, dy, dz, vx, vy, vz, y, core) {
   return dx * vx + dy * vy + dz * vz >= 0 || dx * dx + dy * dy + dz * dz < core * core || y < BR + 0.22;
@@ -1245,15 +1245,32 @@ function humanControl(p, dt) {
   if (p.onGround) { // quick to get going and quick to plant, but not instant, so a cut has a little weight
     const k = Math.min(1, dt * (ix || iz ? 15 : 20)); p.vx += (wx - p.vx) * k; p.vz += (wz - p.vz) * k;
   } else {
-    const k = Math.min(1, dt * 2.5); p.vx += (wx * 0.8 - p.vx) * k; p.vz += (wz * 0.8 - p.vz) * k; // a running jump keeps its momentum
-    const b = G.ball; // holding hit in the air: you drift under the ball so the swing meets it
-    if (G.phase === 'rally' && (keys.hit || (G.hold && G.hold.tap)) && b.z * toward(p.side) < 0.3) {
-      const dx = b.x - p.x, dz = b.z - p.z, d = Math.hypot(dx, dz);
-      if (d > 0.15 && d < 1.8 && Math.abs(b.y - p.cy) < 2.2) { const m = Math.min(1, dt * 6), v = Math.min(3.5, d * 5); p.vx += (dx / d * v - p.vx) * m; p.vz += (dz / d * v - p.vz) * m; }
-    }
+    const aim = jumpAssist(p);
+    if (aim) { const m = Math.min(1, dt * 8); p.vx += (aim[0] - p.vx) * m; p.vz += (aim[1] - p.vz) * m; }
+    else { const k = Math.min(1, dt * 2.5); p.vx += (wx * 0.8 - p.vx) * k; p.vz += (wz * 0.8 - p.vz) * k; } // a running jump keeps its momentum
   }
   if (input.jumpT0 != null && p.onGround) p.squash = Math.min(p.squash, 1 - 0.14 * clamp((performance.now() - input.jumpT0) / 1000 / JUMP_CHARGE, 0, 1)); // crouch while charging
-  if (input.jumpQ != null) { if (p.onGround) { jump(p, input.jumpQ); tutEvent('jump', { c: input.jumpQ }); } input.jumpQ = null; }
+  if (input.jumpQ != null) {
+    if (p.onGround) { jump(p, input.jumpQ); const aim = jumpAssist(p); if (aim) { p.vx = aim[0]; p.vz = aim[1]; } tutEvent('jump', { c: input.jumpQ }); }
+    input.jumpQ = null;
+  }
+}
+
+// Spike help: once you are in the air on your own team's ball, you drift toward the spot where the ball
+// comes down to hand height, so a jump that is roughly right meets it. Returns the drift velocity, or null.
+function jumpAssist(p) {
+  const b = G.ball, t = toward(p.side);
+  if (G.phase !== 'rally' || p.onGround || b.vy > 6) return null;
+  if (G.lastSide !== p.side && b.z * t > 0) return null; // their ball on their side: a block, not a spike
+  const vy = p.vy, hy = p.y + Math.max(0, vy * vy / (2 * GP)) + p.rr * 1.6; // hand height near the top of the jump
+  let tc = timeToY(b, Math.min(hy, b.y));
+  if (tc == null) return null;
+  tc = Math.min(tc, 1.2);
+  const tx = b.x + b.vx * tc, tz = Math.min((b.z + b.vz * tc) * t, -0.3) * t; // never past your side of the net
+  const dx = tx - p.x, dz = tz - p.z, d = Math.hypot(dx, dz);
+  if (d > 3.2) return null; // too far to be what you jumped for
+  const v = Math.min(5, d / Math.max(tc, 0.2));
+  return d < 0.05 ? [0, 0] : [dx / d * v, dz / d * v];
 }
 
 // ===================== main update =====================
@@ -2455,10 +2472,10 @@ function drawSpecialTrail(b, ty) {
   ctx.globalAlpha = 1;
 }
 
-// Where the ball will land, on either side of the net: four small carets painted flat on the floor
-// at the corners of a square, each pointing at the spot. They close in and shrink as the ball drops.
+// Where the ball will land, on either side of the net: four black carets painted flat on the floor
+// at the corners of a square, each pointing at the spot. They start wide, then close in and shrink as the ball drops.
 function drawLandingCarets(lx, lz, tl) {
-  const k = clamp(tl / 1.2, 0, 1), r = 0.24 + 0.32 * k, L = 0.15 + 0.07 * k;
+  const k = clamp(tl / 1.4, 0, 1), r = 0.24 + 0.86 * k, L = 0.2 + 0.16 * k;
   for (const [sx, sz] of [[1, 1], [-1, 1], [-1, -1], [1, -1]]) {
     const cx = lx + sx * r, cz = lz + sz * r;
     // lay a local frame on the ground at this corner: one world metre along x and along z, in canvas px
@@ -2468,7 +2485,7 @@ function drawLandingCarets(lx, lz, tl) {
     ctx.save();
     ctx.transform((ex.x - o.x) * 10, (ex.y - o.y) * 10, (ez.x - o.x) * 10, (ez.y - o.y) * 10, o.x, o.y);
     const pts = [pt(-0.75, -0.9), pt(0, 0), pt(-0.75, 0.9)];
-    for (const [col, lw] of [['#2a1606', 0.5 * L], ['#ff8c28', 0.27 * L]]) {
+    for (const [col, lw] of [['rgba(255,250,235,0.6)', 0.46 * L], ['#000000', 0.3 * L]]) { // black, with a thin light rim for dark floors
       ctx.strokeStyle = col; ctx.lineWidth = lw; ctx.lineJoin = 'miter'; ctx.lineCap = 'square';
       ctx.beginPath(); ctx.moveTo(...pts[0]); ctx.lineTo(...pts[1]); ctx.lineTo(...pts[2]); ctx.stroke();
     }
@@ -3697,7 +3714,7 @@ const TUT_BASICS = [
   { title: 'Camera', text: 'Press C to switch between a camera that follows you and one that holds still. V or the mouse wheel zooms.', ev: 'cam' },
 ];
 const T_SERVE = { title: 'Serve', text: 'Hold left click to toss, then let go as the ball drops back to your hand. The serve goes where the cursor points.', ev: 'serve', test: d => d.q > 0, serve: 'you' };
-const T_PASS = { title: 'Receive', text: 'Their serve is yours: get under the orange carets, hold left click as the ball comes in and let go to pass.', ev: 'pass', test: d => d.first, mine: true };
+const T_PASS = { title: 'Receive', text: 'Their serve is yours: get under the black carets, hold left click as the ball comes in and let go to pass.', ev: 'pass', test: d => d.first, mine: true };
 const T_PERFECT = { title: 'Perfect pass', text: 'Pass again, and let go with the meter in the gold notch at the top for a PERFECT pass.', ev: 'pass', test: d => d.first && d.q >= 1, mine: true };
 const T_DIVE = { title: 'Dive', text: 'Right click on the ground to dive. Hold a direction to dive that way; hold none and you dive at the ball.', ev: 'dive' };
 const T_BLOCKUP = { title: 'Block', text: 'When they attack, stand at the net, jump just after their hitter jumps and right click in the air to put your block up.', ev: 'blockup', test: d => d.net, serve: 'us' };

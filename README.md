@@ -25,7 +25,7 @@ New to it? Open **How to play** on the title screen and start the **Tutorial**: 
 Phones get an on-screen pad.
 
 - Touch the ball without pressing a key and you pass it to a teammate automatically. Each side gets 3 touches.
-- An orange ring on the sand shows where the ball will land on your side. When a teammate sets you, a green ring shows where to jump.
+- Black carets on the floor show where the ball will land. They start wide and close in as the ball drops. When a teammate sets you, a green ring shows where to jump; once you are in the air, you drift toward the ball, and your reach is long, so a jump that is roughly right still makes contact.
 - To block, stand at the net and jump just after the other team's hitter jumps. A red ring at the net shows where to stand and flashes JUMP when it is time. If you touch the spike you either stuff it back for a point or pop it up for your team to play.
 - A spike goes to the most open spot on its own. Hold left or right to aim it across, forward for a short shot, or back to hit deep.
 - Time a spike to PERFECT and your Pokémon lets loose its type move, with a ball trail in that type's style. The computer lands one now and then too.
