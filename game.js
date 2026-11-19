@@ -156,7 +156,7 @@ const Sfx = {
   ctx: null, muted: false,
   init() { if (!this.ctx) { try { this.ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { this.muted = true; } } },
   tone(freq, dur, type = 'triangle', vol = 0.06, slide = 0, delay = 0) {
-    if (this.muted || !this.ctx) return;
+    if (this.muted || !this.ctx || (G && G.demo)) return; // the title screen's background match is silent
     const c = this.ctx, t0 = c.currentTime + delay, o = c.createOscillator(), g = c.createGain();
     o.type = type; o.frequency.setValueAtTime(freq, t0);
     if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(40, freq + slide), t0 + dur);
@@ -203,7 +203,7 @@ function press(action, down) {
   else if (action in keys) keys[action] = down;
 }
 addEventListener('keydown', e => {
-  if (!G || $('#stage').hidden) return;
+  if (!G || $('#stage').hidden || G.demo) return;
   if (e.target.closest && e.target.closest('#coach, #pause') && (e.code === 'Enter' || e.code === 'Space')) return;
   if (e.code === 'KeyP' || e.code === 'Escape') { togglePause(); e.preventDefault(); return; }
   if (e.code === 'KeyM') { Sfx.muted = !Sfx.muted; return; }
@@ -519,13 +519,13 @@ function spots2(s, ph) {
   return { spots, blockers };
 }
 
-function newMatch() {
+function newMatch(demo = false) { // demo: the title screen's background match, with no one under your control
   const n = settings.mode;
   HW = n === 2 ? 8 : 9.5; HL = n === 2 ? 12 : 14;
   const size = n === 6 ? 0.9 : 1;
   const sides = [[], []], rot = [[], []], all = [[], []], libero = [null, null];
   for (let s = 0; s < 2; s++) {
-    const you = s === 0 ? teams[0][0] : null;
+    const you = s === 0 && !demo ? teams[0][0] : null;
     for (const { entry, role } of lineup(teams[s], you, settings.role[n], n)) {
       const p = new Player(entry, s, entry === you, size);
       p.role = role;
@@ -541,7 +541,7 @@ function newMatch() {
     serving: 0, server: null, phase: 'serve', timer: 0, time: 0,
     meter: [0, 0], armed: [false, false], react: [0, 0], aiErr: [[0, 0], [0, 0]], leave: [false, false],
     particles: [], rings: [], texts: [], shake: 0, netWobble: 0, paused: false, shown: false, rally: 0, longestRally: 0,
-    cam: { x: 0, y: CAM.y, z: -HL - CAM.back, yaw: 0, pitch: CAM.pitch },
+    cam: { x: 0, y: CAM.y, z: -HL - CAM.back, yaw: 0, pitch: CAM.pitch }, demo,
   };
   startServe();
 }
@@ -1363,6 +1363,7 @@ function update(dt) {
     }
     if (G.timer <= 0) {
       if (G.phase === 'point') { if (!G.subs.length) { if (G.setDone) nextSet(); startServe(); } }
+      else if (G.demo) demoMatch(); // the background match ends: a new one starts with new teams
       else if (!G.shown) { G.shown = true; showResult(); }
     }
   }
@@ -1376,7 +1377,7 @@ function update(dt) {
   if (TUT) tutTick(dt, you);
 
   // the camera drifts to keep you in view (or holds still in fixed mode), and dollies in or out with the zoom
-  const cw = camWant(you || G.sides[0][0], true);
+  const cw = G.demo ? demoCam() : camWant(you || G.sides[0][0], true);
   G.cam.x += (cw.x - G.cam.x) * Math.min(1, dt * 2.5);
   G.cam.z += (cw.z - G.cam.z) * Math.min(1, dt * 3);
   G.cam.y += (cw.y - G.cam.y) * Math.min(1, dt * 4);
@@ -2521,7 +2522,7 @@ function render() {
   const bp = proj(b.x, b.y, b.z);
   if (bp.y < 0) { ctx.setTransform(1, 0, 0, 1, 0, 0); pxRect(bp.x * US - 3, 2, 6, 3, '#ffffff'); pxRect(bp.x * US - 1, 5, 2, 2, '#ffffff'); }
   ctx.setTransform(S, 0, 0, S, 0, 0); drawVenueLights();
-  for (const l of labels) pxText(l[0], l[1], l[2], l[3]);
+  if (!G.demo) for (const l of labels) pxText(l[0], l[1], l[2], l[3]); // no call-outs over the title screen's match
   G.setBtns = [];
   if (you && !AUTO) {
     const m = G.meterShow, mk = m && m.p === you ? 1 - (G.time - m.t) / 0.45 : 0;
@@ -2544,12 +2545,12 @@ function render() {
     pxRect(x - 3, y + 14, 6, 2, '#ffffff'); pxRect(x - 1, y + 16, 2, 2, '#ffffff');
     pxText(text, x, y + 3, '#141c33', 8, 'center', null);
   }
-  for (const t of G.texts) if (!t.big) {
+  for (const t of G.texts) if (!t.big && !G.demo) {
     const k = t.t / t.life, p = proj(t.x, t.y, t.z);
     if (k > 0.8 && Math.floor(t.t * 20) % 2) continue; // blink out
     pxText(t.text.toUpperCase(), p.x * US, p.y * US - t.t * 16, t.color, t.size > 24 ? 16 : 8);
   }
-  drawHud();
+  if (!G.demo) drawHud();
 }
 
 function drawHud() {
@@ -2641,10 +2642,12 @@ function sizeCanvas() {
   ctx.imageSmoothingEnabled = false;
 }
 let last = performance.now();
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
 function frame(now) {
   const dt = Math.min(0.05, (now - last) / 1000) * SPEEDUP;
   last = now;
-  if (G && !$('#stage').hidden) {
+  if (G && G.demo && reduceMotion.matches) { if (!G.drawnStill) { render(); G.drawnStill = true; } } // a still frame
+  else if (G && !$('#stage').hidden) {
     if (SPEEDUP > 1) { const n = Math.ceil(SPEEDUP); for (let i = 0; i < n; i++) update(dt / n); }
     else update(dt);
     render();
@@ -2669,7 +2672,7 @@ canvas.addEventListener('pointerdown', e => {
 });
 addEventListener('pointerup', e => { if (e.pointerType !== 'touch' && e.button === 0 && keys.hit) press('hit', false); });
 canvas.addEventListener('pointermove', e => { if (e.pointerType !== 'touch') aimAt(e); });
-canvas.addEventListener('wheel', e => { if (G && !G.paused) { e.preventDefault(); wheelZoom(e.deltaY); } }, { passive: false });
+canvas.addEventListener('wheel', e => { if (G && !G.paused && !G.demo) { e.preventDefault(); wheelZoom(e.deltaY); } }, { passive: false });
 // The point on the floor under the cursor, in world metres. Kept fixed on the floor while the camera drifts.
 function aimAt(e) {
   if (!G) return;
@@ -2691,10 +2694,13 @@ canvas.addEventListener('contextmenu', e => e.preventDefault());
 // ===================== screens =====================
 function show(id) {
   for (const s of document.querySelectorAll('.screen')) s.hidden = s.id !== id;
-  $('#stage').hidden = id !== 'stage';
+  const title = id === 'scr-title';
+  if (title) startDemo(); else stopDemo();
+  $('#stage').hidden = id !== 'stage' && !title; // on the title screen the stage is the background
+  $('#stage').classList.toggle('demo-bg', title);
   $('#menu').hidden = id === 'stage';
-  Rally.run(id === 'scr-title'); // the demo rally plays only on the title screen
-  document.body.classList.toggle('on-title', id === 'scr-title');
+  document.body.classList.toggle('on-title', title);
+  for (const d of document.querySelectorAll('#scr-title dialog[open]')) if (!title) d.close();
   window.scrollTo(0, 0);
   const first = id === 'stage' ? null : document.querySelector(`#${id} [data-autofocus]`);
   if (first) first.focus({ preventScroll: true });
@@ -2754,7 +2760,7 @@ seg('#opt-diff', 'diff'); seg('#opt-target', 'target'); seg('#opt-sets', 'sets')
 // Settings are kept between visits (not in test mode). Anything stale or unknown falls back to the default.
 const SAVE_KEY = 'volleydex-settings';
 function saveSettings() { // during the tutorial, save the player's own settings (plus any camera change), not the tutorial's
-  const s = TUT ? { ...TUT.saved, camMode: settings.camMode, zoom: settings.zoom } : settings;
+  const s = demoSaved ? demoSaved.settings : TUT ? { ...TUT.saved, camMode: settings.camMode, zoom: settings.zoom } : settings;
   if (!AUTO) try { localStorage.setItem(SAVE_KEY, JSON.stringify(s)); } catch (e) {}
 }
 function loadSettings() {
@@ -2820,7 +2826,7 @@ renderClubPick();
 function renderSummary() {
   // the demo scoreboard wears the same clubs
   const rows2 = document.querySelectorAll('#bug .bug-row');
-  settings.club.forEach((id, k) => {
+  if (rows2.length) settings.club.forEach((id, k) => {
     rows2[k].style.setProperty('--cc', id === 'random' ? '#8a93a8' : CLUBS[id].color);
     rows2[k].querySelector('b').textContent = id === 'random' ? '???' : CLUBS[id].abbr;
   });
@@ -3021,6 +3027,7 @@ function sceneTint(url) {
   img.src = url;
 }
 function renderScene() {
+  if (!$('#scene')) return; // the old painted title stage is not on the page
   const scene = $('#scene'), C = STAGE[settings.mode];
   // Grow the whole stage with the window: tall enough to fill the screen above the mode picker, never smaller
   // than 2x pixels, and no bigger than the width allows. Everything inside scales together, so the court keeps its shape.
@@ -3224,6 +3231,7 @@ const Rally = (() => {
     draw();
   }
   function run(want) {
+    if (!$('#scene')) return;
     want = want && !reduce.matches;
     if (want === on) return;
     on = want; $('#scene').classList.toggle('live', on);
@@ -3247,19 +3255,91 @@ addEventListener('resize', () => {
 });
 $('#scr-title').classList.add('intro');
 setTimeout(() => $('#scr-title').classList.remove('intro'), 1200);
-// Picking a mode only selects it (and switches the stage to that mode's venue); Continue moves on.
-function markMode() { for (const b of document.querySelectorAll('#opt-mode button')) b.setAttribute('aria-pressed', String(Number(b.dataset.v) === settings.mode)); }
-$('#opt-mode').addEventListener('click', e => {
-  const b = e.target.closest('button'); if (!b) return;
-  Sfx.init();
-  if (Number(b.dataset.v) !== settings.mode) { settings.mode = Number(b.dataset.v); saveSettings(); renderScene(); }
-  markMode();
+
+// ---- Title background: a computer-vs-computer 6 v 6 match in the championship arena, filmed by a slow, panning
+// broadcast camera. It borrows the match settings while it runs; your own settings and teams come back when you leave.
+let demoSaved = null;
+const realSettings = () => (demoSaved ? demoSaved.settings : settings);
+function demoMatch() {
+  const pool = DEX.filter(m => !m.leg).sort(() => Math.random() - 0.5);
+  teams = [0, 1].map(k => pool.slice(k * 7, k * 7 + 7).map((m, i) => makeEntry(m, i === 0)));
+  const ids = Object.keys(CLUBS).sort(() => Math.random() - 0.5);
+  clubs = [CLUBS[ids[0]], CLUBS[ids[1]]];
+  newMatch(true);
+  for (const p of G.players) spriteImg(p.mon.id, p.side === 0);
+  G.camT0 = Math.random() * 60; // start each match at a different point of the camera's sweep
+}
+function startDemo() {
+  if (demoSaved) return;
+  demoSaved = { settings: JSON.parse(JSON.stringify(settings)), teams, clubs, G };
+  Object.assign(settings, { mode: 6, diff: 'hard', target: 25, sets: 1, time: 'day', camMode: 'follow', zoom: 1 });
+  settings.venue = { ...settings.venue, 6: 'night' };
+  skyCache = null; skyTop = null; crowdCache = null; palmCache = null;
+  demoMatch(); sizeCanvas();
+}
+function stopDemo() {
+  if (!demoSaved) return;
+  Object.assign(settings, demoSaved.settings);
+  teams = demoSaved.teams; clubs = demoSaved.clubs;
+  if (G && G.demo) G = demoSaved.G;
+  demoSaved = null; skyCache = null; skyTop = null; crowdCache = null; palmCache = null;
+}
+// The camera sweeps slowly from one side of the court to the other, rising and falling and dollying in and out,
+// and turns a little toward the ball. update() eases toward this, so every move is smooth.
+function demoCam() {
+  const t = G.time + (G.camT0 || 0), b = G.ball;
+  const sweep = Math.sin(t * 0.09), rise = Math.sin(t * 0.063 + 1.3), dolly = Math.sin(t * 0.047 + 0.4);
+  const x = clamp(sweep * HW * 0.75 + b.x * 0.15, -HW, HW);
+  const z = -HL - CAM.back - 1.5 - 3.5 * (0.5 + 0.5 * dolly);
+  const y = CAM.y * (1.05 + 0.35 * rise);
+  // aim a little left of the play, so on wide screens the match sits in the open space right of the menu
+  const aim = b.x * 0.4 - (innerWidth > 760 ? HW * 0.45 : 0);
+  const yaw = clamp(Math.atan2(aim - x, Math.max(4, b.z * 0.3 - z)) * 0.8, -0.26, 0.2);
+  return { x, y, z, yaw, pitch: CAM.pitch + 0.04 * rise };
+}
+
+// ---- The main menu
+const qp = $('#qp'), qpBtn = $('#mm-quick');
+qpBtn.addEventListener('click', () => {
+  const open = qp.hidden; qp.hidden = !open; qpBtn.setAttribute('aria-expanded', String(open));
+  if (open) qp.querySelector('button').focus();
 });
-$('#btn-mode-next').addEventListener('click', () => { Sfx.init(); renderClubPick(); show('scr-team'); });
-markMode();
-// the subtitle's height decides where the stands stop, so measure again once the pixel font has loaded
-let sceneLede = $('#title-hero .lede').offsetHeight;
-document.fonts.ready.then(() => { const h = $('#title-hero .lede').offsetHeight; if (h !== sceneLede && !$('#scr-title').hidden) { sceneLede = h; renderScene(); } });
+function pickMode(n) { // Quick play: the court you pick starts the usual setup, on to choosing your club
+  Sfx.init(); stopDemo();
+  qp.hidden = true; qpBtn.setAttribute('aria-expanded', 'false'); // closed again when you come back
+  if (n !== settings.mode) settings.mode = n;
+  saveSettings(); renderClubPick(); show('scr-team');
+}
+$('#opt-mode').addEventListener('click', e => { const b = e.target.closest('button'); if (b) pickMode(Number(b.dataset.v)); });
+for (const b of document.querySelectorAll('#main-menu [aria-disabled="true"]')) b.addEventListener('click', e => e.preventDefault()); // Franchise and Road to Glory: not yet
+// up and down arrows move through the menu, like a console game
+$('#main-menu').addEventListener('keydown', e => {
+  if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+  const items = [...document.querySelectorAll('#main-menu .mm, #qp:not([hidden]) button')], i = items.indexOf(document.activeElement);
+  if (i < 0) return;
+  e.preventDefault();
+  items[(i + (e.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length].focus();
+});
+// dialogs: How to play and Settings
+for (const d of document.querySelectorAll('#scr-title dialog')) {
+  d.addEventListener('click', e => { if (e.target === d || e.target.closest('[data-close]')) d.close(); });
+}
+$('#mm-howto').addEventListener('click', () => $('#howto-dlg').showModal());
+$('#mm-settings').addEventListener('click', () => { markSettings(); $('#settings-dlg').showModal(); });
+const SET_ROWS = [['#set-diff', 'diff', String], ['#set-target', 'target', Number], ['#set-sets', 'sets', Number], ['#set-cam', 'camMode', String]];
+function markSettings() {
+  const r = realSettings();
+  for (const [box, key] of SET_ROWS) for (const b of document.querySelectorAll(`${box} button`)) b.setAttribute('aria-pressed', String(b.dataset.v === String(r[key])));
+  for (const b of document.querySelectorAll('#set-sound button')) b.setAttribute('aria-pressed', String((b.dataset.v === 'off') === Sfx.muted));
+  // the match setup screen shows the same rules
+  for (const [box, key] of [['#opt-diff', 'diff'], ['#opt-target', 'target'], ['#opt-sets', 'sets']])
+    for (const b of document.querySelectorAll(`${box} button`)) b.setAttribute('aria-pressed', String(b.dataset.v === String(r[key])));
+}
+for (const [box, key, conv] of SET_ROWS) $(box).addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  realSettings()[key] = conv(b.dataset.v); saveSettings(); markSettings();
+});
+$('#set-sound').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; Sfx.init(); Sfx.muted = b.dataset.v === 'off'; markSettings(); });
 $('#btn-team-next').addEventListener('click', () => { renderSummary(); renderVenuePick(); show('scr-venue'); });
 renderSummary();
 $('#btn-start').addEventListener('click', () => { Sfx.init(); saveSettings(); buildPick(); show('scr-pick'); });
@@ -3597,7 +3677,7 @@ function renderTutPick() {
   $('#tut-roles').textContent = `Positions: ${YOUR_ROLES[tutMode].map(r => ROLES[r].name).join(', ')}.`;
 }
 $('#tut-mode').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; tutMode = Number(b.dataset.v); renderTutPick(); });
-$('#btn-tut').addEventListener('click', () => startTutorial(tutMode));
+$('#btn-tut').addEventListener('click', () => { $('#howto-dlg').close(); stopDemo(); startTutorial(tutMode); });
 renderTutPick();
 
 // ---------- pause and result ----------
