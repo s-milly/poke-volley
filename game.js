@@ -558,7 +558,7 @@ function startServe() {
   G.players = [...G.sides[0], ...G.sides[1]];
   G.server = tutServer() || G.sides[s][0];
   Object.assign(G.ball, { vx: 0, vy: 0, vz: 0, gs: 1, trail: [], special: null, noHit: 0 });
-  G.touches = [0, 0]; G.lastSide = -1; G.lastToucher = null; G.intended = [null, null]; G.lastAttack = null; G.setBy = null;
+  G.touches = [0, 0]; G.lastSide = -1; G.lastToucher = null; G.intended = [null, null]; G.lastAttack = null; G.setBy = null; G.killCam = null;
   G.setterNow = [null, null]; G.play = [null, null];
   G.phase = 'serve'; G.timer = 0; G.rally = 0;
   updateFormation();
@@ -998,7 +998,9 @@ function spike(p, q = null) {
   // Each spike is timed rather than given a raw speed: harder hitters land it sooner,
   // but there is always enough time to react and run to the landing ring.
   const power = q == null ? 1 : 1.1 - q * 0.3; // your timing: a perfect swing lands about 20% sooner
-  const flight = clamp(1.3 - p.r.pwr * 0.005, 0.8, 1.15) * (settings.mode === 6 ? 0.75 : 1) * power; // 6 v 6 has more defenders to beat
+  // your own spike is a kill shot: it is on the floor in about a third of a second
+  const flight = human ? clamp(0.5 - p.r.pwr * 0.0015, 0.36, 0.48) * power
+    : clamp(1.3 - p.r.pwr * 0.005, 0.8, 1.15) * (settings.mode === 6 ? 0.75 : 1) * power; // 6 v 6 has more defenders to beat
   const aims = [[tx, tz]];
   for (let i = 0; i < 5; i++) aims.push([rand(-HW * 0.8, HW * 0.8), t * rand(1.5, HL - 1)]);
   const tries = [];
@@ -1013,6 +1015,7 @@ function spike(p, q = null) {
     if (!inCourt(lx, lz, 1 - s) || Math.abs(lz) < 0.5) continue;
     b.vx = vx; b.vy = vy; b.vz = vz; b.gs = g / GB;
     G.lastAttack = { p, type: 'spike' };
+    if (human) G.shake = Math.max(G.shake, 0.18);
     if (special) {
       const ty = p.mon.types[0];
       b.special = ty;
@@ -1020,7 +1023,7 @@ function spike(p, q = null) {
       G.shake = 0.35;
     }
     Sfx.spike();
-    hitstop(special ? 0.32 : 0.15, special ? TYPE_COLORS[p.mon.types[0]] : '#ffffff');
+    hitstop(special ? 0.32 : human ? 0.12 : 0.15, special ? TYPE_COLORS[p.mon.types[0]] : '#ffffff');
     burst(b.x, b.y, b.z, special ? TYPE_COLORS[p.mon.types[0]] : '#ffffff', special ? 22 : 10);
     return true;
   }
@@ -1135,6 +1138,7 @@ function awardPoint(w, label, sub, credit, key) {
   if (credit && key) credit.stats[key]++;
   if (key === 'kills' && G.lastAttack && G.lastAttack.setter) G.lastAttack.setter.stats.ast++;
   G.cheer = 1; // the crowd jumps up
+  if (key === 'kills' && G.lastAttack && G.lastAttack.type === 'spike') G.killCam = { x: G.ball.x, z: G.ball.z, t: 1.4 }; // the camera pushes in on the kill
   G.longestRally = Math.max(G.longestRally, G.rally);
   if (TUT) { G.texts.push({ big: true, text: label, sub, color: TEAM_COLORS[w], t: 0, life: 1.6 }); Sfx.whistle(); G.phase = 'point'; G.timer = 1.6; return; }
   if (w !== G.serving) { // side out: the team that won the serve back rotates one zone clockwise
@@ -1279,7 +1283,7 @@ function update(dt) {
   if (G.freeze > 0) { G.freeze -= dt; return; } // inputs wait in their queues until the world moves again
   G.time += dt;
   G.cheer = Math.max(0, (G.cheer || 0) - dt * 0.6);
-  G.shake = Math.max(0, G.shake - dt); G.netWobble = Math.max(0, G.netWobble - dt * 2.5);
+  G.shake = Math.max(0, G.shake - dt); if (G.killCam) G.killCam.t -= dt; G.netWobble = Math.max(0, G.netWobble - dt * 2.5);
   for (const p of G.players) p.squash += (1 - p.squash) * Math.min(1, dt * 12);
   for (const q of G.particles) {
     q.vy -= 6 * dt * (q.g ?? 1);
@@ -1404,6 +1408,12 @@ function camWant(focus, ball) {
     const spread = Math.hypot(focus.x - bx, focus.z - bz) + Math.max(0, b.y - 3) * 0.6;
     d *= 1 + clamp((spread - 3.5) * 0.02, -0.05, 0.14);
     pitch -= clamp((b.y - 3.2) * 0.022, 0, 0.07);
+  }
+  const kc = G.killCam;
+  if (kc && kc.t > 0 && !fixed) { // after a kill, lean in toward where the spike landed
+    const k = Math.min(1, kc.t / 0.4);
+    d *= 1 - 0.14 * k;
+    yaw += clamp(Math.atan2(kc.x - x, Math.max(2, kc.z - z0)) * 0.5, -0.1, 0.1) * k;
   }
   const piv = CAM.y / Math.tan(CAM.pitch), cam = { x, z: z0 + piv * (1 - d), y: CAM.y * d, yaw, pitch };
   // never tilt so far that your own feet drop toward the bottom edge of the screen
@@ -2620,6 +2630,11 @@ function render() {
     groundEllipse(p.x, p.z, p.rr * (1.0 - lift), p.rr * (0.75 - lift * 0.5)); ctx.fill();
     ctx.strokeStyle = p.human ? '#ffe14a' : p.role === 'L' ? '#c48bff' : TEAM_COLORS[p.side]; ctx.lineWidth = p.human || p.role === 'L' ? 5 : 3;
     groundEllipse(p.x, p.z, p.rr * 1.2, p.rr * 0.95); ctx.stroke();
+    if (p.human && p.y > 0.15) { // a thin line down to your ring, so you can read how high you are
+      const a = proj(p.x, 0, p.z), c = proj(p.x, p.y, p.z);
+      ctx.strokeStyle = 'rgba(255,255,255,0.55)'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(c.x, c.y); ctx.stroke();
+    }
   }
   for (const r of G.rings) { // landing rings
     const k = r.t / 0.6, rad = 0.3 + k * 1.1;
