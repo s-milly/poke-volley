@@ -559,7 +559,7 @@ function startServe() {
   G.players = [...G.sides[0], ...G.sides[1]];
   G.server = tutServer() || G.sides[s][0];
   Object.assign(G.ball, { vx: 0, vy: 0, vz: 0, gs: 1, trail: [], special: null, noHit: 0 });
-  G.touches = [0, 0]; G.lastSide = -1; G.lastToucher = null; G.intended = [null, null]; G.lastAttack = null; G.setBy = null; G.killCam = null;
+  G.touches = [0, 0]; G.lastSide = -1; G.lastToucher = null; G.serveLive = false; G.intended = [null, null]; G.lastAttack = null; G.setBy = null; G.killCam = null;
   G.setterNow = [null, null]; G.play = [null, null];
   G.phase = 'serve'; G.timer = 0; G.rally = 0;
   updateFormation();
@@ -670,7 +670,7 @@ function sweetSpot(dx, dy, dz, vx, vy, vz, y, core) {
 }
 function predictContact(p) {
   const b = G.ball, t = toward(p.side);
-  if (p.cool > 0.5 || (G.lastToucher === p && G.lastSide === p.side && G.touches[p.side] > 0)) return null;
+  if (p.cool > 0.5 || ownServe(p) || (G.lastToucher === p && G.lastSide === p.side && G.touches[p.side] > 0)) return null;
   const g = GB * (b.gs || 1), R = reachOf(p), core = (p.rr + BR) * 0.85;
   let x = b.x, y = b.y, z = b.z, vx = b.vx, vy = b.vy, vz = b.vz, py = p.y, pvy = p.onGround ? 0 : p.vy, best = Infinity, bestT = 0;
   for (let k = 0; k <= 130; k++) {
@@ -728,6 +728,9 @@ function lob(tx, tz, apexY) {
 
 // ===================== serving =====================
 const serveY = p => p.y + p.rr * 2 + 0.6; // where your hand meets the toss
+// A serve must cross the net to the other team. Until they touch it, the serving team may not play it,
+// so a serve that drops back on your own side is a fault.
+const ownServe = p => G.serveLive && p.side === G.lastSide;
 function doServe(p, q = null) {
   const s = p.side, t = toward(s);
   for (const k of [1 - s, s]) {
@@ -754,7 +757,7 @@ function doServe(p, q = null) {
   const apex = NET_H + 2.6 - p.r.pwr / 99 * 1.3 + rand(0, 0.6) - (q == null ? 0 : q * 0.9); // a perfect hit is flatter and faster
   lob(tx, t * depth, apex);
   G.lastToucher = p; G.lastSide = s; G.touches = [0, 0]; G.tid++; G.toss = false;
-  G.lastAttack = { p, type: 'serve' };
+  G.lastAttack = { p, type: 'serve' }; G.serveLive = true;
   G.phase = 'rally'; G.rally = 0;
   rerollAI();
   p.squash = 1.15;
@@ -764,7 +767,7 @@ function doServe(p, q = null) {
 
 // ===================== contacts =====================
 function canContact(p, b) {
-  if (p.cool > 0 || b.noHit > 0) return false;
+  if (p.cool > 0 || b.noHit > 0 || ownServe(p)) return false;
   if (b.z * toward(p.side) > 0.7) return false;               // ball well over on the other side
   if (G.lastToucher === p && G.lastSide === p.side && G.touches[p.side] > 0) return false; // no double touch
   const dx = b.x - p.x, dy = b.y - contactY(p), dz = b.z - p.z; // you get a longer reach than the computer
@@ -785,6 +788,7 @@ function contact(p) {
   const s = p.side, t = toward(s), b = G.ball;
   const incoming = Math.hypot(b.vx, b.vy, b.vz);
   const fromOpp = G.lastSide !== s;
+  G.serveLive = false;
   const human = !aiControlled(p);
   const tm = human ? holdGrade() : null; // your wind-up for this ball
   if (human && tm) G.meterShow = { p, L: holdLevel(G.hold), color: tm.color, t: G.time };
@@ -1068,7 +1072,7 @@ function doBlock(p) {
   if (human) tutEvent('block', { stuff });
   p.cool = 0.3; b.noHit = 0.08; b.special = null; b.gs = 1; G.tid++;
   // beach rules (2 v 2): the block counts as one of the 3 touches. Indoors (6 v 6) it does not. Either way the blocker may play it next.
-  G.lastToucher = null; G.lastSide = s; G.touches[s] = settings.mode === 2 ? 1 : 0; G.intended[s] = null; G.intended[1 - s] = null;
+  G.lastToucher = null; G.lastSide = s; G.serveLive = false; G.touches[s] = settings.mode === 2 ? 1 : 0; G.intended[s] = null; G.intended[1 - s] = null;
   if (stuff) {
     b.z = t * (BR + 0.12);
     b.vz = t * rand(3, 6); b.vy = -rand(1, 3); b.vx = rand(-1.5, 1.5);
@@ -1138,7 +1142,8 @@ function ballDown() {
   }
   const w = 1 - landSide, la = G.lastAttack;
   let label = 'POINT', sub = 'The ball hit the sand', credit = null, key = null;
-  if (la && la.p.side === w) {
+  if (G.serveLive && G.lastSide === landSide) { label = 'SERVE FAULT'; sub = `${la.p.mon.name}'s serve did not cross the net`; }
+  else if (la && la.p.side === w) {
     credit = la.p;
     const name = la.p.mon.name;
     if (la.type === 'serve') { label = 'ACE!'; key = 'aces'; sub = `${name} served an ace`; }
@@ -1186,6 +1191,7 @@ function awardPoint(w, label, sub, credit, key) {
 
 // ===================== AI =====================
 function chooseReceiver(s, lx, lz) {
+  if (G.serveLive && G.lastSide === s) return null; // your own serve: leave it
   if (G.lastSide === s && G.touches[s] > 0 && G.intended[s]) return G.intended[s];
   const cands = G.sides[s].filter(p => !(G.lastSide === s && G.lastToucher === p && G.touches[s] > 0));
   const first = G.lastSide !== s, serve = G.lastAttack && G.lastAttack.type === 'serve';
