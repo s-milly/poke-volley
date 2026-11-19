@@ -2330,7 +2330,7 @@ const scenePicks = (() => { // a fresh cast each visit: three of yours from behi
   const ids = DEX.map(m => m.id).sort(() => Math.random() - 0.5);
   return { near: ids.slice(0, 3), far: ids.slice(3, 6) };
 })();
-const sceneCache = {};
+const sceneCache = {}, sceneFloor = {};
 function sceneBackdrop() {
   const vid = settings.venue[settings.mode], C = STAGE[settings.mode], key = `${vid}:${stageK.toFixed(2)}:${sceneTop}`;
   if (sceneCache[key]) return sceneCache[key];
@@ -2348,7 +2348,13 @@ function sceneBackdrop() {
   g.drawImage(mid, UW, 0, ox, SCENE_H, -(2 * ox + UW), 0, ox, SCENE_H);
   g.restore();
   const sand = V.court === 'sand', cx = SCENE_W / 2;
-  if (!sand) sceneStands(g, V, C);
+  let floor = null;
+  if (!sand) { // keep a patch of bare floor for the page background before the stands cover the corners
+    const t = document.createElement('canvas'); t.width = t.height = 32; t.getContext('2d').drawImage(c, 0, SCENE_H - 32, 32, 32, 0, 0, 32, 32);
+    const [fr, fg, fb] = g.getImageData(4, SCENE_H - 3, 1, 1).data;
+    floor = { '--v-floor': `rgb(${fr},${fg},${fb})`, '--v-tile': `url(${t.toDataURL()})` };
+    sceneStands(g, V, C);
+  }
   if (sand) { // rake the sand flat: the backdrop's diagonal rake marks fight with the court lines
     const img = g.getImageData(0, SCENE_SKY, SCENE_W, SCENE_H - SCENE_SKY), d = img.data, count = {};
     for (let i = (SCENE_H - SCENE_SKY - 40) * SCENE_W * 4; i < d.length; i += 4) { const k = (d[i] << 16) | (d[i + 1] << 8) | d[i + 2]; count[k] = (count[k] || 0) + 1; }
@@ -2374,14 +2380,18 @@ function sceneBackdrop() {
   };
   across(C.hl);
   if (!sand) { across(0); across(C.hl / 3); across(-C.hl / 3); } // centre line and both attack lines
-  return (sceneCache[key] = c.toDataURL());
+  const url = c.toDataURL(); if (floor) sceneFloor[url] = floor;
+  return (sceneCache[key] = url);
 }
-// The arena's far-end stands on the title stage, painted straight onto the backdrop: a dark roof with light rigs,
-// a steep bowl of fans behind the far end line that dims toward the roof, and LED boards along the court.
+// The arena's stands on the title stage, painted straight onto the backdrop, wrapping the court on three sides like
+// the in-game venues: a dark roof with light rigs, a steep bowl behind the far end line and along both sidelines
+// that dims toward the roof, and LED boards around the court.
 function sceneStands(g, V, C) {
   const ex = V.extras || [], d = V.decks[0], night = ex.includes('dark'), rnd = seeded(77), cx = SCENE_W / 2;
   const row = (h, z) => sp(0, h, z).y / 2;                  // stage px are 2 canvas px
-  const z0 = C.hl + 3.4, rise = 1, depth = 0.8, topRow = sceneTop; // the bowl tops out just under the title's subtitle
+  const P = (x, h, z) => { const q = sp(x, h, z); return [cx + q.x / 2, q.y / 2]; };
+  const poly = (pts, col) => { g.fillStyle = col; g.beginPath(); pts.forEach(([x, h, z], i) => g[i ? 'lineTo' : 'moveTo'](...P(x, h, z))); g.closePath(); g.fill(); };
+  const gap = 3.4, z0 = C.hl + gap, X = C.hw / 2 + gap, zNear = -12, rise = 1, depth = 0.8, topRow = sceneTop; // the bowl tops out just under the subtitle
   let N = 1; while (row(rise * N, z0 + depth * N) > topRow && N < 60) N++;
   const top = Math.round(row(rise * N, z0 + depth * N));
   g.fillStyle = night ? '#05070d' : '#0f1424'; g.fillRect(0, 0, SCENE_W, top);   // the roof
@@ -2395,40 +2405,57 @@ function sceneStands(g, V, C) {
   }
   const shirts = ['#3fa7ff', '#3fa7ff', '#ff5d5d', '#ff5d5d', '#ffffff', '#ffcf33', '#2b2f3f', '#6bd88a', '#c48bff'];
   const skins = ['#f1c9a0', '#d9a477', '#b07a4f', '#8a5a3a', '#f6dcc0'];
-  for (let t = N - 1; t >= 0; t--) { // far tiers first, nearer ones paint over them
+  const fan = (x, h, z, side) => { // one fan sitting at world point (x, h, z)
+    const q = sp(x, h, z), kx = q.k * stageK / 2, ky = q.k / 2, px = Math.round(cx + q.x / 2), foot = Math.round(q.y / 2);
+    if (px < 4 || px > SCENE_W - 5 || foot < top) return; // the edge columns are stretched across the page sides: keep them plain
+    const w = Math.max(2, Math.round(0.42 * kx)), fh = Math.max(2, Math.round(0.5 * ky)), hd = Math.max(1, Math.round(0.27 * ky));
+    g.fillStyle = V.teamSides && rnd() < 0.8 ? TEAM_COLORS[side < 0 ? 0 : 1] : shirts[Math.floor(rnd() * shirts.length)];
+    g.fillRect(px - (w >> 1), foot - fh, w, fh);
+    g.fillStyle = skins[Math.floor(rnd() * skins.length)]; g.fillRect(px - (hd >> 1), foot - fh - hd, hd, hd);
+    if (rnd() < 0.06) { const a = Math.max(1, hd >> 1); g.fillRect(px - (w >> 1) - a, foot - fh - hd - a, a, hd + a); g.fillRect(px + w - (w >> 1), foot - fh - hd - a, a, hd + a); } // arms up
+    if (night && rnd() < 0.08) { g.fillStyle = '#ffffff'; g.fillRect(px + 1, foot - fh - hd - 1, 1, 1); } // phone lights
+  };
+  for (let t = N - 1; t >= 0; t--) { // far end: far tiers first, nearer ones paint over them
     const zi = z0 + depth * t, y0 = rise * t, y1 = y0 + rise;
     const rSeat = Math.round(row(y1, zi + depth)), rLip = Math.round(row(y1, zi)), rFoot = Math.round(row(y0, zi));
     g.fillStyle = d.seat[t % 2]; g.fillRect(0, rSeat, SCENE_W, Math.max(1, rLip - rSeat));
     g.fillStyle = d.riser[t % 2]; g.fillRect(0, rLip, SCENE_W, Math.max(1, rFoot - rLip));
-    const s = sp(0, y1, zi + depth * 0.5), kx = s.k * stageK / 2, ky = s.k / 2, foot = Math.round(s.y / 2);
-    const w = Math.max(2, Math.round(0.42 * kx)), h = Math.max(2, Math.round(0.5 * ky)), hd = Math.max(1, Math.round(0.27 * ky));
-    const half = cx / kx + 1;
-    for (let x = -half; x <= half; x += 0.72) {
-      if (Math.abs(x) % 9 < 0.8 || rnd() > d.fill) continue; // aisles and a few empty seats
-      const px = Math.round(cx + (x + (rnd() - 0.5) * 0.2) * kx), up = rnd() < 0.06;
-      if (px < 4 || px > SCENE_W - 5) continue; // the edge columns are stretched across the page sides: keep them plain
-      g.fillStyle = V.teamSides && rnd() < 0.8 ? TEAM_COLORS[x < 0 ? 0 : 1] : shirts[Math.floor(rnd() * shirts.length)];
-      g.fillRect(px - (w >> 1), foot - h, w, h);
-      const skin = skins[Math.floor(rnd() * skins.length)];
-      g.fillStyle = skin; g.fillRect(px - (hd >> 1), foot - h - hd, hd, hd);
-      if (up) { g.fillRect(px - (w >> 1) - 1, foot - h - hd - 1, 1, hd + 1); g.fillRect(px + w - (w >> 1), foot - h - hd - 1, 1, hd + 1); } // arms up
-      if (night && rnd() < 0.08) { g.fillStyle = '#ffffff'; g.fillRect(px + 1, foot - h - hd - 1, 1, 1); } // phone lights
+    const half = cx / (sp(0, y1, zi).k * stageK / 2) + 1;
+    for (let x = -half; x <= half; x += 0.72) if (Math.abs(x) % 9 >= 0.8 && rnd() < d.fill) fan(x + (rnd() - 0.5) * 0.2, y1, zi + depth * 0.5, x);
+  }
+  g.save(); g.beginPath(); g.rect(0, top, SCENE_W, SCENE_H - top); g.clip(); // the sidelines: outer tiers first
+  for (let t = N - 1; t >= 0; t--) {
+    const y0 = rise * t, y1 = y0 + rise;
+    for (const sd of [-1, 1]) {
+      const xi = sd * (X + depth * t), xo = xi + sd * depth;
+      poly([[xi, y1, z0], [xi, y1, zNear], [xo, y1, zNear], [xo, y1, z0]], d.seat[t % 2]);
+      poly([[xi, y0, z0], [xi, y0, zNear], [xi, y1, zNear], [xi, y1, z0]], d.riser[t % 2]);
+      for (let z = z0 - 0.4; z >= zNear + 5; z -= 0.5) if ((z + 40) % 8 >= 0.8 && rnd() < d.fill) fan(xi + sd * depth * 0.5 + (rnd() - 0.5) * 0.2, y1, z + (rnd() - 0.5) * 0.25, sd);
     }
   }
+  g.restore();
   const fade = g.createLinearGradient(0, top, 0, Math.round(row(0, z0)));    // lights aim at the court, so the upper rows dim
   fade.addColorStop(0, night ? 'rgba(5,7,13,0.8)' : 'rgba(15,20,36,0.7)'); fade.addColorStop(0.6, 'rgba(15,20,36,0.25)'); fade.addColorStop(1, 'rgba(15,20,36,0)');
   g.fillStyle = fade; g.fillRect(0, top, SCENE_W, Math.round(row(0, z0)) - top);
   g.fillStyle = '#0b0f1c'; g.fillRect(0, top - 3, SCENE_W, 4);                // the fascia under the roof, with a ribbon board
   g.fillStyle = night ? '#ff5d5d' : '#3fa7ff'; g.fillRect(0, top - 2, SCENE_W, 1);
   g.fillStyle = '#ffcf33'; for (let x = 6; x < SCENE_W; x += 18) g.fillRect(x, top - 2, 6, 1);
-  if (ex.includes('led')) { // LED ad boards along the far end of the court
-    const zb = C.hl + 1.6, b0 = Math.round(row(0.9, zb)), b1 = Math.round(row(0, zb)), kx = sp(0, 0, zb).k * stageK / 2;
-    const bw = Math.round((C.hw / 2 + 4) * kx), cols = ['#3fa7ff', '#ff5d5d', '#ffcf33', '#6bd88a'];
-    g.fillStyle = '#0b0f1c'; g.fillRect(cx - bw, b0 - 1, bw * 2, b1 - b0 + 1);
-    for (let i = 0, x = cx - bw + 1; x < cx + bw - 1; i++, x += 24) {
-      const seg = Math.min(23, cx + bw - 1 - x);
-      g.fillStyle = cols[i % cols.length]; g.fillRect(x, b0, seg, b1 - b0 - 1);
-      g.fillStyle = '#ffffff'; g.fillRect(x + 4, b0 + 1, Math.max(1, seg - 8), 1);
+  if (ex.includes('led')) { // LED ad boards around the court: along the far end, then down both sidelines
+    const zb = C.hl + 1.6, xb = C.hw / 2 + 1.6, H = 0.9, cols = ['#3fa7ff', '#ff5d5d', '#ffcf33', '#6bd88a'];
+    poly([[-xb, 0, zb], [xb, 0, zb], [xb, H, zb], [-xb, H, zb]], '#0b0f1c');
+    const n = Math.round(2 * xb / 3);
+    for (let i = 0; i < n; i++) {
+      const a = -xb + (2 * xb / n) * i + 0.08, b2 = -xb + (2 * xb / n) * (i + 1) - 0.08;
+      poly([[a, 0.1, zb], [b2, 0.1, zb], [b2, H - 0.1, zb], [a, H - 0.1, zb]], cols[i % cols.length]);
+      poly([[a + 0.5, H - 0.3, zb], [b2 - 0.5, H - 0.3, zb], [b2 - 0.5, H - 0.2, zb], [a + 0.5, H - 0.2, zb]], '#ffffff');
+    }
+    for (const sd of [-1, 1]) {
+      const x = sd * xb;
+      poly([[x, 0, zb], [x, 0, zNear], [x, H, zNear], [x, H, zb]], '#0b0f1c');
+      for (let i = 0, z = zb; z > zNear; i++, z -= 3) {
+        const z2 = Math.max(zNear, z - 3) + 0.08;
+        poly([[x, 0.1, z - 0.08], [x, 0.1, z2], [x, H - 0.1, z2], [x, H - 0.1, z - 0.08]], cols[(i + (sd > 0 ? 2 : 0)) % cols.length]);
+      }
     }
   }
 }
@@ -2463,7 +2490,7 @@ function sceneTint(url) {
     sg.drawImage(c, 0, 0, 1, SCENE_H, 0, 0, 1, SCENE_H); sg.drawImage(c, SCENE_W - 1, 0, 1, SCENE_H, 1, 0, 1, SCENE_H);
     const tile = document.createElement('canvas'); tile.width = tile.height = 32; // a patch of floor from the stage's
     tile.getContext('2d').drawImage(c, 0, SCENE_H - 32, 32, 32, 0, 0, 32, 32);       // corner, clear of the court lines
-    set(tintCache[url] = { '--v-sky': px(2, 2), '--v-floor': px(4, SCENE_H - 3), '--v-edge': `url(${strip.toDataURL()})`, '--v-tile': `url(${tile.toDataURL()})` });
+    set(tintCache[url] = { '--v-sky': px(2, 2), '--v-floor': px(4, SCENE_H - 3), '--v-edge': `url(${strip.toDataURL()})`, '--v-tile': `url(${tile.toDataURL()})`, ...sceneFloor[url] });
   };
   img.src = url;
 }
