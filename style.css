@@ -249,9 +249,9 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
 .howto h2 { color: var(--text); font-size: 14px; margin: 0; }
 .howto[open] summary { margin-bottom: 16px; }
 @media (hover: hover) { .howto summary:hover h2 { color: var(--accent); } }
-.keys { list-style: none; padding: 0; margin: 0 0 14px; display: grid; gap: 10px; }
-.keys li { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
-.keys span { margin-right: 14px; margin-left: 4px; }
+.keys { list-style: none; padding: 0; margin: 0 0 14px; display: grid; gap: 8px; }
+.keys li { display: grid; grid-template-columns: 140px 1fr; align-items: center; gap: 12px; }
+.keys .k { display: flex; align-items: center; gap: 4px; }
 kbd { display: inline-block; min-width: 28px; text-align: center; padding: 6px 7px 5px; background: var(--panel2); border: 2px solid var(--ink); box-shadow: inset 0 -3px 0 var(--line); font-size: 10px; color: var(--text); }
 .howto b { color: var(--text); }
 /* the tutorial: its own small mode picker at the top of How to play */
@@ -426,3 +426,11 @@ table.box tr.you th, table.box tr.you td { color: var(--accent); }
   .touch { position: absolute; inset: auto 0 0 0; pointer-events: none; }
   .touch button { pointer-events: auto; opacity: 0.85; }
 }
+/* How to play: the numbered basics and the folded extra tips */
+.basics { margin: 0 0 24px; padding-left: 2.5em; display: grid; gap: 8px; }
+.basics li::marker { color: var(--accent); }
+.tips { margin-top: 8px; }
+.tips summary { justify-content: flex-start; color: var(--text); }
+.tips summary:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+@media (hover: hover) { .tips summary:hover { color: var(--accent); } }
+.tips ul { margin: 4px 0 0; padding-left: 2.5em; display: grid; gap: 6px; }
