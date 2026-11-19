@@ -2520,8 +2520,32 @@ function drawSpecialTrail(b, ty) {
 
 // Where the ball will land, on either side of the net: four black carets painted flat on the floor
 // at the corners of a square, each pointing at the spot. They start wide, then close in and shrink as the ball drops.
-function drawLandingCarets(lx, lz, tl) {
-  const k = clamp(tl / 1.4, 0, 1), r = 0.24 + 0.86 * k, L = 0.2 + 0.16 * k;
+// What is drawn eases toward the prediction instead of jumping: after a touch the carets glide to the new spot
+// and open back up, they fade in when a rally starts and fade out where the ball came down.
+const CARET = { x: 0, z: 0, vx: 0, vz: 0, r: 1.1, a: 0, t: 0 };
+function updateCarets(target) { // target: { x, z, tl } while the ball is in the air, or null
+  const now = performance.now(), dt = clamp((now - (CARET.t || now)) / 1000, 0, 0.05);
+  CARET.t = now;
+  const ease = (rate) => 1 - Math.exp(-rate * dt);
+  if (target) {
+    const k = clamp(target.tl / 1.4, 0, 1), rT = 0.24 + 0.86 * k * k * (3 - 2 * k); // smoothstep: no hard start or stop
+    if (CARET.a < 0.03) { CARET.x = target.x; CARET.z = target.z; CARET.vx = CARET.vz = 0; CARET.r = rT; } // nothing on screen yet: start in place
+    const W = 16; // a critically damped spring: speeds up into the glide and settles without overshoot (about 0.3 s)
+    for (let n = Math.ceil(dt * 240), h = dt / Math.max(n, 1); n > 0; n--) {
+      CARET.vx += (-2 * W * CARET.vx - W * W * (CARET.x - target.x)) * h; CARET.x += CARET.vx * h;
+      CARET.vz += (-2 * W * CARET.vz - W * W * (CARET.z - target.z)) * h; CARET.z += CARET.vz * h;
+    }
+    CARET.r += (rT - CARET.r) * ease(16);
+    CARET.a += (1 - CARET.a) * ease(14);
+  } else {
+    CARET.r += (0.16 - CARET.r) * ease(10);
+    CARET.a += (0 - CARET.a) * ease(9);
+  }
+  if (CARET.a > 0.02) drawLandingCarets(CARET.x, CARET.z, CARET.r, CARET.a);
+}
+function drawLandingCarets(lx, lz, r, alpha) {
+  const k = clamp((r - 0.24) / 0.86, 0, 1), L = 0.2 + 0.16 * k;
+  ctx.save(); ctx.globalAlpha *= alpha;
   for (const [sx, sz] of [[1, 1], [-1, 1], [-1, -1], [1, -1]]) {
     const cx = lx + sx * r, cz = lz + sz * r;
     // lay a local frame on the ground at this corner: one world metre along x and along z, in canvas px
@@ -2537,6 +2561,7 @@ function drawLandingCarets(lx, lz, tl) {
     }
     ctx.restore();
   }
+  ctx.restore();
 }
 
 // The wind-up meter over your head. It fills left to right while you hold; gold is the last stretch before full.
@@ -2693,12 +2718,9 @@ function render() {
     groundEllipse(you.homeX, you.homeZ, 0.55, 0.55); ctx.stroke();
     const lab = proj(you.homeX, 0, you.homeZ); labels.push(['YOUR SPOT', lab.x * US, lab.y * US + 6, bad ? '#ff8a8a' : '#7dffb0']);
   }
-  if (G.phase === 'rally') {
-    const tl = timeToY(b, BR);
-    if (tl != null) {
-      const lx = b.x + b.vx * tl, lz = b.z + b.vz * tl;
-      drawLandingCarets(lx, lz, tl);
-    }
+  { // the landing carets, eased (see updateCarets)
+    const tl = G.phase === 'rally' ? timeToY(b, BR) : null;
+    updateCarets(tl != null ? { x: b.x + b.vx * tl, z: b.z + b.vz * tl, tl } : null);
   }
   // where your serve or attack would go: the cursor, pulled inside the other court
   const aim = you && !AUTO && (G.phase === 'rally' || (G.phase === 'serve' && G.server === you)) ? aimInto(0, 0.6) : null;
