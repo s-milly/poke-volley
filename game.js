@@ -2102,8 +2102,8 @@ function drawLandingCarets(lx, lz, tl) {
 // Past the top it turns red. After a release it freezes in the grade colour and fades.
 function drawTimingMeter(p, L, tick, dim, result) {
   const bx = p.box || { ...proj(p.x, p.y, p.z), w: 40, h: 60 };
-  const w = 3, h = 34, x = Math.round((bx.x + bx.w / 2) * US + 3), y = Math.round((bx.y - bx.h * 0.55) * US - h / 2);
-  const bow = 5, off = i => Math.round(bow * Math.sin(Math.PI * i / h)); // row i (0 = top) bows outward
+  const w = 2, h = 22, x = Math.round((bx.x + bx.w / 2) * US + 3), y = Math.round((bx.y - bx.h * 0.55) * US - h / 2);
+  const bow = 3, off = i => Math.round(bow * Math.sin(Math.PI * i / h)); // row i (0 = top) bows outward
   const over = L != null && L > 1, gold = ZONES[2][0];
   const top = l => h - Math.round(h * clamp(l, 0, 1)); // first row filled at level l
   const fillCol = L == null ? null : result ? result.color : L > gold ? '#ffcf33' : '#ffffff';
@@ -2143,7 +2143,7 @@ function drawSetButtons() {
   };
   // a number badge over each hitter, nudged up where two would overlap
   const you = G.sides[0].find(p => p.human), bx = you.box || { ...proj(you.x, you.y, you.z), w: 40, h: 60 };
-  const placed = [{ x: (bx.x + bx.w / 2) * US, y: (bx.y - bx.h * 0.55) * US - 18, w: 14, h: 38 }]; // your own meter
+  const placed = [{ x: (bx.x + bx.w / 2) * US, y: (bx.y - bx.h * 0.55) * US - 13, w: 10, h: 26 }]; // your own meter
   const hits = (x, y) => placed.some(r => x < r.x + r.w + 3 && x + 17 > r.x && y < r.y + r.h + 3 && y + 17 > r.y);
   opts.forEach((o, i) => {
     const q = o.q, top = proj(q.x, q.y + q.rr * 2 + 0.3, q.z);
