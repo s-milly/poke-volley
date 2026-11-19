@@ -84,13 +84,6 @@ const BODY_COLORS = {
   black: '#4a4a58', blue: '#5b8fe0', brown: '#b07a4f', gray: '#a3a9b3', green: '#69b85a',
   pink: '#f4a3c4', purple: '#9b72d6', red: '#e2553e', white: '#f1efe9', yellow: '#f4d34e',
 };
-const SPECIAL = {
-  electric: 'Thunder Spike', fire: 'Blaze Spike', water: 'Tidal Spike', grass: 'Leaf Storm Spike',
-  ice: 'Blizzard Spike', fighting: 'Dynamic Spike', poison: 'Venom Spike', ground: 'Quake Spike',
-  flying: 'Sky Drop Spike', psychic: 'Psy Spike', bug: 'Swarm Spike', rock: 'Rock Slide Spike',
-  ghost: 'Phantom Spike', dragon: 'Dragon Spike', normal: 'Giga Spike', fairy: 'Moonlight Spike',
-  steel: 'Iron Spike',
-};
 const CAPTAIN_BOOST = 14;
 const STAT_KEYS = [['spd', 'SPD', 'Speed: how fast it runs'], ['jmp', 'JMP', 'Jump: how high it leaps'],
   ['pwr', 'PWR', 'Power: how hard it spikes and serves'], ['def', 'DEF', 'Defense: how cleanly it receives'],
@@ -98,11 +91,11 @@ const STAT_KEYS = [['spd', 'SPD', 'Speed: how fast it runs'], ['jmp', 'JMP', 'Ju
 
 // Opponent AI by difficulty. Your teammates always use MATE.
 const DIFF = {
-  easy:   { err: 1.6, react: 0.30, spd: 0.84, jump: 0.25, serveFault: 0.10, leaveOut: 0.40, teamOffset: -7, block: 0.22 },
-  normal: { err: 0.8, react: 0.18, spd: 0.94, jump: 0.12, serveFault: 0.06, leaveOut: 0.75, teamOffset: -1, block: 0.30 },
-  hard:   { err: 0.3, react: 0.09, spd: 1.03, jump: 0.05, serveFault: 0.03, leaveOut: 0.95, teamOffset: 4,  block: 0.38 },
+  easy:   { err: 1.6, react: 0.30, spd: 0.84, jump: 0.25, serveFault: 0.10, leaveOut: 0.40, teamOffset: -7, block: 0.22, perfect: 0.06 },
+  normal: { err: 0.8, react: 0.18, spd: 0.94, jump: 0.12, serveFault: 0.06, leaveOut: 0.75, teamOffset: -1, block: 0.30, perfect: 0.12 },
+  hard:   { err: 0.3, react: 0.09, spd: 1.03, jump: 0.05, serveFault: 0.03, leaveOut: 0.95, teamOffset: 4,  block: 0.38, perfect: 0.2 },
 };
-const MATE = { err: 0.4, react: 0.11, spd: 1, jump: 0.07, leaveOut: 0.85, block: 0.32 };
+const MATE = { err: 0.4, react: 0.11, spd: 1, jump: 0.07, leaveOut: 0.85, block: 0.32, perfect: 0.12 };
 
 const QS = new URLSearchParams(location.search);
 const AUTO = QS.has('auto');                 // test mode: the computer also plays your Pokémon
@@ -176,11 +169,11 @@ const Sfx = {
 // Left click receives on the ground and spikes in the air; E sets; right click dives on the ground
 // and blocks in the air; hold Space to charge a jump; Shift strafes; C and V (or the wheel) work the camera.
 const keys = { left: false, right: false, up: false, down: false, hit: false, set: false, jump: false, strafe: false };
-const input = { jumpT0: null, jumpQ: null, hitQ: false, setQ: false, diveQ: false, specialQ: false, aim: null };
+const input = { jumpT0: null, jumpQ: null, hitQ: false, setQ: false, diveQ: false, aim: null };
 const KEYMAP = {
   ArrowLeft: 'left', KeyA: 'left', ArrowRight: 'right', KeyD: 'right',
   ArrowUp: 'up', KeyW: 'up', ArrowDown: 'down', KeyS: 'down',
-  Space: 'jump', KeyE: 'set', KeyJ: 'hit', Enter: 'hit', KeyL: 'dive', KeyF: 'special', KeyK: 'special',
+  Space: 'jump', KeyE: 'set', KeyJ: 'hit', Enter: 'hit', KeyL: 'dive',
   ShiftLeft: 'strafe', ShiftRight: 'strafe', KeyC: 'cam', KeyV: 'zoom',
 };
 const JUMP_CHARGE = 0.4; // seconds of holding Space for a full-height jump
@@ -197,7 +190,6 @@ function press(action, down) {
     keys[action] = down;
   }
   else if (action === 'dive') { if (down) input.diveQ = true; }
-  else if (action === 'special') { if (down) input.specialQ = true; }
   else if (action === 'cam') { if (down) cycleCam(); }
   else if (action === 'zoom') { if (down) cycleZoom(); }
   else if (action in keys) keys[action] = down;
@@ -539,7 +531,7 @@ function newMatch(demo = false) { // demo: the title screen's background match, 
     score: [0, 0], sets: [0, 0], setNo: 1, setLog: [], setDone: false, firstServe: 0, touches: [0, 0], lastSide: -1, lastToucher: null, intended: [null, null], lastAttack: null,
     setterNow: [null, null], blockers: [[], []], play: [null, null], subs: [], started: false,
     serving: 0, server: null, phase: 'serve', timer: 0, time: 0,
-    meter: [0, 0], armed: [false, false], react: [0, 0], aiErr: [[0, 0], [0, 0]], leave: [false, false],
+    react: [0, 0], aiErr: [[0, 0], [0, 0]], leave: [false, false],
     particles: [], rings: [], texts: [], shake: 0, netWobble: 0, paused: false, shown: false, rally: 0, longestRally: 0,
     cam: { x: 0, y: CAM.y, z: -HL - CAM.back, yaw: 0, pitch: CAM.pitch }, demo,
   };
@@ -549,7 +541,6 @@ function newMatch(demo = false) { // demo: the title screen's background match, 
 function nextSet() { // fresh score; the team that received first last set serves first this time
   G.setDone = false; G.setNo++; G.score = [0, 0];
   G.firstServe = 1 - G.firstServe; G.serving = G.firstServe;
-  G.meter = [0, 0]; G.armed = [false, false];
   for (let k = 0; k < 2; k++) applyLibero(k); // the server changes, so the libero may need to come on or off
   G.players = [...G.sides[0], ...G.sides[1]];
 }
@@ -793,7 +784,6 @@ function contact(p) {
   const s = p.side, t = toward(s), b = G.ball;
   const incoming = Math.hypot(b.vx, b.vy, b.vz);
   const fromOpp = G.lastSide !== s;
-  const wasSpecial = b.special;
   const human = !aiControlled(p);
   const tm = human ? holdGrade() : null; // your wind-up for this ball
   if (human && tm) G.meterShow = { p, L: holdLevel(G.hold), color: tm.color, t: G.time };
@@ -806,7 +796,7 @@ function contact(p) {
 
   // block at the net (a libero may not block)
   if (p.role !== 'L' && !p.onGround && !p.dive && (aiControlled(p) || p.blockUp) && Math.abs(p.z) < p.rr + 0.9 && fromOpp && b.vz * t < 0 && b.y > NET_H - 0.3 && G.lastSide !== -1) {
-    doBlock(p, wasSpecial);
+    doBlock(p);
     return;
   }
 
@@ -822,8 +812,6 @@ function contact(p) {
   G.setBy = null;
   G.lastToucher = p; G.lastSide = s; G.intended[s] = null;
   p.cool = 0.3; b.noHit = 0.06; b.special = null; G.tid++;
-  if (q != null && q >= 1) G.meter[s] = Math.min(100, G.meter[s] + 5); // perfect touches build the Type Spike faster
-  G.meter[s] = Math.min(100, G.meter[s] + 5);
   G.rally++;
 
   // push the ball out of the body so it leaves cleanly
@@ -860,12 +848,12 @@ function contact(p) {
     if (!aiControlled(p)) floatText('BACK ROW: HIT FROM BEHIND THE LINE', p.x, p.cy + p.rr + 0.6, p.z, '#ffd6d6', 1.4);
   }
   if (action === 'spike') {
-    let special = false;
-    if (s === 0 && G.armed[0] && !aiControlled(p)) special = true;
-    if (aiControlled(p) && G.meter[s] >= 100 && Math.random() < 0.6 && !(s === 0 && !AUTO)) special = true;
-    if (!spike(p, special, q)) action = 'over';
+    // a perfectly timed spike lets loose the hitter's type move. The computer times one perfectly now and then.
+    let sq = q;
+    if (!human && Math.random() < (s === 0 ? MATE : DIFF[settings.diff]).perfect) sq = 1;
+    if (!spike(p, sq)) action = 'over';
   }
-  if (action === 'pass' || action === 'set') pass(p, incoming, wasSpecial, fromOpp, q, dove, action === 'set' ? tm : null);
+  if (action === 'pass' || action === 'set') pass(p, incoming, fromOpp, q, dove, action === 'set' ? tm : null);
   else if (action === 'over') { over(p); G.lastAttack = { p, type: 'over' }; }
   else if (action === 'tip') { tip(p); G.lastAttack = { p, type: 'tip' }; }
   if (action === 'spike' || action === 'over' || action === 'tip') { // an attack: the swing counts, and so does the set behind it
@@ -929,7 +917,7 @@ function choosePlay(s, setter, tm = null) {
   return { ...pick, tx: pick.ox * m, tz: pick.oz * m, ty: pick.q.apex + pick.q.rr * 2 };
 }
 
-function pass(p, incoming, wasSpecial, fromOpp, q = null, dove = false, setTm = null) {
+function pass(p, incoming, fromOpp, q = null, dove = false, setTm = null) {
   const s = p.side, t = toward(s), b = G.ball;
   let target, tx, tz, ty, apexY, skill;
   if (G.touches[s] === 1) { // pass to the setter's target spot
@@ -943,7 +931,7 @@ function pass(p, incoming, wasSpecial, fromOpp, q = null, dove = false, setTm = 
     floatText(play.call, p.x, p.cy + p.rr + 0.6, p.z, '#ffe9a0', 0.9);
     p.stats.sets++; G.setBy = p;
   }
-  const heat = clamp(incoming / 16, 0, 1.6) * (wasSpecial ? 1.8 : 1);
+  const heat = clamp(incoming / 16, 0, 1.6);
   // your timing: no click is the old auto pass (x1), a perfect click nearly takes the error away
   const tq = q == null ? 1 : clamp(1 - q * 0.85, 0.15, 1.4);
   const err = (100 - skill) * 0.022 * (0.4 + (G.touches[s] === 1 ? heat : 0.2)) * (tq + (dove ? 0.3 : 0));
@@ -952,7 +940,7 @@ function pass(p, incoming, wasSpecial, fromOpp, q = null, dove = false, setTm = 
 
   // a hard spike can shank off the arms
   if (G.touches[s] === 1 && fromOpp && incoming > 12.5) {
-    const shank = clamp((incoming - 12.5) / 8, 0, 1) * (1.35 - p.r.def / 100) * (wasSpecial ? 1.5 : 1) * (q == null ? 1 : clamp(1 - q, 0, 1.3));
+    const shank = clamp((incoming - 12.5) / 8, 0, 1) * (1.35 - p.r.def / 100) * (q == null ? 1 : clamp(1 - q, 0, 1.3));
     if (Math.random() < shank) {
       const sx = Math.random() < 0.5 ? -1 : 1;
       tx = b.x + sx * rand(2.5, 7); tz = b.z - t * rand(1, 8); apexY = b.y + rand(0.2, 1.4); target = null;
@@ -989,7 +977,8 @@ function openSpot(s, tries = 16) {
   return best;
 }
 
-function spike(p, special, q = null) {
+function spike(p, q = null) {
+  const special = q != null && q >= 1;
   const s = p.side, t = toward(s), b = G.ball;
   const human = !aiControlled(p);
   let [tx, tz] = openSpot(s, human ? 16 : 4); // the computer does not always find the best gap
@@ -1009,7 +998,7 @@ function spike(p, special, q = null) {
   // Each spike is timed rather than given a raw speed: harder hitters land it sooner,
   // but there is always enough time to react and run to the landing ring.
   const power = q == null ? 1 : 1.1 - q * 0.3; // your timing: a perfect swing lands about 20% sooner
-  const flight = clamp(1.3 - p.r.pwr * 0.005, 0.8, 1.15) * (special ? 0.8 : 1) * (settings.mode === 6 ? 0.75 : 1) * power; // 6 v 6 has more defenders to beat
+  const flight = clamp(1.3 - p.r.pwr * 0.005, 0.8, 1.15) * (settings.mode === 6 ? 0.75 : 1) * power; // 6 v 6 has more defenders to beat
   const aims = [[tx, tz]];
   for (let i = 0; i < 5; i++) aims.push([rand(-HW * 0.8, HW * 0.8), t * rand(1.5, HL - 1)]);
   const tries = [];
@@ -1028,25 +1017,22 @@ function spike(p, special, q = null) {
       const ty = p.mon.types[0];
       b.special = ty;
       for (let i = 0; i < 16; i++) specialFx(b, true); // the hit throws out a burst of the move's particles
-      G.meter[s] = 0; G.armed[s] = false;
       G.shake = 0.35;
-      floatText(SPECIAL[ty] || 'Mega Spike', p.x, p.cy + p.rr + 0.8, p.z, TYPE_COLORS[ty], 1.3, 30);
     }
     Sfx.spike();
-    if (q != null && q >= 1 && !special) G.shake = Math.max(G.shake, 0.14);
-    hitstop(special ? 0.32 : q != null && q >= 1 ? 0.22 : 0.15, special ? TYPE_COLORS[p.mon.types[0]] : '#ffffff');
-    burst(b.x, b.y, b.z, special ? TYPE_COLORS[p.mon.types[0]] : '#ffffff', special ? 22 : q != null && q >= 1 ? 16 : 10);
+    hitstop(special ? 0.32 : 0.15, special ? TYPE_COLORS[p.mon.types[0]] : '#ffffff');
+    burst(b.x, b.y, b.z, special ? TYPE_COLORS[p.mon.types[0]] : '#ffffff', special ? 22 : 10);
     return true;
   }
   return false;
 }
 
-function doBlock(p, wasSpecial) {
+function doBlock(p) {
   const s = p.side, t = toward(s), b = G.ball;
   const atk = G.lastAttack && G.lastAttack.p;
   const human = !aiControlled(p);
   const chance = (human ? 0.55 : s === 0 ? MATE.block : DIFF[settings.diff].block)
-             + (p.r.jmp - (atk ? atk.r.pwr : 50)) / 250 - (wasSpecial ? 0.25 : 0);
+             + (p.r.jmp - (atk ? atk.r.pwr : 50)) / 250;
   const roll = Math.random(), stuff = roll < clamp(chance, human ? 0.15 : 0.08, human ? 0.8 : 0.75);
   // a computer blocker can be beaten clean; when you get there in time you always get a hand on it
   if (!human && !stuff && roll < clamp(chance, 0.08, 0.75) + 0.4) { p.cool = 0.5; return; }
@@ -1084,7 +1070,7 @@ function stepBall(h) {
     if (G.lastSide === 1 - sIn) {
       for (const p of G.sides[sIn]) {
         if (p.role === 'L' || p.onGround || p.cool > 0 || Math.abs(p.z) > p.rr + 1.0 || !(aiControlled(p) || p.blockUp)) continue; // you block with right click in the air
-        if (Math.abs(b.x - p.x) < p.rr + 0.55 && b.y <= p.y + p.rr * 2 + 0.9) { doBlock(p, b.special); break; }
+        if (Math.abs(b.x - p.x) < p.rr + 0.55 && b.y <= p.y + p.rr * 2 + 0.9) { doBlock(p); break; }
       }
     }
   }
@@ -1148,7 +1134,6 @@ function awardPoint(w, label, sub, credit, key) {
   G.score[w]++;
   if (credit && key) credit.stats[key]++;
   if (key === 'kills' && G.lastAttack && G.lastAttack.setter) G.lastAttack.setter.stats.ast++;
-  G.meter[w] = Math.min(100, G.meter[w] + 10);
   G.cheer = 1; // the crowd jumps up
   G.longestRally = Math.max(G.longestRally, G.rally);
   if (TUT) { G.texts.push({ big: true, text: label, sub, color: TEAM_COLORS[w], t: 0, life: 1.6 }); Sfx.whistle(); G.phase = 'point'; G.timer = 1.6; return; }
@@ -1291,11 +1276,6 @@ function update(dt) {
   G.rings = G.rings.filter(r => r.t < 0.6);
   for (const tx of G.texts) tx.t += dt;
   G.texts = G.texts.filter(tx => tx.t < tx.life);
-
-  if (input.specialQ) {
-    input.specialQ = false;
-    if (G.meter[0] >= 100 && !G.armed[0]) { G.armed[0] = true; Sfx.tone(880, 0.2, 'sine', 0.05, 440); }
-  }
 
   updateFormation();
   const you = G.sides[0].find(p => p.human);
@@ -2740,17 +2720,6 @@ function drawHud() {
   const cx = UW / 2;
   drawScoreboard();
   if (G.toast && G.time - G.toast.t < 1.2) pxText(G.toast.text, cx, UH - 84, '#ffffff', 8);
-  for (let s = 0; s < 2; s++) {
-    const w = 96, x = s === 0 ? 8 : UW - 8 - w, y = UH - 12;
-    const lead = s === 0 ? G.sides[0].find(p => p.human) || G.sides[0][0] : G.sides[1].find(p => p.entry.captain) || G.sides[1][0];
-    pxRect(x - 1, y - 1, w + 2, 8, '#10141f'); pxRect(x, y, w, 6, '#33405f');
-    const fill = Math.floor((w * G.meter[s] / 100) / 4) * 4; // fills in 4 px steps
-    pxRect(x, y, fill, 6, TYPE_COLORS[lead.mon.types[0]]);
-    let label = 'TYPE SPIKE';
-    if (s === 0 && !AUTO) label = G.armed[0] ? 'ARMED!' : G.meter[0] >= 100 ? 'PRESS F' : 'TYPE SPIKE';
-    const blink = G.meter[s] >= 100 && Math.floor(G.time * 4) % 2;
-    pxText(label, s === 0 ? x : x + w, y - 11, blink ? '#ffe14a' : '#ffffff', 8, s === 0 ? 'left' : 'right');
-  }
   const me = G.sides[0].find(p => p.human);
   if (me && !AUTO) {
     const where = settings.mode === 6 ? `  ZONE ${zoneOf(me)} ${isFront(me) ? 'FRONT' : 'BACK'} ROW` : '';

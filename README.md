@@ -19,7 +19,6 @@ New to it? Open **How to play** on the title screen and start the **Tutorial**: 
 | Shift | Strafe: face the cursor while you move, get up faster from a side dive |
 | C / V | Camera mode (follow or fixed) / zoom. The mouse wheel zooms too |
 | 1 2 3 4 | Quick chat: Mine!, Set me!, Nice!, My bad |
-| F | Arm your Type Spike when the meter is full |
 | P or Esc | Pause |
 | M | Sound on or off |
 
@@ -29,6 +28,7 @@ Phones get an on-screen pad.
 - An orange ring on the sand shows where the ball will land on your side. When a teammate sets you, a green ring shows where to jump.
 - To block, stand at the net and jump just after the other team's hitter jumps. A red ring at the net shows where to stand and flashes JUMP when it is time. If you touch the spike you either stuff it back for a point or pop it up for your team to play.
 - A spike goes to the most open spot on its own. Hold left or right to aim it across, forward for a short shot, or back to hit deep.
+- Time a spike to PERFECT and your Pokémon lets loose its type move, with a ball trail in that type's style. The computer lands one now and then too.
 - Rally scoring to 11, 15 or 25, win by 2.
 - Choose your team and the rival's (or a random rival) from 10 clubs named after the Gen 1 towns, such as the Cerulean Tides (CER) and the Vermilion Volts (VER). Every club has a pixel crest, and all of them are shown at once on the Match settings screen.
 - A TV-style scoreboard in the top left shows each club's code, sets won and the points in the current set, plus who is serving and how many touches have been used.

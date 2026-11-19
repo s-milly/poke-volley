@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>VolleyDex: Gen 1 Draft Volleyball</title>
 <meta name="description" content="Pick a Gen 1 Pokémon, draft teammates by their stats, and play arcade volleyball in the browser.">
-<link rel="stylesheet" href="style.css?v=34">
+<link rel="stylesheet" href="style.css?v=36">
 </head>
 <body class="on-title">
 <main id="menu">
@@ -73,7 +73,6 @@
         <li><span class="k"><kbd>E</kbd></span><span>Set: tap for a high set, hold for a quick one</span></li>
         <li><span class="k"><kbd>Space</kbd></span><span>Jump: hold to jump higher</span></li>
         <li><span class="k"><kbd>Right click</kbd></span><span>Dive, or block in the air</span></li>
-        <li><span class="k"><kbd>F</kbd></span><span>Type Spike, when its meter is full</span></li>
         <li><span class="k"><kbd>Shift</kbd></span><span>Strafe</span></li>
         <li><span class="k"><kbd>C</kbd><kbd>V</kbd></span><span>Camera and zoom</span></li>
         <li><span class="k"><kbd>1</kbd>-<kbd>4</kbd></span><span>Quick chat</span></li>
@@ -84,6 +83,7 @@
         <summary>More tips</summary>
         <ul>
           <li>Holding too long turns the meter red and sprays the ball.</li>
+          <li>Spike with the meter at PERFECT and your Pokémon lets loose its type move, with a ball trail in its type's style. The other team can do it too.</li>
           <li>To block, stand at the net and jump just after their hitter does, then right click.</li>
           <li>In 6 v 6, stand on the green YOUR SPOT ring when the ball is served.</li>
           <li>Ratings come from base stats: <b>SPD</b> Speed, <b>JMP</b> Speed and Attack, <b>PWR</b> Attack and Sp. Atk, <b>DEF</b> HP and Defense, <b>SKL</b> Sp. Atk and Sp. Def.</li>
@@ -287,7 +287,6 @@
       <button type="button" data-act="down" aria-label="Move back">▼</button>
     </div>
     <div class="pad">
-      <button type="button" data-act="special" class="small" aria-label="Type Spike">Type</button>
       <button type="button" data-act="dive" class="small" aria-label="Dive">Dive</button>
       <button type="button" data-act="set" class="small" aria-label="Set">Set</button>
       <button type="button" data-act="jump" aria-label="Jump">Jump</button>
@@ -296,8 +295,8 @@
   </div>
 </div>
 
-<script src="data.js?v=34"></script>
-<script src="sprites.js?v=34"></script>
-<script src="game.js?v=34"></script>
+<script src="data.js?v=36"></script>
+<script src="sprites.js?v=36"></script>
+<script src="game.js?v=36"></script>
 </body>
 </html>
