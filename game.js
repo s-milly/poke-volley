@@ -5,7 +5,8 @@
 
 // ===================== constants =====================
 const W = 1280, H = 720;
-const NET_H = 1.55;         // net height, scaled to Pokémon size
+const NET_H = 1.85;         // net height, scaled to Pokémon size
+const NET_BAND = 1.0;       // how far the mesh hangs below the tape (drawn only; the ball hits the net anywhere under NET_H)
 const BR = 0.17;            // ball radius
 const GB = 9.0;             // gravity on the ball (a little floaty, arcade style)
 const GP = 24;              // gravity on players
@@ -1723,7 +1724,7 @@ function star(ctx, x, y, s) {
 
 // ===================== camera and projection =====================
 const canvas = $('#court'), ctx = canvas.getContext('2d');
-const CAM = { y: 8.6, back: 3.6, pitch: 0.47, F: (H / 2) / Math.tan(31 * Math.PI / 180), cy: H * 0.56 };
+const CAM = { y: 9.2, back: 3.6, pitch: 0.49, F: (H / 2) / Math.tan(31 * Math.PI / 180), cy: H * 0.56 };
 // The camera turns (yaw) and tilts (pitch) as it follows the play. Painted backdrops are built at the resting pitch.
 const camPitch = () => (G && G.cam.pitch != null ? G.cam.pitch : CAM.pitch);
 function proj(x, y, z) {
@@ -2343,20 +2344,29 @@ function drawCourt() {
 
 function drawNet() {
   const wob = Math.sin(G.time * 40) * 0.04 * G.netWobble;
-  // the mesh is a band at the top with open space below, so you can see the far side through it
-  const xL = -HW - 0.6, xR = HW + 0.6, top = NET_H, bot = NET_H - 0.5;
+  // a full mesh panel hangs from the tape, about as deep as a real net, with the floor showing under it.
+  // The mesh is thin and see-through, so the other team stays easy to read behind it.
+  const xL = -HW - 0.6, xR = HW + 0.6, top = NET_H, bot = NET_H - NET_BAND;
   const a = proj(xL, top, wob), b = proj(xR, top, wob), c = proj(xR, bot, wob), d = proj(xL, bot, wob);
   ctx.lineWidth = 8; ctx.strokeStyle = '#d8392f'; ctx.lineCap = 'butt';
   for (const x of [xL, xR]) { const p0 = proj(x, 0, 0), p1 = proj(x, top + 0.1, 0); ctx.beginPath(); ctx.moveTo(p0.x, p0.y); ctx.lineTo(p1.x, p1.y); ctx.stroke(); }
-  ctx.fillStyle = 'rgba(16,20,31,0.18)';
+  ctx.fillStyle = 'rgba(16,20,31,0.12)';
   ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.lineTo(c.x, c.y); ctx.lineTo(d.x, d.y); ctx.closePath(); ctx.fill();
-  ctx.strokeStyle = 'rgba(16,20,31,0.55)'; ctx.lineWidth = 2.7;
-  const cols = Math.round((xR - xL) / 0.45);
-  for (let i = 0; i <= cols; i++) { const u = i / cols; ctx.beginPath(); ctx.moveTo(a.x + (b.x - a.x) * u, a.y + (b.y - a.y) * u); ctx.lineTo(d.x + (c.x - d.x) * u, d.y + (c.y - d.y) * u); ctx.stroke(); }
-  for (let j = 0; j <= 2; j++) { const v = j / 2; ctx.beginPath(); ctx.moveTo(a.x + (d.x - a.x) * v, a.y + (d.y - a.y) * v); ctx.lineTo(b.x + (c.x - b.x) * v, b.y + (c.y - b.y) * v); ctx.stroke(); }
-  ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 6;
+  const cell = 0.2, cols = Math.round((xR - xL) / cell), rows = Math.round(NET_BAND / cell);
+  ctx.strokeStyle = 'rgba(16,20,31,0.42)'; ctx.lineWidth = 1.6;
+  ctx.beginPath();
+  for (let i = 1; i < cols; i++) { const u = i / cols; ctx.moveTo(a.x + (b.x - a.x) * u, a.y + (b.y - a.y) * u); ctx.lineTo(d.x + (c.x - d.x) * u, d.y + (c.y - d.y) * u); }
+  for (let j = 1; j < rows; j++) { const v = j / rows; ctx.moveTo(a.x + (d.x - a.x) * v, a.y + (d.y - a.y) * v); ctx.lineTo(b.x + (c.x - b.x) * v, b.y + (c.y - b.y) * v); }
+  ctx.stroke();
+  // side bands down each end of the mesh, the white tape on top and the cable along the bottom
+  ctx.fillStyle = 'rgba(255,255,255,0.9)';
+  for (const [p, q, sgn] of [[a, d, 1], [b, c, -1]]) {
+    const w = (b.x - a.x) / cols * 0.6 * sgn;
+    ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.x + w, p.y); ctx.lineTo(q.x + w, q.y); ctx.lineTo(q.x, q.y); ctx.closePath(); ctx.fill();
+  }
+  ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 7;
   ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
-  ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(d.x, d.y); ctx.lineTo(c.x, c.y); ctx.stroke();
+  ctx.lineWidth = 3.5; ctx.beginPath(); ctx.moveTo(d.x, d.y); ctx.lineTo(c.x, c.y); ctx.stroke();
   ctx.lineWidth = 4;
   for (const x of [-HW, HW]) {
     const p0 = proj(x, top, 0), p1 = proj(x, top + 0.8, 0);
