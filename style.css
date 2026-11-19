@@ -21,10 +21,6 @@
 html, body { margin: 0; }
 body {
   background-color: var(--bg);
-  background-image:
-    linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
-  background-size: 16px 16px;
   color: var(--text);
   font: 22px/1.25 var(--body);
   min-height: 100vh;
@@ -57,14 +53,15 @@ button { color: inherit; cursor: pointer; -webkit-tap-highlight-color: transpare
   background-position: center top, 0 0; image-rendering: pixelated;
   margin-inline: calc(50% - 50vw); border-bottom: 3px solid var(--ink);
 }
-/* the title screen's page is the venue floor under the stage, fading into the night */
+/* the title screen's page is the venue floor carrying on under the stage (a patch of the stage's own sand or
+   arena floor, drawn at the same 2x pixel size), fading into the night so the menu text stays readable */
 body.on-title {
   overflow-x: clip;
   background:
-    linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px) 0 0 / 16px 16px,
-    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px) 0 0 / 16px 16px,
-    linear-gradient(color-mix(in srgb, var(--v-floor, var(--bg)) 24%, var(--bg)) 443px, color-mix(in srgb, var(--v-floor, var(--bg)) 10%, var(--bg)) 780px, var(--bg) 1100px)
-    var(--bg);
+    linear-gradient(color-mix(in srgb, var(--bg) 30%, transparent) 440px, color-mix(in srgb, var(--bg) 82%, transparent) 640px, var(--bg) 820px) 0 0 / 100% 100% no-repeat,
+    var(--v-tile, none) 50% 440px / 64px 64px repeat,
+    var(--v-floor, var(--bg));
+  image-rendering: pixelated;
 }
 body.on-title #menu { padding-top: 0; }
 .hero-copy { position: relative; z-index: 5; text-align: center; padding: 28px 16px 0; }

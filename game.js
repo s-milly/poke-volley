@@ -2395,7 +2395,9 @@ function sceneTint(url) {
     const strip = document.createElement('canvas'); strip.width = 2; strip.height = SCENE_H; // the stage's two edge columns,
     const sg = strip.getContext('2d');                                                     // stretched to fill the page sides
     sg.drawImage(c, 0, 0, 1, SCENE_H, 0, 0, 1, SCENE_H); sg.drawImage(c, SCENE_W - 1, 0, 1, SCENE_H, 1, 0, 1, SCENE_H);
-    set(tintCache[url] = { '--v-sky': px(2, 2), '--v-floor': px(4, SCENE_H - 3), '--v-edge': `url(${strip.toDataURL()})` });
+    const tile = document.createElement('canvas'); tile.width = tile.height = 32; // a patch of floor from the stage's
+    tile.getContext('2d').drawImage(c, 0, SCENE_H - 32, 32, 32, 0, 0, 32, 32);       // corner, clear of the court lines
+    set(tintCache[url] = { '--v-sky': px(2, 2), '--v-floor': px(4, SCENE_H - 3), '--v-edge': `url(${strip.toDataURL()})`, '--v-tile': `url(${tile.toDataURL()})` });
   };
   img.src = url;
 }
