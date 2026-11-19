@@ -1383,12 +1383,18 @@ function pixelDisc(g, cx, cy, r, col) {
 
 let skyCache = null;
 // Beach backdrops for each time of day, painted once on the UI grid (UW x UH). Animated bits are in drawSkyFx.
+const islandH = x => (x >= 180 && x < 310 ? Math.max(0, Math.round(9 * Math.sin((x - 180) / 130 * Math.PI) + 3 * Math.sin(x / 9))) : 0);
+const LIGHT_X = 230; // the lighthouse stands on the island's shoulder
+function lighthouseBase(hy) { // the lowest island top under its footprint, so the tower sits on the rock with no gap
+  let h = Infinity; for (let x = LIGHT_X - 3; x < LIGHT_X + 3; x++) h = Math.min(h, islandH(x));
+  return hy - 12 - h + 1;
+}
 function paintIsland(g, hy, col, lighthouse) {
   g.fillStyle = col;
-  for (let x = 180; x < 310; x++) { const h = Math.round(9 * Math.sin((x - 180) / 130 * Math.PI) + 3 * Math.sin(x / 9)); if (h > 0) g.fillRect(x, hy - 12 - h, 1, h); }
+  for (let x = 180; x < 310; x++) { const h = islandH(x); if (h > 0) g.fillRect(x, hy - 12 - h, 1, h); }
   for (let x = 330; x < 390; x++) { const h = Math.round(5 * Math.sin((x - 330) / 60 * Math.PI)); if (h > 0) g.fillRect(x, hy - 12 - h, 1, h); }
   if (lighthouse) {
-    const lx = 206, base = hy - 12 - 9;
+    const lx = LIGHT_X, base = lighthouseBase(hy);
     for (let i = 0; i < 14; i++) { g.fillStyle = lighthouse === 'day' ? (Math.floor(i / 3) % 2 ? '#e8453c' : '#ffffff') : '#20263a'; g.fillRect(lx - (i < 2 ? 3 : 2), base - i, i < 2 ? 6 : 4, 1); }
     g.fillStyle = lighthouse === 'day' ? '#2b2f3f' : '#fff3b0'; g.fillRect(lx - 2, base - 17, 4, 3);
     g.fillStyle = lighthouse === 'day' ? '#e8453c' : '#3a2a20'; g.fillRect(lx - 3, base - 18, 6, 1);
@@ -1446,7 +1452,7 @@ function drawSkyFx() {
   ctx.save(); ctx.setTransform(U, 0, 0, U, 0, 0);
   if (tod === 'night') {
     for (const [x, y, ph] of STARS) if (y < hy - 14 && Math.sin(t * 2 + ph) > 0.3) { ctx.fillStyle = '#ffffff'; ctx.fillRect(x, y, 1, 1); }
-    const lx = 206, ly = hy - 12 - 9 - 16, a = t * 1.2, reach = Math.cos(a) * 140; // lighthouse beam sweeps around
+    const lx = LIGHT_X, ly = lighthouseBase(hy) - 16, a = t * 1.2, reach = Math.cos(a) * 140; // lighthouse beam sweeps around
     ctx.fillStyle = 'rgba(255,243,176,0.14)'; ctx.beginPath(); ctx.moveTo(lx, ly); ctx.lineTo(lx + reach, ly - 6); ctx.lineTo(lx + reach, ly + 6); ctx.closePath(); ctx.fill();
     ctx.fillStyle = '#ffffff'; for (let i = 0; i < 4; i++) if (Math.sin(t * 6 + i * 2) > 0.5) ctx.fillRect(424 + i * 4, hy - 8 + i * 3, 2, 1);
   } else {
@@ -2305,6 +2311,7 @@ function renderSummary() {
 const SCENE_W = 560, SCENE_H = 220, SCENE_SKY = 110;
 const ST = { hor: SCENE_SKY * 2, camH: 4.5, back: 14.7, F: 359 }; // horizon y, camera height, camera to net, focal length
 let stageK = 1;                                                    // horizontal squeeze on narrow screens
+let sceneTop = 80;                                                 // canvas row where the arena stands stop, under the subtitle
 let stageF = 1;                                                    // stage size: 1 = the 440 px stage, scaled up to fit the window
 function sp(x, h, z) { // world point -> stage px; k is px per world unit at that depth
   const k = ST.F / (z + ST.back);
@@ -2325,7 +2332,7 @@ const scenePicks = (() => { // a fresh cast each visit: three of yours from behi
 })();
 const sceneCache = {};
 function sceneBackdrop() {
-  const vid = settings.venue[settings.mode], C = STAGE[settings.mode], key = `${vid}:${stageK.toFixed(2)}`;
+  const vid = settings.venue[settings.mode], C = STAGE[settings.mode], key = `${vid}:${stageK.toFixed(2)}:${sceneTop}`;
   if (sceneCache[key]) return sceneCache[key];
   const mode = settings.mode, time = settings.time; settings.time = 'day'; // the title stage is always in daylight
   const bd = backdropFor(); settings.time = time; settings.mode = mode;
@@ -2341,6 +2348,7 @@ function sceneBackdrop() {
   g.drawImage(mid, UW, 0, ox, SCENE_H, -(2 * ox + UW), 0, ox, SCENE_H);
   g.restore();
   const sand = V.court === 'sand', cx = SCENE_W / 2;
+  if (!sand) sceneStands(g, V, C);
   if (sand) { // rake the sand flat: the backdrop's diagonal rake marks fight with the court lines
     const img = g.getImageData(0, SCENE_SKY, SCENE_W, SCENE_H - SCENE_SKY), d = img.data, count = {};
     for (let i = (SCENE_H - SCENE_SKY - 40) * SCENE_W * 4; i < d.length; i += 4) { const k = (d[i] << 16) | (d[i + 1] << 8) | d[i + 2]; count[k] = (count[k] || 0) + 1; }
@@ -2367,6 +2375,62 @@ function sceneBackdrop() {
   across(C.hl);
   if (!sand) { across(0); across(C.hl / 3); across(-C.hl / 3); } // centre line and both attack lines
   return (sceneCache[key] = c.toDataURL());
+}
+// The arena's far-end stands on the title stage, painted straight onto the backdrop: a dark roof with light rigs,
+// a steep bowl of fans behind the far end line that dims toward the roof, and LED boards along the court.
+function sceneStands(g, V, C) {
+  const ex = V.extras || [], d = V.decks[0], night = ex.includes('dark'), rnd = seeded(77), cx = SCENE_W / 2;
+  const row = (h, z) => sp(0, h, z).y / 2;                  // stage px are 2 canvas px
+  const z0 = C.hl + 3.4, rise = 1, depth = 0.8, topRow = sceneTop; // the bowl tops out just under the title's subtitle
+  let N = 1; while (row(rise * N, z0 + depth * N) > topRow && N < 60) N++;
+  const top = Math.round(row(rise * N, z0 + depth * N));
+  g.fillStyle = night ? '#05070d' : '#0f1424'; g.fillRect(0, 0, SCENE_W, top);   // the roof
+  g.fillStyle = night ? '#121828' : '#1a2138';
+  for (let x = 14; x < SCENE_W; x += 28) g.fillRect(x, 0, 1, top); // clear of the edge columns, which stretch to the page sides
+  for (let y = 10; y < top; y += 14) g.fillRect(0, y, SCENE_W, 1);
+  for (let r = 0; r < 2; r++) for (let x = 8 + r * 20; x < SCENE_W - 14; x += 40) { // light rigs
+    const y = 6 + r * 16;
+    g.fillStyle = 'rgba(255,246,208,0.08)'; g.fillRect(x - 4, y + 3, 16, 12);
+    g.fillStyle = '#fff6d0'; g.fillRect(x, y, 8, 3);
+  }
+  const shirts = ['#3fa7ff', '#3fa7ff', '#ff5d5d', '#ff5d5d', '#ffffff', '#ffcf33', '#2b2f3f', '#6bd88a', '#c48bff'];
+  const skins = ['#f1c9a0', '#d9a477', '#b07a4f', '#8a5a3a', '#f6dcc0'];
+  for (let t = N - 1; t >= 0; t--) { // far tiers first, nearer ones paint over them
+    const zi = z0 + depth * t, y0 = rise * t, y1 = y0 + rise;
+    const rSeat = Math.round(row(y1, zi + depth)), rLip = Math.round(row(y1, zi)), rFoot = Math.round(row(y0, zi));
+    g.fillStyle = d.seat[t % 2]; g.fillRect(0, rSeat, SCENE_W, Math.max(1, rLip - rSeat));
+    g.fillStyle = d.riser[t % 2]; g.fillRect(0, rLip, SCENE_W, Math.max(1, rFoot - rLip));
+    const s = sp(0, y1, zi + depth * 0.5), kx = s.k * stageK / 2, ky = s.k / 2, foot = Math.round(s.y / 2);
+    const w = Math.max(2, Math.round(0.42 * kx)), h = Math.max(2, Math.round(0.5 * ky)), hd = Math.max(1, Math.round(0.27 * ky));
+    const half = cx / kx + 1;
+    for (let x = -half; x <= half; x += 0.72) {
+      if (Math.abs(x) % 9 < 0.8 || rnd() > d.fill) continue; // aisles and a few empty seats
+      const px = Math.round(cx + (x + (rnd() - 0.5) * 0.2) * kx), up = rnd() < 0.06;
+      if (px < 4 || px > SCENE_W - 5) continue; // the edge columns are stretched across the page sides: keep them plain
+      g.fillStyle = V.teamSides && rnd() < 0.8 ? TEAM_COLORS[x < 0 ? 0 : 1] : shirts[Math.floor(rnd() * shirts.length)];
+      g.fillRect(px - (w >> 1), foot - h, w, h);
+      const skin = skins[Math.floor(rnd() * skins.length)];
+      g.fillStyle = skin; g.fillRect(px - (hd >> 1), foot - h - hd, hd, hd);
+      if (up) { g.fillRect(px - (w >> 1) - 1, foot - h - hd - 1, 1, hd + 1); g.fillRect(px + w - (w >> 1), foot - h - hd - 1, 1, hd + 1); } // arms up
+      if (night && rnd() < 0.08) { g.fillStyle = '#ffffff'; g.fillRect(px + 1, foot - h - hd - 1, 1, 1); } // phone lights
+    }
+  }
+  const fade = g.createLinearGradient(0, top, 0, Math.round(row(0, z0)));    // lights aim at the court, so the upper rows dim
+  fade.addColorStop(0, night ? 'rgba(5,7,13,0.8)' : 'rgba(15,20,36,0.7)'); fade.addColorStop(0.6, 'rgba(15,20,36,0.25)'); fade.addColorStop(1, 'rgba(15,20,36,0)');
+  g.fillStyle = fade; g.fillRect(0, top, SCENE_W, Math.round(row(0, z0)) - top);
+  g.fillStyle = '#0b0f1c'; g.fillRect(0, top - 3, SCENE_W, 4);                // the fascia under the roof, with a ribbon board
+  g.fillStyle = night ? '#ff5d5d' : '#3fa7ff'; g.fillRect(0, top - 2, SCENE_W, 1);
+  g.fillStyle = '#ffcf33'; for (let x = 6; x < SCENE_W; x += 18) g.fillRect(x, top - 2, 6, 1);
+  if (ex.includes('led')) { // LED ad boards along the far end of the court
+    const zb = C.hl + 1.6, b0 = Math.round(row(0.9, zb)), b1 = Math.round(row(0, zb)), kx = sp(0, 0, zb).k * stageK / 2;
+    const bw = Math.round((C.hw / 2 + 4) * kx), cols = ['#3fa7ff', '#ff5d5d', '#ffcf33', '#6bd88a'];
+    g.fillStyle = '#0b0f1c'; g.fillRect(cx - bw, b0 - 1, bw * 2, b1 - b0 + 1);
+    for (let i = 0, x = cx - bw + 1; x < cx + bw - 1; i++, x += 24) {
+      const seg = Math.min(23, cx + bw - 1 - x);
+      g.fillStyle = cols[i % cols.length]; g.fillRect(x, b0, seg, b1 - b0 - 1);
+      g.fillStyle = '#ffffff'; g.fillRect(x + 4, b0 + 1, Math.max(1, seg - 8), 1);
+    }
+  }
 }
 let sceneBallUrl = null;
 function sceneBall() {
@@ -2411,6 +2475,8 @@ function renderScene() {
   stageF = Math.max(1, Math.min(1.8, (innerHeight - below) / 440, innerWidth / 300));
   document.documentElement.style.setProperty('--sf', stageF.toFixed(3));
   stageK = Math.min(1, (innerWidth - 40) / (600 * stageF)); // pull everything in on narrow screens
+  const hero = $('#title-hero'), lede = hero.querySelector('.lede');
+  if (lede && lede.offsetParent) sceneTop = Math.round(clamp((lede.getBoundingClientRect().bottom - hero.getBoundingClientRect().top + 8) / (2 * stageF), 56, 100));
   const bd = sceneBackdrop();
   $('#title-hero').style.backgroundImage = `url(${bd}), var(--v-edge, none)`;
   sceneTint(bd);
