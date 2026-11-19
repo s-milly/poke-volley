@@ -9,6 +9,12 @@ const NET_H = 1.55;         // net height, scaled to Pokémon size
 const BR = 0.17;            // ball radius
 const GB = 9.0;             // gravity on the ball (a little floaty, arcade style)
 const GP = 24;              // gravity on players
+// Near the top of a jump gravity eases off, so you hang there for a beat to swing.
+const HANG_V = 3, HANG = 0.4;
+const pGrav = vy => (Math.abs(vy) < HANG_V ? GP * HANG : GP);
+// Take-off speed that reaches a given height, and the time it takes to get there, with the hang.
+const jumpVFor = apex => Math.sqrt(Math.max(2 * GP * apex - HANG_V * HANG_V / HANG + HANG_V * HANG_V, HANG_V * HANG_V + 1));
+const timeUp = v => (v > HANG_V ? (v - HANG_V) / GP + HANG_V / (GP * HANG) : v / (GP * HANG));
 const STEP = 1 / 120;
 const TEAM_COLORS = ['#3fa7ff', '#ff5d5d'];
 // Clubs you can play as, named after the Gen 1 towns. `color` is the club's stripe on the scoreboard.
@@ -222,8 +228,8 @@ class Player {
     this.entry = entry; this.mon = entry.mon; this.r = entry.r; this.side = side; this.human = human;
     this.rr = clamp(0.24 + Math.sqrt(this.mon.h) * 0.075, 0.3, 0.72) * size; // body radius
     this.speed = 5.2 + this.r.spd * 0.065;
-    this.apex = 0.55 + this.r.jmp * 0.011;
-    this.jumpV = Math.sqrt(2 * GP * this.apex);
+    this.apex = 1.1 + this.r.jmp * 0.017;
+    this.jumpV = jumpVFor(this.apex); this.tUp = timeUp(this.jumpV);
     this.x = 0; this.y = 0; this.z = 0; this.vx = 0; this.vy = 0; this.vz = 0; this.onGround = true;
     this.face = 0; this.cool = 0; this.squash = 1; this.homeX = 0; this.homeZ = 0;
     this.dive = 0; this.rec = 0; this.diveDir = [0, 1];
@@ -594,7 +600,7 @@ function clampPlayer(p) {
   p.z = clamp(p.z * t, -(HL + 4), -(p.rr + 0.08)) * t;
 }
 function stepPlayer(p, h) {
-  if (!p.onGround) p.vy -= GP * h;
+  if (!p.onGround) p.vy -= pGrav(p.vy) * h;
   p.x += p.vx * h; p.z += p.vz * h; p.y += p.vy * h;
   if (p.y <= 0) {
     if (!p.onGround) { p.squash = 0.78; p.blockUp = false; dust(p.x, p.z, 4, '#e8d3a2'); }
@@ -631,6 +637,8 @@ function startDive(p, ix, iz) {
 // when you meet the ball (or when you let go, if that was just before). Hold past full and it goes red: a bad hit.
 const CHARGE = 0.35;      // seconds from empty to full in a rally
 const RELEASE_WIN = 0.2;  // a release this long before contact still counts
+const SET_WIN = 1.6;      // a set call (E) is kept this long after you let go, so a quick tap still sets
+const holdWin = h => (h.kind === 'set' ? SET_WIN : RELEASE_WIN);
 const ZONES = [[0.4, -0.25, 'WEAK', '#ff8a8a', '#3a2630'], [0.65, 0.3, 'OK', '#c9d4ee', '#5d6b8a'], [0.85, 0.65, 'GOOD', '#7dffb0', '#2f9e63'], [1, 1, 'PERFECT', '#ffe14a', '#ffcf33']];
 const TOO_LONG = { q: -0.5, label: 'TOO LONG', color: '#ff5a5a' };
 function gradeL(L) {
@@ -647,12 +655,12 @@ const evTime = ms => (ms == null ? G.time : G.time - clamp((last - ms) / 1000, 0
 // Your wind-up for the touch you are about to make, or null if you are not holding (or let go too soon).
 function holdGrade() {
   const h = G.hold;
-  if (!h || (h.tr != null && G.time - h.tr > RELEASE_WIN)) return null;
+  if (!h || (h.tr != null && G.time - h.tr > holdWin(h))) return null;
   if (h.kind === 'set') return { ...(holdLevel(h) >= 1 ? SET_QUICK : SET_HIGH), set: true };
   return gradeL(holdLevel(h));
 }
 const contactY = p => (p.dive > 0 ? p.y + p.rr * 0.55 : p.cy);
-const reachOf = p => p.rr + BR + (aiControlled(p) ? 0.22 : 0.45) + (p.dive > 0 ? 0.55 : 0);
+const reachOf = p => p.rr + BR + (aiControlled(p) ? 0.22 : p.onGround ? 0.45 : 0.6) + (p.dive > 0 ? 0.55 : 0);
 // The ball is at its sweet spot: past the closest approach, deep in the body, or about to hit the floor.
 function sweetSpot(dx, dy, dz, vx, vy, vz, y, core) {
   return dx * vx + dy * vy + dz * vz >= 0 || dx * dx + dy * dy + dz * dz < core * core || y < BR + 0.22;
@@ -671,7 +679,7 @@ function predictContact(p) {
     }
     if (y <= BR) break;
     vy -= g * STEP; x += vx * STEP; y += vy * STEP; z += vz * STEP;
-    if (py > 0 || pvy) { pvy -= GP * STEP; py += pvy * STEP; if (py <= 0) { py = 0; pvy = 0; } }
+    if (py > 0 || pvy) { pvy -= pGrav(pvy) * STEP; py += pvy * STEP; if (py <= 0) { py = 0; pvy = 0; } }
   }
   return best < R + 1.2 ? { T: bestT, reach: false } : null;
 }
@@ -747,6 +755,7 @@ function doServe(p, q = null) {
   G.phase = 'rally'; G.rally = 0;
   rerollAI();
   p.squash = 1.15;
+  hitstop(q != null && q >= 1 ? 0.12 : 0.07, '#ffffff');
   Sfx.serve();
 }
 
@@ -912,7 +921,7 @@ function pass(p, incoming, wasSpecial, fromOpp, q = null, dove = false, setTm = 
     tx = ox * t; tz = oz * t; ty = 1.3; apexY = NET_H + 2.0; skill = p.r.def;
   } else { // set one of the hitters
     const play = choosePlay(s, p, setTm);
-    target = play.q; tx = play.tx; tz = play.tz; ty = play.ty; apexY = play.apex + rand(0, 0.3); skill = p.r.skl;
+    target = play.q; tx = play.tx; tz = play.tz; ty = play.ty; apexY = Math.max(play.apex, ty + (play.call === 'QUICK' ? 0.35 : 0.9)) + rand(0, 0.3); skill = p.r.skl;
     G.play[s] = play.type;
     floatText(play.call, p.x, p.cy + p.rr + 0.6, p.z, '#ffe9a0', 0.9);
     p.stats.sets++;
@@ -1007,6 +1016,7 @@ function spike(p, special, q = null) {
     }
     Sfx.spike();
     if (q != null && q >= 1 && !special) G.shake = Math.max(G.shake, 0.14);
+    hitstop(special ? 0.32 : q != null && q >= 1 ? 0.22 : 0.15, special ? TYPE_COLORS[p.mon.types[0]] : '#ffffff');
     burst(b.x, b.y, b.z, special ? TYPE_COLORS[p.mon.types[0]] : '#ffffff', special ? 22 : q != null && q >= 1 ? 16 : 10);
     return true;
   }
@@ -1030,7 +1040,7 @@ function doBlock(p, wasSpecial) {
     b.vz = t * rand(3, 6); b.vy = -rand(1, 3); b.vx = rand(-1.5, 1.5);
     G.lastAttack = { p, type: 'block' };
     floatText('BLOCK!', p.x, p.cy + p.rr + 0.6, p.z, '#fff', 1);
-    G.shake = 0.2;
+    G.shake = 0.2; hitstop(0.16, '#ffffff');
   } else {
     b.z = -t * (BR + 0.12);
     b.vz = -t * rand(1, 2.5); b.vy = rand(4, 6); b.vx = rand(-1, 1);
@@ -1041,6 +1051,11 @@ function doBlock(p, wasSpecial) {
 }
 
 // ===================== rally flow =====================
+// A freeze frame on a big contact, so it lands with some weight. The world stops; the screen still draws.
+function hitstop(sec, color) {
+  if (AUTO && SPEEDUP > 1) return;
+  G.freeze = Math.max(G.freeze || 0, sec); G.freezeMax = G.freeze; G.freezeAt = { x: G.ball.x, y: G.ball.y, z: G.ball.z, c: color };
+}
 function stepBall(h) {
   const b = G.ball, pz = b.z;
   b.vy -= GB * (b.gs || 1) * h; b.x += b.vx * h; b.y += b.vy * h; b.z += b.vz * h;
@@ -1188,7 +1203,7 @@ function aiReceive(p, lx, lz, pars) {
       if (settings.mode === 6 && !isFront(p)) tz = -t * Math.max(-tz * t, attackLine() + 0.15); // take off behind the line
       if (p.onGround) {
         moveToward(p, tx, tz, pars.spd);
-        if (tc <= p.jumpV / GP + 0.015 && Math.hypot(p.x - tx, p.z - tz) < p.rr + 0.35) jump(p);
+        if (tc <= p.tUp + 0.015 && Math.hypot(p.x - tx, p.z - tz) < p.rr + 0.35) jump(p);
       } else moveToward(p, tx, tz, pars.spd * 0.8);
       return;
     }
@@ -1223,7 +1238,14 @@ function humanControl(p, dt) {
   const d = Math.hypot(ix, iz) || 1, sp = p.speed * (p.strafe ? 0.85 : 1);
   const wx = ix / d * sp, wz = iz / d * sp * toward(p.side);
   if (p.onGround) { p.vx = wx; p.vz = wz; }
-  else { const k = Math.min(1, dt * 2.5); p.vx += (wx * 0.8 - p.vx) * k; p.vz += (wz * 0.8 - p.vz) * k; } // a running jump keeps its momentum
+  else {
+    const k = Math.min(1, dt * 2.5); p.vx += (wx * 0.8 - p.vx) * k; p.vz += (wz * 0.8 - p.vz) * k; // a running jump keeps its momentum
+    const b = G.ball; // holding hit in the air: you drift under the ball so the swing meets it
+    if (G.phase === 'rally' && keys.hit && b.z * toward(p.side) < 0.3) {
+      const dx = b.x - p.x, dz = b.z - p.z, d = Math.hypot(dx, dz);
+      if (d > 0.15 && d < 1.8 && Math.abs(b.y - p.cy) < 2.2) { const m = Math.min(1, dt * 6), v = Math.min(3.5, d * 5); p.vx += (dx / d * v - p.vx) * m; p.vz += (dz / d * v - p.vz) * m; }
+    }
+  }
   if (input.jumpT0 != null && p.onGround) p.squash = Math.min(p.squash, 1 - 0.14 * clamp((performance.now() - input.jumpT0) / 1000 / JUMP_CHARGE, 0, 1)); // crouch while charging
   if (input.jumpQ != null) { if (p.onGround) { jump(p, input.jumpQ); tutEvent('jump', { c: input.jumpQ }); } input.jumpQ = null; }
 }
@@ -1231,6 +1253,7 @@ function humanControl(p, dt) {
 // ===================== main update =====================
 function update(dt) {
   if (!G || G.paused) return;
+  if (G.freeze > 0) { G.freeze -= dt; return; } // inputs wait in their queues until the world moves again
   G.time += dt;
   G.cheer = Math.max(0, (G.cheer || 0) - dt * 0.6);
   G.shake = Math.max(0, G.shake - dt); G.netWobble = Math.max(0, G.netWobble - dt * 2.5);
@@ -1248,10 +1271,10 @@ function update(dt) {
   updateFormation();
   const you = G.sides[0].find(p => p.human);
   if (G.phase === 'rally' && you && !AUTO) { // the wind-up: press starts it, letting go freezes it
-    if (input.hitQ) G.hold = { t0: evTime(input.downAt), tr: null, C: CHARGE, kind: 'hit' };
+    if (input.hitQ && !(G.hold && G.hold.kind === 'set' && keys.set)) G.hold = { t0: evTime(input.downAt), tr: null, C: CHARGE, kind: 'hit' };
     if (input.setQ) G.hold = { t0: evTime(input.downAt), tr: null, C: SET_CHARGE, kind: 'set' };
     if (G.hold && G.hold.tr == null && !keys[G.hold.kind]) G.hold.tr = Math.max(G.hold.t0, evTime(input.upAt));
-    if (G.hold && G.time - (G.hold.tr ?? G.time) > RELEASE_WIN) G.hold = null;
+    if (G.hold && G.time - (G.hold.tr ?? G.time) > holdWin(G.hold)) G.hold = null;
   }
   if (G.phase !== 'rally') input.setQ = false;
   if (G.phase === 'serve') {
@@ -1297,7 +1320,7 @@ function update(dt) {
     for (let i = 0; i < steps; i++) {
       G.time += h;
       for (const p of G.players) stepPlayer(p, h);
-      if (stepBall(h)) break;
+      if (stepBall(h) || G.freeze > 0) break;
     }
     G.time = tEnd;
   } else {
@@ -2390,6 +2413,19 @@ function render() {
     it.d();
   }
   if (!netDrawn) drawNet();
+  if (G.freeze > 0 && G.freezeAt) { // the impact: a star of lines around the ball while the world is held still
+    const f = G.freezeAt, p = proj(f.x, f.y, f.z), k = 1 - G.freeze / G.freezeMax, r0 = Math.max(16, 0.55 * p.k) * (1 + k * 0.5);
+    ctx.globalAlpha = 1 - k * 0.4;
+    for (const [col, lw] of [['#20222e', 8], [f.c, 4]]) { // dark under-stroke so it reads on white sprites and sand
+      ctx.strokeStyle = col; ctx.lineWidth = lw;
+      for (let i = 0; i < 8; i++) {
+        const a = i * Math.PI / 4 + 0.2, r1 = r0 * (i % 2 ? 1.7 : 2.5);
+        ctx.beginPath(); ctx.moveTo(p.x + Math.cos(a) * r0, p.y + Math.sin(a) * r0); ctx.lineTo(p.x + Math.cos(a) * r1, p.y + Math.sin(a) * r1); ctx.stroke();
+      }
+    }
+    ctx.globalAlpha = 1;
+    drawBall(G.ball); // the ball on top of whoever hit it
+  }
   ctx.restore();
 
   const bp = proj(b.x, b.y, b.z);
