@@ -1127,8 +1127,22 @@ function stepBall(h) {
     contact(p); if (G.phase !== 'rally') return true; break;
   }
   if (b.y <= BR) { b.y = BR; ballDown(); return true; }
-  if (Math.abs(b.x) > HW + 9 || Math.abs(b.z) > HL + 12) { awardPoint(1 - G.lastSide, 'OUT', 'Hit out of bounds', null, null); return true; }
+  if (Math.abs(b.x) > HW + 9 || Math.abs(b.z) > HL + 12) {
+    if (aceFor(1 - G.lastSide)) awardAce(); else awardPoint(1 - G.lastSide, 'OUT', 'Hit out of bounds', null, null);
+    return true;
+  }
   return false;
+}
+
+// An ace: the serve wins the point outright. It lands untouched, or the receivers get only one touch on it,
+// such as a shanked pass that goes out or drops. Once they make a second contact the ball was playable.
+function aceFor(w) {
+  const la = G.lastAttack;
+  return !!la && la.type === 'serve' && la.p.side === w && (G.lastSide === w || G.touches[G.lastSide] <= 1);
+}
+function awardAce() {
+  const p = G.lastAttack.p;
+  awardPoint(p.side, 'ACE!', `${p.mon.name} served an ace`, p, 'aces');
 }
 
 function ballDown() {
@@ -1137,17 +1151,18 @@ function ballDown() {
   const landSide = inCourt(b.x, b.z, 0) ? 0 : inCourt(b.x, b.z, 1) ? 1 : -1;
   G.rings.push({ x: b.x, z: b.z, t: 0, c: landSide === -1 ? '#ff6b6b' : '#ffffff' }); // a ring spreads where it lands
   if (landSide === -1) {
+    if (aceFor(1 - G.lastSide)) { awardAce(); return; }
     awardPoint(1 - G.lastSide, 'OUT', `${G.lastToucher ? G.lastToucher.mon.name : 'The block'} hit it out`, null, null);
     return;
   }
   const w = 1 - landSide, la = G.lastAttack;
   let label = 'POINT', sub = 'The ball hit the sand', credit = null, key = null;
   if (G.serveLive && G.lastSide === landSide) { label = 'SERVE FAULT'; sub = `${la.p.mon.name}'s serve did not cross the net`; }
-  else if (la && la.p.side === w) {
+  else if (aceFor(w)) { awardAce(); return; }
+  else if (la && la.p.side === w && la.type !== 'serve') {
     credit = la.p;
     const name = la.p.mon.name;
-    if (la.type === 'serve') { label = 'ACE!'; key = 'aces'; sub = `${name} served an ace`; }
-    else if (la.type === 'spike') { label = 'KILL!'; key = 'kills'; sub = `${name} put it away`; }
+    if (la.type === 'spike') { label = 'KILL!'; key = 'kills'; sub = `${name} put it away`; }
     else if (la.type === 'block') { label = 'STUFF BLOCK!'; key = 'blocks'; sub = `${name} shut it down`; }
     else if (la.type === 'tip') { label = 'TIP!'; key = 'kills'; sub = `${name} found the gap`; }
     else { label = 'POINT'; key = 'kills'; sub = `${name} dropped it in`; }
