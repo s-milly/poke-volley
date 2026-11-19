@@ -14,7 +14,7 @@ New to it? Open **How to play** on the title screen and start the **Tutorial**: 
 | Mouse | Aim. Serves, spikes, tips and over-balls go toward the cursor; as setter you set the hitter it points at |
 | Left click | Receive on the ground, spike in the air. Hold to wind up; hold to toss your serve |
 | E | Set. Hold to charge while you run in: full charge at contact is a quick set |
-| Right click | Dive on the ground, block in the air. A block does not use a team touch |
+| Right click | Dive on the ground, block in the air. In 2 v 2 (beach rules) a block counts as one of the 3 touches; in 6 v 6 (indoor rules) it does not |
 | Space (hold) | Charge your jump. A full charge jumps higher; running jumps keep their speed |
 | Shift | Strafe: face the cursor while you move, get up faster from a side dive |
 | C / V | Camera mode (follow or fixed) / zoom. The mouse wheel zooms too |

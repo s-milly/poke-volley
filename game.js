@@ -1066,7 +1066,8 @@ function doBlock(p) {
   if (!human && !stuff && roll < clamp(chance, 0.08, 0.75) + 0.4) { p.cool = 0.5; return; }
   if (human) tutEvent('block', { stuff });
   p.cool = 0.3; b.noHit = 0.08; b.special = null; b.gs = 1; G.tid++;
-  G.lastToucher = null; G.lastSide = s; G.touches[s] = 0; G.intended[s] = null; G.intended[1 - s] = null;
+  // beach rules (2 v 2): the block counts as one of the 3 touches. Indoors (6 v 6) it does not. Either way the blocker may play it next.
+  G.lastToucher = null; G.lastSide = s; G.touches[s] = settings.mode === 2 ? 1 : 0; G.intended[s] = null; G.intended[1 - s] = null;
   if (stuff) {
     b.z = t * (BR + 0.12);
     b.vz = t * rand(3, 6); b.vy = -rand(1, 3); b.vx = rand(-1.5, 1.5);
@@ -3758,7 +3759,7 @@ const T_PASS = { title: 'Receive', text: 'Their serve is yours: get under the bl
 const T_PERFECT = { title: 'Perfect pass', text: 'Pass again, and let go with the meter in the gold notch at the top for a PERFECT pass.', ev: 'pass', test: d => d.first && d.q >= 1, mine: true };
 const T_DIVE = { title: 'Dive', text: 'Right click on the ground to dive. Hold a direction to dive that way; hold none and you dive at the ball.', ev: 'dive' };
 const T_BLOCKUP = { title: 'Block', text: 'When they attack, stand at the net, jump just after their hitter jumps and right click in the air to put your block up.', ev: 'blockup', test: d => d.net, serve: 'us' };
-const T_BLOCK = { title: 'Touch a spike', text: 'Now get a hand on one of their spikes: stand at the net in front of their hitter, jump just after they jump and right click. A block does not use one of your 3 touches.', ev: 'block', serve: 'us' };
+const T_BLOCK = { title: 'Touch a spike', get text() { return 'Now get a hand on one of their spikes: stand at the net in front of their hitter, jump just after they jump and right click. ' + (settings.mode === 2 ? 'On the beach a block counts as one of your 3 touches.' : 'Indoors a block does not use one of your 3 touches.'); }, ev: 'block', serve: 'us' };
 const T_SPIKE = { title: 'Spike', text: 'Your setter is looking for you. Follow the green ring, jump as the ball comes down and hold left click; let go to swing.', ev: 'spike', callMe: true };
 const TUT_ROLE = {
   B: [T_SERVE, T_BLOCKUP, T_BLOCK, T_SPIKE],
