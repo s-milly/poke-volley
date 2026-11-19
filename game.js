@@ -1026,7 +1026,8 @@ function spike(p, special, q = null) {
     G.lastAttack = { p, type: 'spike' };
     if (special) {
       const ty = p.mon.types[0];
-      b.special = TYPE_COLORS[ty];
+      b.special = ty;
+      for (let i = 0; i < 16; i++) specialFx(b, true); // the hit throws out a burst of the move's particles
       G.meter[s] = 0; G.armed[s] = false;
       G.shake = 0.35;
       floatText(SPECIAL[ty] || 'Mega Spike', p.x, p.cy + p.rr + 0.8, p.z, TYPE_COLORS[ty], 1.3, 30);
@@ -1278,7 +1279,13 @@ function update(dt) {
   G.cheer = Math.max(0, (G.cheer || 0) - dt * 0.6);
   G.shake = Math.max(0, G.shake - dt); G.netWobble = Math.max(0, G.netWobble - dt * 2.5);
   for (const p of G.players) p.squash += (1 - p.squash) * Math.min(1, dt * 12);
-  for (const q of G.particles) { q.vy -= 6 * dt; q.x += q.vx * dt; q.y += q.vy * dt; q.z += q.vz * dt; q.life -= dt; }
+  for (const q of G.particles) {
+    q.vy -= 6 * dt * (q.g ?? 1);
+    if (q.drag) { const d = Math.exp(-q.drag * dt); q.vx *= d; q.vy *= d; q.vz *= d; }
+    if (q.jit) { q.vx += rand(-q.jit, q.jit) * dt; q.vy += rand(-q.jit, q.jit) * dt; q.vz += rand(-q.jit, q.jit) * dt; }
+    if (q.spin) q.rot += q.spin * dt;
+    q.x += q.vx * dt; q.y += q.vy * dt; q.z += q.vz * dt; q.life -= dt;
+  }
   G.particles = G.particles.filter(q => q.life > 0);
   for (const r of G.rings) r.t += dt;
   G.rings = G.rings.filter(r => r.t < 0.6);
@@ -1371,7 +1378,8 @@ function update(dt) {
   if (G.phase === 'rally') {
     b.trail.push({ x: b.x, y: b.y, z: b.z, c: b.special });
     const fast = Math.hypot(b.vx, b.vy, b.vz) > 11;
-    if (b.trail.length > (b.special ? 14 : fast ? 11 : 6)) b.trail.shift();
+    if (b.trail.length > (b.special ? 24 : fast ? 11 : 6)) b.trail.shift();
+    if (b.special) { b.fxAcc = (b.fxAcc || 0) + dt * FX[b.special].rate; for (; b.fxAcc >= 1; b.fxAcc--) specialFx(b); }
   } else b.trail.length = 0;
 
   if (TUT) tutTick(dt, you);
@@ -1448,6 +1456,70 @@ function burst(x, y, z, color, n) {
     const a = rand(0, Math.PI * 2), e = rand(-1, 1), s = rand(1.5, 4.5);
     G.particles.push({ x, y, z, vx: Math.cos(a) * s, vy: e * s, vz: Math.sin(a) * s, life: rand(0.25, 0.5), r: rand(0.03, 0.07), color });
   }
+}
+// ===================== special moves: each type's spike leaves its own trail =====================
+// trail: how the streak behind the ball is drawn. cols: [outer, middle, core]. rate: particles a second.
+// part(): one particle, with its position and speed relative to the ball. Particle fields: shape, g (gravity
+// scale, below 0 rises), drag, jit (random buzz), rot/spin, grow (size gain over its life), shrink, a (opacity).
+const R3 = s => [rand(-s, s), rand(-s, s), rand(-s, s)];
+const FX = {
+  fire:     { trail: 'flame', cols: ['#e8401c', '#ff8a1f', '#ffe9a0'], rate: 90,
+    part: () => ({ color: pickOne(['#ffd23f', '#ff8a1f', '#e8401c']), v: [rand(-0.6, 0.6), rand(0.8, 2.4), rand(-0.6, 0.6)], g: -0.15, life: rand(0.25, 0.45), r: rand(0.05, 0.1), shrink: 1 }) },
+  water:    { trail: 'wave', cols: ['#2f63d8', '#6390f0', '#e6f2ff'], rate: 60,
+    part: () => Math.random() < 0.25
+      ? { shape: 'bubble', color: '#cfe4ff', v: R3(0.6), g: -0.08, drag: 2, life: rand(0.45, 0.7), r: rand(0.05, 0.09) }
+      : { shape: 'puff', color: pickOne(['#6390f0', '#9cc4ff', '#ffffff']), v: [rand(-1, 1), rand(0, 1.6), rand(-1, 1)], g: 1, life: rand(0.35, 0.55), r: rand(0.03, 0.06) } },
+  electric: { trail: 'bolt', cols: ['#f7d02c', '#fff27a', '#ffffff'], rate: 70,
+    part: () => ({ shape: 'spark', color: pickOne(['#fff6a0', '#f7d02c', '#ffffff']), v: R3(5), g: 0, life: rand(0.08, 0.18), r: 0.05 }) },
+  grass:    { trail: 'helix', cols: ['#3f8a2a', '#7ac74c', '#d9f5b5'], rate: 45,
+    part: () => ({ shape: 'leaf', color: pickOne(['#7ac74c', '#4f9a35', '#b6e07a']), v: R3(1.3), g: 0.12, drag: 1.5, rot: rand(0, 6.3), spin: rand(-10, 10), life: rand(0.6, 0.9), r: rand(0.06, 0.09) }) },
+  ice:      { trail: 'streak', cols: ['#5fc4d6', '#96d9d6', '#ffffff'], rate: 50,
+    part: () => Math.random() < 0.3
+      ? { shape: 'star', color: '#ffffff', v: R3(0.4), g: 0, life: rand(0.3, 0.5), r: rand(0.05, 0.08) }
+      : { shape: 'diamond', color: pickOne(['#e8fbff', '#96d9d6', '#bfeef5']), v: R3(1), g: 0.6, rot: rand(0, 6.3), spin: rand(-6, 6), life: rand(0.4, 0.6), r: rand(0.05, 0.08) } },
+  fighting: { trail: 'streak', cols: ['#8e1f1a', '#c22e28', '#ffb07a'], rate: 22,
+    part: () => ({ shape: 'ring', color: pickOne(['#ff8a3d', '#ffffff', '#c22e28']), v: [0, 0, 0], g: 0, grow: 3, life: 0.22, r: 0.12, a: 0.9 }) },
+  poison:   { trail: 'wave', cols: ['#6d2a6c', '#a33ea1', '#e3a6e2'], rate: 40,
+    part: () => Math.random() < 0.7
+      ? { shape: 'bubble', color: pickOne(['#c36ac1', '#a33ea1', '#e3a6e2']), v: [rand(-0.5, 0.5), rand(0.3, 1.2), rand(-0.5, 0.5)], g: -0.1, drag: 2, jit: 4, life: rand(0.5, 0.8), r: rand(0.04, 0.09) }
+      : { shape: 'puff', color: '#7a2a78', v: [rand(-0.4, 0.4), 0, rand(-0.4, 0.4)], g: 1, life: rand(0.4, 0.6), r: rand(0.04, 0.06) } },
+  ground:   { trail: 'streak', cols: ['#8a6a2c', '#c9a352', '#f0dda8'], rate: 50,
+    part: () => Math.random() < 0.7
+      ? { shape: 'puff', color: pickOne(['#e2bf65', '#b8954a', '#d9c18a']), v: [rand(-0.6, 0.6), rand(0, 0.6), rand(-0.6, 0.6)], g: 0.1, drag: 2, grow: 1.6, a: 0.7, life: rand(0.5, 0.7), r: rand(0.07, 0.11) }
+      : { shape: 'rock', color: '#8a6a3a', v: R3(1.2), g: 1.2, rot: rand(0, 6.3), spin: rand(-12, 12), life: rand(0.4, 0.6), r: rand(0.03, 0.05) } },
+  flying:   { trail: 'helix', cols: ['#7d68d6', '#a98ff3', '#ffffff'], rate: 45,
+    part: () => Math.random() < 0.8
+      ? { shape: 'spark', color: pickOne(['#ffffff', '#dfe6ff', '#c9b8ff']), v: R3(2.5), g: 0, drag: 2, life: rand(0.25, 0.4), r: 0.05 }
+      : { shape: 'leaf', color: '#ffffff', v: R3(0.8), g: 0.3, drag: 1, rot: rand(0, 6.3), spin: rand(-8, 8), life: rand(0.5, 0.8), r: rand(0.06, 0.08) } },
+  psychic:  { trail: 'helix', cols: ['#c2306a', '#f95587', '#ffd0e0'], rate: 30,
+    part: () => Math.random() < 0.6
+      ? { shape: 'ring', color: pickOne(['#f95587', '#ffb3cf']), v: [0, 0, 0], g: 0, grow: 2.5, life: 0.35, r: 0.06, a: 0.8 }
+      : { shape: 'star', color: '#ffd0e0', v: R3(0.6), g: 0, life: rand(0.3, 0.5), r: rand(0.04, 0.07) } },
+  bug:      { trail: 'streak', cols: ['#6b7a10', '#a6b91a', '#e6f08a'], rate: 55,
+    part: () => ({ color: pickOne(['#a6b91a', '#d4e157', '#4f5a0c']), v: R3(1.5), g: 0, jit: 40, drag: 1, life: rand(0.4, 0.7), r: rand(0.025, 0.04) }) },
+  rock:     { trail: 'streak', cols: ['#6e6540', '#b6a136', '#e8dca0'], rate: 32,
+    part: () => ({ shape: 'rock', color: pickOne(['#b6a136', '#8c7a2a', '#6e6540']), v: [rand(-1.2, 1.2), rand(0, 1.5), rand(-1.2, 1.2)], g: 1.3, rot: rand(0, 6.3), spin: rand(-12, 12), life: rand(0.5, 0.7), r: rand(0.05, 0.09) }) },
+  ghost:    { trail: 'ghosts', cols: ['#3c2a55', '#735797', '#c9b3ea'], rate: 30,
+    part: () => ({ shape: 'puff', color: pickOne(['#735797', '#a68bd0', '#3c2a55']), v: [rand(-0.4, 0.4), rand(0.2, 0.8), rand(-0.4, 0.4)], g: -0.05, drag: 1.5, grow: 1.2, jit: 3, a: 0.55, life: rand(0.5, 0.8), r: rand(0.07, 0.1) }) },
+  dragon:   { trail: 'wave', cols: ['#4a1fbf', '#6f35fc', '#7fe3ff'], rate: 65,
+    part: () => Math.random() < 0.75
+      ? { color: pickOne(['#6f35fc', '#9f7bff', '#4bd0ff']), v: [rand(-0.6, 0.6), rand(0.8, 2), rand(-0.6, 0.6)], g: -0.15, life: rand(0.25, 0.45), r: rand(0.05, 0.09), shrink: 1 }
+      : { shape: 'spark', color: '#bff3ff', v: R3(4), g: 0, life: rand(0.1, 0.2), r: 0.05 } },
+  normal:   { trail: 'ghosts', cols: ['#8f8a75', '#d8d3bd', '#ffffff'], rate: 30,
+    part: () => ({ shape: 'spark', color: pickOne(['#ffffff', '#e8e2cf']), v: R3(1.5), g: 0, life: rand(0.12, 0.2), r: 0.05, back: 0.35 }) },
+  fairy:    { trail: 'helix', cols: ['#b5578a', '#d685ad', '#ffe3f1'], rate: 45,
+    part: () => ({ shape: 'star', color: pickOne(['#ffd1ea', '#d685ad', '#ffffff']), v: R3(0.8), g: 0.15, drag: 1, rot: rand(0, 6.3), spin: rand(-4, 4), life: rand(0.5, 0.8), r: rand(0.05, 0.09) }) },
+  steel:    { trail: 'streak', cols: ['#6f7488', '#b7b7ce', '#ffffff'], rate: 50,
+    part: () => ({ shape: 'spark', color: pickOne(['#ffffff', '#ffd27a', '#b7b7ce']), v: [rand(-3.5, 3.5), rand(1, 4), rand(-3.5, 3.5)], g: 1.6, life: rand(0.2, 0.35), r: 0.04 }) },
+  dark:     { trail: 'ghosts', cols: ['#2a211b', '#705746', '#c9a98f'], rate: 30,
+    part: () => ({ shape: 'puff', color: pickOne(['#3a2e26', '#705746']), v: R3(0.5), g: -0.05, drag: 1.5, grow: 1.2, a: 0.6, life: rand(0.5, 0.8), r: rand(0.07, 0.1) }) },
+};
+function specialFx(b, hit = false) {
+  const fx = FX[b.special]; if (!fx) return;
+  const o = fx.part(), [vx, vy, vz] = o.v, k = o.back || 0, sp = hit ? 2.2 : 1;
+  delete o.v;
+  G.particles.push(Object.assign({ x: b.x + rand(-0.06, 0.06), y: b.y + rand(-0.06, 0.06), z: b.z + rand(-0.06, 0.06),
+    vx: vx * sp - b.vx * k, vy: vy * sp - b.vy * k, vz: vz * sp - b.vz * k, rot: 0, life0: o.life }, o, { r: o.r * 1.5 }));
 }
 function floatText(text, x, y, z, color, life, size = 22) { G.texts.push({ text, x, y, z, color, t: 0, life, size }); }
 
@@ -2264,7 +2336,9 @@ function drawNet() {
 }
 
 function drawBall(b) {
-  if (b.trail.length > 2 && Math.hypot(b.vx, b.vy, b.vz) > 11) { // a hard hit leaves a streak, thickest at the ball
+  const sty = b.trail.find(q => q.c);
+  if (sty) drawSpecialTrail(b, sty.c);
+  else if (b.trail.length > 2 && Math.hypot(b.vx, b.vy, b.vz) > 11) { // a hard hit leaves a streak, thickest at the ball
     ctx.lineCap = 'round';
     for (let i = 1; i < b.trail.length; i++) {
       const a = proj(b.trail[i - 1].x, b.trail[i - 1].y, b.trail[i - 1].z), c = proj(b.trail[i].x, b.trail[i].y, b.trail[i].z), f = i / b.trail.length;
@@ -2276,12 +2350,19 @@ function drawBall(b) {
     ctx.globalAlpha = 1;
   }
   for (let i = 0; i < b.trail.length; i++) {
+    if (b.trail[i].c) continue; // a special move draws its own trail
     const q = b.trail[i], a = (i + 1) / b.trail.length, p = proj(q.x, q.y, q.z), s = Math.max(4, BR * 2.2 * p.k * (0.4 + a * 0.6));
     ctx.globalAlpha = a * (q.c ? 0.8 : 0.4); ctx.fillStyle = q.c || '#ffffff';
     ctx.fillRect(p.x - s / 2, p.y - s / 2, s, s);
   }
   ctx.globalAlpha = 1;
   const p = proj(b.x, b.y, b.z), r = Math.max(6, BR * 1.4 * p.k);
+  if (b.special) { // a glow in the move's colours around the ball
+    const [c0, c1] = FX[b.special].cols, pulse = 1 + 0.12 * Math.sin(G.time * 40);
+    ctx.globalAlpha = 0.3; ctx.fillStyle = c0; ctx.beginPath(); ctx.arc(p.x, p.y, (r + 11) * pulse, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = 0.9; ctx.strokeStyle = c1; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(p.x, p.y, r + 6, 0, Math.PI * 2); ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
   // a chunky pixel ball: dark rim, white body, yellow and blue panels
   ctx.save(); ctx.translate(p.x, p.y);
   ctx.fillStyle = '#20222e'; ctx.beginPath(); ctx.arc(0, 0, r + 2.7, 0, Math.PI * 2); ctx.fill();
@@ -2290,7 +2371,108 @@ function drawBall(b) {
   ctx.fillStyle = '#ffcf33'; ctx.fillRect(-r, -r, r * 0.8, r * 2);
   ctx.fillStyle = '#3d7fe0'; ctx.fillRect(r * 0.25, -r, r * 0.8, r * 2);
   ctx.restore(); ctx.restore();
-  if (b.special) { ctx.strokeStyle = b.special; ctx.lineWidth = 5; ctx.strokeRect(p.x - r - 7, p.y - r - 7, r * 2 + 14, r * 2 + 14); }
+}
+
+function drawParticle(q) {
+  const p = proj(q.x, q.y, q.z), t = q.life0 ? 1 - q.life / q.life0 : 0; // t runs 0 to 1 over its life
+  const s = Math.max(2.7, q.r * 2 * p.k * (q.grow ? 1 + q.grow * t : 1) * (q.shrink ? 1 - 0.7 * t : 1));
+  ctx.globalAlpha = clamp(q.life * 2.5, 0, 1) * (q.a ?? 1);
+  ctx.fillStyle = ctx.strokeStyle = q.color;
+  switch (q.shape) {
+    case 'spark': { // a short streak along its motion
+      const e = proj(q.x - q.vx * 0.035, q.y - q.vy * 0.035, q.z - q.vz * 0.035);
+      ctx.lineCap = 'round'; ctx.lineWidth = Math.max(1.5, s * 0.45);
+      ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(e.x, e.y); ctx.stroke(); break;
+    }
+    case 'leaf':
+      ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(q.rot);
+      ctx.beginPath(); ctx.ellipse(0, 0, s * 0.9, s * 0.38, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore(); break;
+    case 'diamond':
+      ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(q.rot); ctx.beginPath();
+      ctx.moveTo(0, -s); ctx.lineTo(s * 0.42, 0); ctx.lineTo(0, s); ctx.lineTo(-s * 0.42, 0); ctx.closePath(); ctx.fill(); ctx.restore(); break;
+    case 'star': { // four points, twinkling
+      const k = s * (0.75 + 0.25 * Math.sin(G.time * 30 + q.rot * 5));
+      ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(q.rot); ctx.beginPath();
+      for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4, rr = i % 2 ? k * 0.3 : k; ctx.lineTo(Math.cos(a) * rr, Math.sin(a) * rr); }
+      ctx.closePath(); ctx.fill(); ctx.restore(); break;
+    }
+    case 'ring':
+      ctx.lineWidth = Math.max(1.5, s * 0.16); ctx.beginPath(); ctx.arc(p.x, p.y, s, 0, Math.PI * 2); ctx.stroke(); break;
+    case 'bubble':
+      ctx.lineWidth = Math.max(1.2, s * 0.2); ctx.beginPath(); ctx.arc(p.x, p.y, s * 0.6, 0, Math.PI * 2); ctx.stroke();
+      ctx.fillRect(p.x - s * 0.3, p.y - s * 0.3, Math.max(1.5, s * 0.2), Math.max(1.5, s * 0.2)); break;
+    case 'puff':
+      ctx.beginPath(); ctx.arc(p.x, p.y, s * 0.55, 0, Math.PI * 2); ctx.fill(); break;
+    case 'rock':
+      ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(q.rot); ctx.fillRect(-s / 2, -s / 2, s, s);
+      ctx.fillStyle = '#00000055'; ctx.fillRect(-s / 2, s * 0.1, s, s * 0.4); ctx.restore(); break;
+    default:
+      ctx.fillRect(p.x - s / 2, p.y - s / 2, s, s);
+  }
+  ctx.globalAlpha = 1;
+}
+
+// The streak behind a special spike, in the move's style. Thin and faint at the tail, full at the ball.
+function drawSpecialTrail(b, ty) {
+  const fx = FX[ty] || FX.normal, [c0, c1, c2] = fx.cols;
+  const pts = b.trail.filter(q => q.c).map(q => proj(q.x, q.y, q.z));
+  pts.push(proj(b.x, b.y, b.z));
+  const n = pts.length; if (n < 3) return;
+  const nrm = pts.map((q, i) => { // screen-space normal to the path at each point
+    const a = pts[Math.max(0, i - 1)], c = pts[Math.min(n - 1, i + 1)], dx = c.x - a.x, dy = c.y - a.y, l = Math.hypot(dx, dy) || 1;
+    return { x: -dy / l, y: dx / l };
+  });
+  const W = i => Math.max(2, BR * 3.2 * pts[i].k * (i / (n - 1)));
+  const at = (i, off) => ({ x: pts[i].x + nrm[i].x * off, y: pts[i].y + nrm[i].y * off });
+  // one tapering line along the path, pushed sideways by off(i)
+  const line = (col, alpha, wk, off = () => 0) => {
+    ctx.strokeStyle = col;
+    for (let i = 1; i < n; i++) {
+      const f = i / (n - 1), a = at(i - 1, off(i - 1)), c = at(i, off(i));
+      ctx.globalAlpha = alpha * f; ctx.lineWidth = Math.max(1.5, W(i) * wk);
+      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(c.x, c.y); ctx.stroke();
+    }
+  };
+  ctx.lineCap = ctx.lineJoin = 'round';
+  const T = G.time;
+  switch (fx.trail) {
+    case 'flame': { // flickering, wider than the ball, white-hot at the core
+      const fl = i => W(i) * 0.25 * Math.sin(T * 50 + i * 1.7);
+      line(c0, 0.45, 2.2, fl); line(c1, 0.85, 1.3, i => fl(i) * 0.5); line(c2, 1, 0.5);
+      break;
+    }
+    case 'wave': { // a ribbon that ripples side to side
+      const wv = i => W(i) * 0.5 * Math.sin(i * 0.9 - T * 18);
+      line(c0, 0.5, 1.8, wv); line(c1, 0.9, 1.0, wv); line(c2, 0.9, 0.35, wv);
+      break;
+    }
+    case 'bolt': { // jagged lightning, redrawn every frame, with a forked branch
+      const jag = pts.map((_, i) => (i === n - 1 ? 0 : rand(-1, 1) * W(i) * 1.1));
+      line(c0, 0.5, 1.6, i => jag[i]); line(c1, 1, 0.7, i => jag[i]); line(c2, 1, 0.3, i => jag[i]);
+      const j = Math.floor(rand(n * 0.3, n * 0.8)), s = rand(-1, 1) > 0 ? 1 : -1, a = at(j, jag[j]);
+      ctx.globalAlpha = 0.8; ctx.strokeStyle = c1; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(a.x, a.y);
+      ctx.lineTo(a.x + nrm[j].x * s * W(j) * 2 + rand(-6, 6), a.y + nrm[j].y * s * W(j) * 2 + rand(-6, 6)); ctx.stroke();
+      break;
+    }
+    case 'helix': { // two strands twisting around a faint core
+      line(c0, 0.35, 1.2);
+      line(c1, 0.95, 0.35, i => W(i) * 0.9 * Math.sin(i * 0.8 - T * 22));
+      line(c2, 0.95, 0.35, i => W(i) * 0.9 * Math.sin(i * 0.8 - T * 22 + Math.PI));
+      break;
+    }
+    case 'ghosts': { // fading copies of the ball along its path
+      line(c0, 0.35, 1.0);
+      for (let i = n - 4; i >= 0; i -= 3) {
+        const f = i / (n - 1), r = Math.max(4, BR * 1.4 * pts[i].k);
+        ctx.globalAlpha = 0.55 * f; ctx.fillStyle = c1; ctx.beginPath(); ctx.arc(pts[i].x, pts[i].y, r, 0, Math.PI * 2); ctx.fill();
+        ctx.globalAlpha = 0.4 * f; ctx.strokeStyle = c2; ctx.lineWidth = 2; ctx.stroke();
+      }
+      break;
+    }
+    default: // a layered streak
+      line('#10141f', 0.4, 1.5); line(c1, 0.95, 1.1); line(c2, 1, 0.4);
+  }
+  ctx.globalAlpha = 1;
 }
 
 // Where the ball will land, on either side of the net: four small carets painted flat on the floor
@@ -2496,7 +2678,7 @@ function render() {
   // far side, the net, then the near side
   const items = [...G.players, ...G.bench[0], ...G.bench[1]].map(p => ({ z: p.z, d: () => drawPlayer(p) }));
   items.push({ z: b.z, d: () => drawBall(b) });
-  for (const q of G.particles) items.push({ z: q.z, d: () => { const p = proj(q.x, q.y, q.z), s = Math.max(2.7, q.r * 2 * p.k); ctx.globalAlpha = clamp(q.life * 2.5, 0, 1); ctx.fillStyle = q.color; ctx.fillRect(p.x - s / 2, p.y - s / 2, s, s); ctx.globalAlpha = 1; } });
+  for (const q of G.particles) items.push({ z: q.z, d: () => drawParticle(q) });
   items.sort((a, c) => c.z - a.z);
   let netDrawn = false;
   for (const it of items) {
