@@ -395,6 +395,12 @@ table.box tr.you th, table.box tr.you td { color: var(--accent); }
 .overlay { position: absolute; inset: 0; display: grid; place-items: center; }
 .dialog { display: grid; gap: 14px; min-width: 280px; padding: 26px; text-align: center; }
 .dialog h2 { font-size: 20px; margin-bottom: 6px; }
+.tabstats { pointer-events: none; background: rgb(8 11 20 / 0.45); }
+.tabstats .dialog { width: min(900px, 92%); max-height: 92%; overflow: auto; text-align: left; }
+.tabstats h2 { display: flex; justify-content: space-between; gap: 16px; font-size: 16px; }
+.tabstats .box-wrap { margin-bottom: 0; }
+.tabstats table.box td { font-variant-numeric: tabular-nums; }
+.tab-hint { color: var(--muted); font-size: 12px; text-align: center; }
 
 .touch { width: 100%; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); gap: 12px; user-select: none; -webkit-user-select: none; }
 .pad { display: flex; gap: 10px; align-items: center; }

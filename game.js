@@ -207,12 +207,13 @@ addEventListener('keydown', e => {
   if (e.target.closest && e.target.closest('#coach, #pause') && (e.code === 'Enter' || e.code === 'Space')) return;
   if (e.code === 'KeyP' || e.code === 'Escape') { togglePause(); e.preventDefault(); return; }
   if (e.code === 'KeyM') { Sfx.muted = !Sfx.muted; return; }
+  if (e.code === 'Tab') { e.preventDefault(); if (!e.repeat) showTabStats(true); return; }
   if (/^Digit[1-4]$/.test(e.code)) { if (!e.repeat) quickChat(+e.code[5] - 1); e.preventDefault(); return; }
   const a = KEYMAP[e.code];
   if (a) { e.preventDefault(); if (!e.repeat) press(a, true); }
 });
-addEventListener('keyup', e => { const a = KEYMAP[e.code]; if (a) press(a, false); });
-addEventListener('blur', () => { for (const k in keys) keys[k] = false; input.jumpT0 = null; });
+addEventListener('keyup', e => { if (e.code === 'Tab') showTabStats(false); const a = KEYMAP[e.code]; if (a) press(a, false); });
+addEventListener('blur', () => { for (const k in keys) keys[k] = false; input.jumpT0 = null; showTabStats(false); });
 
 // ===================== match state =====================
 const settings = { mode: 2, diff: 'normal', target: 15, sets: 1, role: { 2: 'B', 6: 'OH' }, venue: { 2: 'beach', 6: 'arena' }, time: 'day', club: ['cerulean', 'random'], camMode: 'follow', zoom: 1 };
@@ -234,7 +235,7 @@ class Player {
     this.face = 0; this.cool = 0; this.squash = 1; this.homeX = 0; this.homeZ = 0;
     this.dive = 0; this.rec = 0; this.diveDir = [0, 1];
     this.ai = { jumpErr: 0, blockWait: -1 };
-    this.stats = { kills: 0, aces: 0, blocks: 0, digs: 0, sets: 0 };
+    this.stats = { kills: 0, att: 0, ast: 0, aces: 0, blocks: 0, digs: 0, sets: 0 }; // att: attacks swung, ast: sets that became kills
   }
   get cy() { return this.y + this.rr; }
 }
@@ -566,7 +567,7 @@ function startServe() {
   G.players = [...G.sides[0], ...G.sides[1]];
   G.server = tutServer() || G.sides[s][0];
   Object.assign(G.ball, { vx: 0, vy: 0, vz: 0, gs: 1, trail: [], special: null, noHit: 0 });
-  G.touches = [0, 0]; G.lastSide = -1; G.lastToucher = null; G.intended = [null, null]; G.lastAttack = null;
+  G.touches = [0, 0]; G.lastSide = -1; G.lastToucher = null; G.intended = [null, null]; G.lastAttack = null; G.setBy = null;
   G.setterNow = [null, null]; G.play = [null, null];
   G.phase = 'serve'; G.timer = 0; G.rally = 0;
   updateFormation();
@@ -813,6 +814,8 @@ function contact(p) {
   }
   const la = G.lastAttack;
   if (fromOpp && la && la.type === 'spike') p.stats.digs++;
+  const setter = !fromOpp && G.setBy && G.lastToucher === G.setBy && G.setBy !== p ? G.setBy : null; // who set you, if this is the touch after their set
+  G.setBy = null;
   G.lastToucher = p; G.lastSide = s; G.intended[s] = null;
   p.cool = 0.3; b.noHit = 0.06; b.special = null; G.tid++;
   if (q != null && q >= 1) G.meter[s] = Math.min(100, G.meter[s] + 5); // perfect touches build the Type Spike faster
@@ -861,6 +864,10 @@ function contact(p) {
   if (action === 'pass' || action === 'set') pass(p, incoming, wasSpecial, fromOpp, q, dove, action === 'set' ? tm : null);
   else if (action === 'over') { over(p); G.lastAttack = { p, type: 'over' }; }
   else if (action === 'tip') { tip(p); G.lastAttack = { p, type: 'tip' }; }
+  if (action === 'spike' || action === 'over' || action === 'tip') { // an attack: the swing counts, and so does the set behind it
+    p.stats.att++;
+    if (G.lastAttack && G.lastAttack.p === p) G.lastAttack.setter = setter;
+  }
   if (human) tutEvent(action, { q, tm, first: fromOpp, dove, to: G.intended[s] });
 
   rerollAI();
@@ -930,7 +937,7 @@ function pass(p, incoming, wasSpecial, fromOpp, q = null, dove = false, setTm = 
     target = play.q; tx = play.tx; tz = play.tz; ty = play.ty; apexY = Math.max(play.apex, ty + (play.call === 'QUICK' ? 0.35 : 0.9)) + rand(0, 0.3); skill = p.r.skl;
     G.play[s] = play.type;
     floatText(play.call, p.x, p.cy + p.rr + 0.6, p.z, '#ffe9a0', 0.9);
-    p.stats.sets++;
+    p.stats.sets++; G.setBy = p;
   }
   const heat = clamp(incoming / 16, 0, 1.6) * (wasSpecial ? 1.8 : 1);
   // your timing: no click is the old auto pass (x1), a perfect click nearly takes the error away
@@ -1135,6 +1142,7 @@ function awardPoint(w, label, sub, credit, key) {
   if (G.phase !== 'rally') return;
   G.score[w]++;
   if (credit && key) credit.stats[key]++;
+  if (key === 'kills' && G.lastAttack && G.lastAttack.setter) G.lastAttack.setter.stats.ast++;
   G.meter[w] = Math.min(100, G.meter[w] + 10);
   G.cheer = 1; // the crowd jumps up
   G.longestRally = Math.max(G.longestRally, G.rally);
@@ -3584,30 +3592,48 @@ renderTutPick();
 function togglePause() {
   if (!G || G.phase === 'over' || (TUT && TUT.wait)) return;
   G.paused = !G.paused;
-  $('#pause').hidden = !G.paused;
+  $('#pause').hidden = !G.paused; showTabStats(false);
   if (G.paused) $('#btn-resume').focus();
 }
 $('#btn-resume').addEventListener('click', togglePause);
 $('#btn-pause').addEventListener('click', togglePause);
-$('#btn-quit').addEventListener('click', () => { G.paused = false; $('#pause').hidden = true; G = null; if (TUT) endTutorial(); else show('scr-title'); });
+$('#btn-quit').addEventListener('click', () => { showTabStats(false); G.paused = false; $('#pause').hidden = true; G = null; if (TUT) endTutorial(); else show('scr-title'); });
 
+// The box score, one table per team. Used by the Tab scoreboard during a match and the result screen after it.
+const BOX_COLS = [['kills', 'K', 'Kills'], ['att', 'ATT', 'Attack attempts'], ['ast', 'AST', 'Assists: sets that became kills'],
+  ['blocks', 'BLK', 'Blocks'], ['digs', 'DIG', 'Digs'], ['aces', 'ACE', 'Aces']];
+function boxScore(box) {
+  box.innerHTML = '';
+  for (let s = 0; s < 2; s++) {
+    const tbl = el('table', 'box');
+    tbl.innerHTML = `<caption>${teamName(s)}</caption><thead><tr><th scope="col">Pokémon</th>${BOX_COLS.map(([, h, t]) => `<th scope="col" title="${t}">${h}</th>`).join('')}</tr></thead>`;
+    const tb = el('tbody');
+    for (const p of G.all[s]) tb.appendChild(el('tr', p.human ? 'you' : '', `<th scope="row">${p.mon.name}</th>${BOX_COLS.map(([k]) => `<td>${p.stats[k]}</td>`).join('')}`));
+    tbl.appendChild(tb); box.appendChild(tbl);
+  }
+}
+// Hold Tab during a match to see the box score. The match keeps running underneath.
+let tabTimer = null;
+function fillTabStats() {
+  if (!G) return;
+  $('#tab-score').textContent = `${G.score[0]} - ${G.score[1]}${settings.sets > 1 ? ` · Sets ${G.sets[0]} - ${G.sets[1]}` : ''}`;
+  boxScore($('#tab-box'));
+}
+function showTabStats(on) {
+  const o = $('#tabstats');
+  if (on && G && !G.paused) {
+    if (o.hidden) { fillTabStats(); tabTimer = setInterval(fillTabStats, 250); } // the rally keeps going, so keep the numbers live
+    o.hidden = false;
+  } else { o.hidden = true; clearInterval(tabTimer); tabTimer = null; }
+}
 function showResult() {
+  showTabStats(false);
   const w = G.winner;
   $('#res-title').textContent = w === 0 ? 'You win!' : `${teamName(1)} wins`;
   const multi = settings.sets > 1;
   $('#res-score').textContent = multi ? `${G.sets[0]} : ${G.sets[1]}` : `${G.score[0]} : ${G.score[1]}`;
   $('#res-meta').textContent = (multi ? `Sets: ${G.setLog.map(x => x.join('-')).join(', ')} · ` : '') + `Longest rally: ${G.longestRally} touches`;
-  const box = $('#res-box'); box.innerHTML = '';
-  for (let s = 0; s < 2; s++) {
-    const tbl = el('table', 'box');
-    tbl.innerHTML = `<caption>${teamName(s)}</caption><thead><tr><th scope="col">Pokémon</th><th scope="col" title="Kills">K</th><th scope="col" title="Aces">A</th><th scope="col" title="Blocks">B</th><th scope="col" title="Digs">D</th><th scope="col" title="Sets">S</th></tr></thead>`;
-    const tb = el('tbody');
-    for (const p of G.all[s]) {
-      const st = p.stats;
-      tb.appendChild(el('tr', p.human ? 'you' : '', `<th scope="row">${p.mon.name}</th><td>${st.kills}</td><td>${st.aces}</td><td>${st.blocks}</td><td>${st.digs}</td><td>${st.sets}</td>`));
-    }
-    tbl.appendChild(tb); box.appendChild(tbl);
-  }
+  boxScore($('#res-box'));
   const mvp = G.players.reduce((a, p) => (val(p) > val(a) ? p : a));
   $('#res-mvp').innerHTML = '';
   $('#res-mvp').appendChild(portrait(mvp.mon, 192, 128));

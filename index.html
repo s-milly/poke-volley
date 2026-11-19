@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>VolleyDex: Gen 1 Draft Volleyball</title>
 <meta name="description" content="Pick a Gen 1 Pokémon, draft teammates by their stats, and play arcade volleyball in the browser.">
-<link rel="stylesheet" href="style.css?v=28">
+<link rel="stylesheet" href="style.css?v=29">
 </head>
 <body class="on-title">
 <main id="menu">
@@ -86,6 +86,7 @@
         <li><span class="k"><kbd>Shift</kbd></span><span>Strafe</span></li>
         <li><span class="k"><kbd>C</kbd><kbd>V</kbd></span><span>Camera and zoom</span></li>
         <li><span class="k"><kbd>1</kbd>-<kbd>4</kbd></span><span>Quick chat</span></li>
+        <li><span class="k"><kbd>Tab</kbd></span><span>Hold for the box score</span></li>
         <li><span class="k"><kbd>P</kbd> <kbd>M</kbd></span><span>Pause, sound</span></li>
       </ul>
       <details class="tips">
@@ -259,6 +260,13 @@
     <canvas id="court" width="1280" height="720" aria-label="Volleyball match"></canvas>
     <button type="button" class="icon-btn" id="btn-pause" aria-label="Pause">II</button>
     <aside id="coach" class="coach" aria-live="polite" aria-label="Tutorial coach" hidden></aside>
+    <div id="tabstats" class="overlay tabstats" hidden>
+      <div class="dialog">
+        <h2>Box score <span id="tab-score"></span></h2>
+        <div class="box-wrap" id="tab-box"></div>
+        <p class="tab-hint">Let go of <kbd>Tab</kbd> to play</p>
+      </div>
+    </div>
     <div id="pause" class="overlay" hidden>
       <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="pause-h">
         <h2 id="pause-h">Paused</h2>
@@ -284,8 +292,8 @@
   </div>
 </div>
 
-<script src="data.js?v=28"></script>
-<script src="sprites.js?v=28"></script>
-<script src="game.js?v=28"></script>
+<script src="data.js?v=29"></script>
+<script src="sprites.js?v=29"></script>
+<script src="game.js?v=29"></script>
 </body>
 </html>
