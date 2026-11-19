@@ -2102,21 +2102,23 @@ function drawLandingCarets(lx, lz, tl) {
 // Past the top it turns red. After a release it freezes in the grade colour and fades.
 function drawTimingMeter(p, L, tick, dim, result) {
   const bx = p.box || { ...proj(p.x, p.y, p.z), w: 40, h: 60 };
-  const w = 3, h = 32, x = Math.round((bx.x + bx.w / 2) * US + 4), y = Math.round((bx.y - bx.h * 0.55) * US - h / 2);
-  const ly = l => y + h - Math.round(h * clamp(l, 0, 1));
+  const w = 3, h = 34, x = Math.round((bx.x + bx.w / 2) * US + 3), y = Math.round((bx.y - bx.h * 0.55) * US - h / 2);
+  const bow = 5, off = i => Math.round(bow * Math.sin(Math.PI * i / h)); // row i (0 = top) bows outward
   const over = L != null && L > 1, gold = ZONES[2][0];
+  const top = l => h - Math.round(h * clamp(l, 0, 1)); // first row filled at level l
+  const fillCol = L == null ? null : result ? result.color : L > gold ? '#ffcf33' : '#ffffff';
   ctx.save(); ctx.globalAlpha = result ? result.a : dim ? 0.45 : 1;
-  pxRect(x - 1, y - 1, w + 2, h + 2, 'rgba(10,14,24,0.85)');
-  pxRect(x, y, w, h, over ? '#d8343a' : 'rgba(255,255,255,0.12)');
-  if (!over) {
-    pxRect(x, ly(1), w, ly(gold) - ly(1), 'rgba(255,207,51,0.35)');
-    pxRect(x - 2, ly(gold), w + 4, 1, '#ffcf33');
-    if (L != null) {
-      const col = result ? result.color : L > gold ? '#ffcf33' : '#ffffff';
-      pxRect(x, ly(L), w, y + h - ly(L), col);
-    }
+  pxRect(x + off(0) - 1, y - 1, w + 2, 1, 'rgba(10,14,24,0.85)');
+  pxRect(x + off(h - 1) - 1, y + h, w + 2, 1, 'rgba(10,14,24,0.85)');
+  for (let i = 0; i < h; i++) {
+    const rx = x + off(i);
+    pxRect(rx - 1, y + i, w + 2, 1, 'rgba(10,14,24,0.85)');
+    let col = over ? '#d8343a' : i < top(gold) ? 'rgba(255,207,51,0.35)' : 'rgba(255,255,255,0.12)';
+    if (!over && fillCol && i >= top(L)) col = fillCol;
+    pxRect(rx, y + i, w, 1, col);
   }
-  if (tick != null && !result) pxRect(x - 4, ly(tick) - 1, 2, 2, tick > 1 ? '#ff5a5a' : '#eef3ff');
+  if (!over) pxRect(x + off(top(gold)) - 2, y + top(gold), w + 4, 1, '#ffcf33');
+  if (tick != null && !result) { const i = clamp(top(tick), 0, h - 1); pxRect(x + off(i) - 4, y + i - 1, 2, 2, tick > 1 ? '#ff5a5a' : '#eef3ff'); }
   ctx.restore();
 }
 
@@ -2141,7 +2143,7 @@ function drawSetButtons() {
   };
   // a number badge over each hitter, nudged up where two would overlap
   const you = G.sides[0].find(p => p.human), bx = you.box || { ...proj(you.x, you.y, you.z), w: 40, h: 60 };
-  const placed = [{ x: (bx.x + bx.w / 2) * US, y: (bx.y - bx.h * 0.55) * US - 18, w: 12, h: 36 }]; // your own meter
+  const placed = [{ x: (bx.x + bx.w / 2) * US, y: (bx.y - bx.h * 0.55) * US - 18, w: 14, h: 38 }]; // your own meter
   const hits = (x, y) => placed.some(r => x < r.x + r.w + 3 && x + 17 > r.x && y < r.y + r.h + 3 && y + 17 > r.y);
   opts.forEach((o, i) => {
     const q = o.q, top = proj(q.x, q.y + q.rr * 2 + 0.3, q.z);
