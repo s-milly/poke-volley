@@ -629,7 +629,7 @@ function startDive(p, ix, iz) {
 // ===================== timing meter =====================
 // Hold the hit button to wind up. The meter fills over CHARGE seconds; your touch is graded by how full it is
 // when you meet the ball (or when you let go, if that was just before). Hold past full and it goes red: a bad hit.
-const CHARGE = 0.5;       // seconds from empty to full in a rally
+const CHARGE = 0.35;      // seconds from empty to full in a rally
 const RELEASE_WIN = 0.2;  // a release this long before contact still counts
 const ZONES = [[0.4, -0.25, 'WEAK', '#ff8a8a', '#3a2630'], [0.65, 0.3, 'OK', '#c9d4ee', '#5d6b8a'], [0.85, 0.65, 'GOOD', '#7dffb0', '#2f9e63'], [1, 1, 'PERFECT', '#ffe14a', '#ffcf33']];
 const TOO_LONG = { q: -0.5, label: 'TOO LONG', color: '#ff5a5a' };
@@ -639,7 +639,7 @@ function gradeL(L) {
 }
 // E is the set. Its meter is a charge, not a timing window: start holding while you run in,
 // and if it is full when you touch the ball you get a quick set (low and fast); before that, a high set.
-const SET_CHARGE = 0.55;
+const SET_CHARGE = 0.4;
 const SET_HIGH = { q: 0.65, label: 'HIGH SET', color: '#8fd3ff' }, SET_QUICK = { q: 0.55, label: 'QUICK SET', color: '#7dffb0', quick: true };
 const holdLevel = h => ((h.tr ?? G.time) - h.t0) / h.C;
 // The game clock at a key or mouse event during the last frame (update() has already moved G.time to the end of it).
