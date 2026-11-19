@@ -2791,11 +2791,10 @@ function sceneStands(g, V, C) {
   let N = 1; while (row(rise * N, z0 + depth * N) > topRow && N < 60) N++;
   const top = Math.round(row(rise * N, z0 + depth * N));
   g.fillStyle = night ? '#05070d' : '#0f1424'; g.fillRect(0, 0, SCENE_W, top);   // the roof
-  g.fillStyle = night ? '#121828' : '#1a2138';
-  for (let x = 14; x < SCENE_W; x += 28) g.fillRect(x, 0, 1, top); // clear of the edge columns, which stretch to the page sides
-  for (let y = 10; y < top; y += 14) g.fillRect(0, y, SCENE_W, 1);
-  for (let r = 0; r < 2; r++) for (let x = 8 + r * 20; x < SCENE_W - 14; x += 40) { // light rigs
+  // light rigs, only out past the title and subtitle so the text sits on a plain dark roof
+  for (let r = 0; r < 2; r++) for (let x = 8 + r * 20; x < SCENE_W - 14; x += 40) {
     const y = 6 + r * 16;
+    if (Math.abs(x + 4 - cx) < 170) continue;
     g.fillStyle = 'rgba(255,246,208,0.08)'; g.fillRect(x - 4, y + 3, 16, 12);
     g.fillStyle = '#fff6d0'; g.fillRect(x, y, 8, 3);
   }
@@ -2811,6 +2810,7 @@ function sceneStands(g, V, C) {
     if (rnd() < 0.06) { const a = Math.max(1, hd >> 1); g.fillRect(px - (w >> 1) - a, foot - fh - hd - a, a, hd + a); g.fillRect(px + w - (w >> 1), foot - fh - hd - a, a, hd + a); } // arms up
     if (night && rnd() < 0.08) { g.fillStyle = '#ffffff'; g.fillRect(px + 1, foot - fh - hd - 1, 1, 1); } // phone lights
   };
+  g.save(); g.beginPath(); g.rect(0, top, SCENE_W, SCENE_H - top); g.clip(); // nothing pokes up into the roof
   for (let t = N - 1; t >= 0; t--) { // far end: far tiers first, nearer ones paint over them
     const zi = z0 + depth * t, y0 = rise * t, y1 = y0 + rise;
     const rSeat = Math.round(row(y1, zi + depth)), rLip = Math.round(row(y1, zi)), rFoot = Math.round(row(y0, zi));
@@ -2819,14 +2819,15 @@ function sceneStands(g, V, C) {
     const half = cx / (sp(0, y1, zi).k * stageK / 2) + 1;
     for (let x = -half; x <= half; x += 0.72) if (Math.abs(x) % 9 >= 0.8 && rnd() < d.fill) fan(x + (rnd() - 0.5) * 0.2, y1, zi + depth * 0.5, x);
   }
-  g.save(); g.beginPath(); g.rect(0, top, SCENE_W, SCENE_H - top); g.clip(); // the sidelines: outer tiers first
+  // the sidelines: outer tiers first (still under the roof clip)
   for (let t = N - 1; t >= 0; t--) {
     const y0 = rise * t, y1 = y0 + rise;
     for (const sd of [-1, 1]) {
-      const xi = sd * (X + depth * t), xo = xi + sd * depth;
-      poly([[xi, y1, z0], [xi, y1, zNear], [xo, y1, zNear], [xo, y1, z0]], d.seat[t % 2]);
-      poly([[xi, y0, z0], [xi, y0, zNear], [xi, y1, zNear], [xi, y1, z0]], d.riser[t % 2]);
-      for (let z = z0 - 0.4; z >= zNear + 5; z -= 0.5) if ((z + 40) % 8 >= 0.8 && rnd() < d.fill) fan(xi + sd * depth * 0.5 + (rnd() - 0.5) * 0.2, y1, z + (rnd() - 0.5) * 0.25, sd);
+      // each side tier runs back to the far-end tier of the same row, so the rows turn the corner as one bowl
+      const xi = sd * (X + depth * t), xo = xi + sd * depth, zi = z0 + depth * t, zs = zi + depth;
+      poly([[xi, y1, zs], [xi, y1, zNear], [xo, y1, zNear], [xo, y1, zs]], d.seat[t % 2]);
+      poly([[xi, y0, zi], [xi, y0, zNear], [xi, y1, zNear], [xi, y1, zi]], d.riser[t % 2]);
+      for (let z = zi - 0.4; z >= zNear + 5; z -= 0.5) if ((z + 40) % 8 >= 0.8 && rnd() < d.fill) fan(xi + sd * depth * 0.5 + (rnd() - 0.5) * 0.2, y1, z + (rnd() - 0.5) * 0.25, sd);
     }
   }
   g.restore();
@@ -2899,7 +2900,15 @@ function renderScene() {
   document.documentElement.style.setProperty('--sf', stageF.toFixed(3));
   stageK = Math.min(1, (innerWidth - 40) / (600 * stageF)); // pull everything in on narrow screens
   const hero = $('#title-hero'), lede = hero.querySelector('.lede');
-  if (lede && lede.offsetParent) sceneTop = Math.round(clamp((lede.getBoundingClientRect().bottom - hero.getBoundingClientRect().top + 8) / (2 * stageF), 56, 100));
+  // the stands top out just under the subtitle; where the title runs taller than the sky (phones), the stage art
+  // moves down by --stage-dy so the subtitle keeps a plain roof or sky behind it
+  let dy = 0;
+  if (lede && lede.offsetParent) {
+    const under = lede.getBoundingClientRect().bottom - hero.getBoundingClientRect().top + 18;
+    dy = Math.max(0, Math.ceil(under - 200 * stageF));
+    sceneTop = Math.round(clamp((under - dy) / (2 * stageF), 56, 100));
+  }
+  document.documentElement.style.setProperty('--stage-dy', `${dy}px`);
   const bd = sceneBackdrop();
   $('#title-hero').style.backgroundImage = `url(${bd}), var(--v-edge, none)`;
   sceneTint(bd);
@@ -3119,6 +3128,9 @@ $('#opt-mode').addEventListener('click', e => {
 });
 $('#btn-mode-next').addEventListener('click', () => { Sfx.init(); renderClubPick(); show('scr-team'); });
 markMode();
+// the subtitle's height decides where the stands stop, so measure again once the pixel font has loaded
+let sceneLede = $('#title-hero .lede').offsetHeight;
+document.fonts.ready.then(() => { const h = $('#title-hero .lede').offsetHeight; if (h !== sceneLede && !$('#scr-title').hidden) { sceneLede = h; renderScene(); } });
 $('#btn-team-next').addEventListener('click', () => { renderSummary(); renderVenuePick(); show('scr-venue'); });
 renderSummary();
 $('#btn-start').addEventListener('click', () => { Sfx.init(); saveSettings(); buildPick(); show('scr-pick'); });

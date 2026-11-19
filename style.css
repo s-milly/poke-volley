@@ -47,12 +47,14 @@ button { color: inherit; cursor: pointer; -webkit-tap-highlight-color: transpare
 /* ---------- title ---------- */
 /* The stage: a 560x220 pixel scene drawn at 2x, with sprites, net and ball laid over it, then scaled by --sf
    (set by renderScene in game.js) so it fills the window above the mode picker. */
-:root { --sf: 1; --stage-h: calc(440px * var(--sf)); }
+:root { --sf: 1; --stage-dy: 0px; --stage-h: calc(440px * var(--sf) + var(--stage-dy)); }
 .title-hero {
+  --art-h: calc(440px * var(--sf));
   position: relative; height: var(--stage-h); overflow: hidden;
-  /* the stage art, then its two edge columns stretched out to the sides of the window */
-  background: #3c9fe4 center top / auto var(--stage-h) no-repeat; background-size: auto var(--stage-h), 100% var(--stage-h);
-  background-position: center top, 0 0; image-rendering: pixelated;
+  /* the stage art, then its two edge columns stretched out to the sides of the window; --stage-dy (phones) moves
+     both down under a tall title, and the venue's top colour fills the strip above */
+  background: var(--v-sky, #3c9fe4) center top / auto var(--art-h) no-repeat; background-size: auto var(--art-h), 100% var(--art-h);
+  background-position: center var(--stage-dy), 0 var(--stage-dy); image-rendering: pixelated;
   margin-inline: calc(50% - 50vw); border-bottom: 3px solid var(--ink);
 }
 /* the title screen's page is the venue floor carrying on under the stage (a patch of the stage's own sand or
@@ -72,7 +74,7 @@ body.on-title #menu { padding-top: 0; }
 .hero-copy h1 span { color: var(--accent); }
 .lede { color: #fbfcff; font-size: 26px; max-width: 44ch; text-wrap: balance; margin: 14px auto 0; text-shadow: 2px 2px 0 var(--ink), -1px -1px 0 var(--ink), 1px -1px 0 var(--ink), -1px 1px 0 var(--ink); }
 
-.scene { position: absolute; inset: 0 0 auto; height: 440px; pointer-events: none; transform: scale(var(--sf)); transform-origin: 50% 0; }
+.scene { position: absolute; inset: var(--stage-dy) 0 auto; height: 440px; pointer-events: none; transform: scale(var(--sf)); transform-origin: 50% 0; }
 .mon { position: absolute; left: 50%; top: 0; transform-origin: 0 0; }
 .mon img { display: block; image-rendering: pixelated; }
 .far .mon { z-index: 1; }
