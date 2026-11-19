@@ -2391,7 +2391,7 @@ function sceneStands(g, V, C) {
   const row = (h, z) => sp(0, h, z).y / 2;                  // stage px are 2 canvas px
   const P = (x, h, z) => { const q = sp(x, h, z); return [cx + q.x / 2, q.y / 2]; };
   const poly = (pts, col) => { g.fillStyle = col; g.beginPath(); pts.forEach(([x, h, z], i) => g[i ? 'lineTo' : 'moveTo'](...P(x, h, z))); g.closePath(); g.fill(); };
-  const gap = 11, z0 = C.hl + gap, X = C.hw / 2 + gap, zNear = -12, rise = 1, depth = 0.8, topRow = sceneTop; // the bowl tops out just under the subtitle
+  const gap = 11, z0 = C.hl + gap, X = C.hw + gap, zNear = -12, rise = 1, depth = 0.8, topRow = sceneTop; // the bowl tops out just under the subtitle
   let N = 1; while (row(rise * N, z0 + depth * N) > topRow && N < 60) N++;
   const top = Math.round(row(rise * N, z0 + depth * N));
   g.fillStyle = night ? '#05070d' : '#0f1424'; g.fillRect(0, 0, SCENE_W, top);   // the roof
@@ -2441,7 +2441,7 @@ function sceneStands(g, V, C) {
   g.fillStyle = night ? '#ff5d5d' : '#3fa7ff'; g.fillRect(0, top - 2, SCENE_W, 1);
   g.fillStyle = '#ffcf33'; for (let x = 6; x < SCENE_W; x += 18) g.fillRect(x, top - 2, 6, 1);
   if (ex.includes('led')) { // LED ad boards around the court: along the far end, then down both sidelines
-    const zb = C.hl + 1.6, xb = C.hw / 2 + 1.6, H = 0.9, cols = ['#3fa7ff', '#ff5d5d', '#ffcf33', '#6bd88a'];
+    const zb = C.hl + 1.6, xb = C.hw + 1.6, H = 0.9, cols = ['#3fa7ff', '#ff5d5d', '#ffcf33', '#6bd88a'];
     poly([[-xb, 0, zb], [xb, 0, zb], [xb, H, zb], [-xb, H, zb]], '#0b0f1c');
     const n = Math.round(2 * xb / 3);
     for (let i = 0; i < n; i++) {
