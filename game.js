@@ -1765,10 +1765,11 @@ const UW = 480, UH = 270, US = UW / W, U = LW / UW;
 const PX_FONT = '"Press Start 2P", monospace';
 
 // Sprites: front for the other team, back for yours (Pokémon FireRed/LeafGreen sprites).
-const SPR = { front: [], back: [] };
-function spriteImg(id, back) {
-  const set = back ? SPR.back : SPR.front;
-  if (!set[id]) { const img = new Image(); img.src = `sprites/${back ? 'back' : 'front'}/${id}.png`; set[id] = img; }
+// Liberos use the shiny sprite, like the different jersey a libero wears, so they stand out from the rest of the team.
+const SPR = { front: [], back: [], 'shiny/front': [], 'shiny/back': [] };
+function spriteImg(id, back, shiny = false) {
+  const dir = (shiny ? 'shiny/' : '') + (back ? 'back' : 'front'), set = SPR[dir];
+  if (!set[id]) { const img = new Image(); img.src = `sprites/${dir}/${id}.png`; set[id] = img; }
   return set[id];
 }
 
@@ -2644,7 +2645,7 @@ function drawSetButtons() {
 
 function drawPlayer(p) {
   const back = p.side === 0, f = proj(p.x, p.y, p.z);
-  const img = spriteImg(p.mon.id, back), box = SPRITE_BOX[p.mon.id];
+  const img = spriteImg(p.mon.id, back, p.role === 'L'), box = SPRITE_BOX[p.mon.id];
   if (p.strafe && input.aim) p.flip = back ? input.aim.x < p.x : input.aim.x > p.x; // strafing: face the cursor
   else if (Math.abs(p.vx) > 0.6) p.flip = back ? p.vx < 0 : p.vx > 0;
   if (img.complete && img.naturalWidth) {
@@ -2948,10 +2949,10 @@ function show(id) {
 }
 
 // A sprite drawn at `size` px (a multiple of 96 keeps the pixels even), cropped to a `box` px square.
-function portrait(mon, size = 96, box = 64) {
+function portrait(mon, size = 96, box = 64, shiny = false) {
   const wrap = el('span', 'portrait'); wrap.style.width = wrap.style.height = box + 'px';
   const img = new Image();
-  img.src = `sprites/front/${mon.id}.png`; img.width = img.height = size; img.alt = ''; img.decoding = 'async';
+  img.src = `sprites/${shiny ? 'shiny/' : ''}front/${mon.id}.png`; img.width = img.height = size; img.alt = ''; img.decoding = 'async';
   wrap.appendChild(img);
   return wrap;
 }
@@ -3507,7 +3508,7 @@ function demoMatch() {
   const ids = Object.keys(CLUBS).sort(() => Math.random() - 0.5);
   clubs = [CLUBS[ids[0]], CLUBS[ids[1]]];
   newMatch(true);
-  for (const p of G.players) spriteImg(p.mon.id, p.side === 0);
+  for (const p of [...G.players, ...G.libero]) if (p) spriteImg(p.mon.id, p.side === 0, p.role === 'L');
   G.camT0 = Math.random() * 60; // start each match at a different point of the camera's sweep
 }
 function startDemo() {
@@ -3738,7 +3739,7 @@ function renderMatchup() {
     const ul = el('ul', 'mu-list');
     for (const { entry: e, role } of lu) {
       const li = el('li', '');
-      li.appendChild(portrait(e.mon, 96, 64));
+      li.appendChild(portrait(e.mon, 96, 64, role === 'L'));
       const who = s === 0 && e === teams[0][0] ? 'You' : e.mon.types.map(cap).join(' / ');
       li.appendChild(el('div', 'ri-text', `<b>${e.mon.name}</b><span>${who}</span>`));
       li.appendChild(el('span', 'role-tag', ROLES[role].short));
@@ -3770,7 +3771,7 @@ $('#btn-play').addEventListener('click', startMatch);
 function startMatch() {
   Sfx.init();
   newMatch(); skyCache = null; skyTop = null; crowdCache = null; palmCache = null; show('stage'); sizeCanvas();
-  for (const p of G.players) spriteImg(p.mon.id, p.side === 0);
+  for (const p of [...G.players, ...G.libero]) if (p) spriteImg(p.mon.id, p.side === 0, p.role === 'L');
   if (document.fonts) document.fonts.load(`8px ${PX_FONT}`);
   for (const k in keys) keys[k] = false;
   updateTouchUI();
@@ -3996,6 +3997,7 @@ show('scr-title');
 requestAnimationFrame(frame);
 
 if (AUTO) { // test mode: draft and play without input
+  stopDemo(); // the title screen's demo match would put its saved settings back over these
   window.__test = { get G() { return G; }, settings };
   if (QS.get('mode')) settings.mode = Number(QS.get('mode'));
   if (QS.get('diff')) settings.diff = QS.get('diff');
