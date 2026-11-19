@@ -185,8 +185,11 @@ function press(action, down) {
     else if (!down && keys.jump && input.jumpT0 != null) { input.jumpQ = clamp((performance.now() - input.jumpT0) / 1000 / JUMP_CHARGE, 0, 1); input.jumpT0 = null; }
     keys.jump = down;
   }
-  else if (action === 'hit') { if (down && !keys.hit) input.hitQ = true; keys.hit = down; }
-  else if (action === 'set') { if (down && !keys.set) input.setQ = true; keys.set = down; }
+  else if (action === 'hit' || action === 'set') { // when it happened, so the meter is graded at the moment you pressed or let go
+    if (down && !keys[action]) { input[action + 'Q'] = true; input.downAt = performance.now(); }
+    if (!down && keys[action]) input.upAt = performance.now();
+    keys[action] = down;
+  }
   else if (action === 'dive') { if (down) input.diveQ = true; }
   else if (action === 'special') { if (down) input.specialQ = true; }
   else if (action === 'cam') { if (down) cycleCam(); }
@@ -639,6 +642,8 @@ function gradeL(L) {
 const SET_CHARGE = 0.55;
 const SET_HIGH = { q: 0.65, label: 'HIGH SET', color: '#8fd3ff' }, SET_QUICK = { q: 0.55, label: 'QUICK SET', color: '#7dffb0', quick: true };
 const holdLevel = h => ((h.tr ?? G.time) - h.t0) / h.C;
+// The game clock at a key or mouse event during the last frame (update() has already moved G.time to the end of it).
+const evTime = ms => (ms == null ? G.time : G.time - clamp((last - ms) / 1000, 0, 0.05) * SPEEDUP);
 // Your wind-up for the touch you are about to make, or null if you are not holding (or let go too soon).
 function holdGrade() {
   const h = G.hold;
@@ -1243,9 +1248,9 @@ function update(dt) {
   updateFormation();
   const you = G.sides[0].find(p => p.human);
   if (G.phase === 'rally' && you && !AUTO) { // the wind-up: press starts it, letting go freezes it
-    if (input.hitQ) G.hold = { t0: G.time, tr: null, C: CHARGE, kind: 'hit' };
-    if (input.setQ) G.hold = { t0: G.time, tr: null, C: SET_CHARGE, kind: 'set' };
-    if (G.hold && G.hold.tr == null && !keys[G.hold.kind]) G.hold.tr = G.time;
+    if (input.hitQ) G.hold = { t0: evTime(input.downAt), tr: null, C: CHARGE, kind: 'hit' };
+    if (input.setQ) G.hold = { t0: evTime(input.downAt), tr: null, C: SET_CHARGE, kind: 'set' };
+    if (G.hold && G.hold.tr == null && !keys[G.hold.kind]) G.hold.tr = Math.max(G.hold.t0, evTime(input.upAt));
     if (G.hold && G.time - (G.hold.tr ?? G.time) > RELEASE_WIN) G.hold = null;
   }
   if (G.phase !== 'rally') input.setQ = false;
@@ -1271,6 +1276,7 @@ function update(dt) {
         b.vy -= GB * dt; b.y += b.vy * dt;
         const h = G.hold;
         if (h && !keys.hit) {
+          h.tr = Math.max(h.t0, evTime(input.upAt));
           const gr = gradeL(holdLevel(h));
           floatText(gr.label, sv.x, sv.cy + sv.rr + 1.1, sv.z, gr.color, 0.7);
           G.meterShow = { p: sv, L: holdLevel(h), color: gr.color, t: G.time };
@@ -1285,11 +1291,15 @@ function update(dt) {
     input.hitQ = input.setQ = false;
     aiThink(dt);
     if (you && !AUTO) humanControl(you, dt);
-    const steps = Math.max(1, Math.round(dt / STEP)), h = dt / steps;
+    // step the clock with the physics, so a touch is graded at the moment it happens, not at the end of the frame
+    const steps = Math.max(1, Math.round(dt / STEP)), h = dt / steps, tEnd = G.time;
+    G.time -= dt;
     for (let i = 0; i < steps; i++) {
+      G.time += h;
       for (const p of G.players) stepPlayer(p, h);
       if (stepBall(h)) break;
     }
+    G.time = tEnd;
   } else {
     G.timer -= dt;
     if (G.subs.length) runSubs(dt);
