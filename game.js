@@ -990,16 +990,23 @@ function spike(p, q = null) {
       if (ix) tx = clamp(b.x + ix * HW, -HW * 0.85, HW * 0.85);
       if (keys.up) tz = t * 1.8; else if (keys.down) tz = t * (HL - 1);
     }
-    if (q != null && q < 0) { tx += rand(-1.5, 1.5); tz += t * rand(-1, 1); } // mistimed: it sprays
+    // your timing decides how true the aim is: perfect and good go where you point, OK drifts, a miss sprays
+    const spray = q == null || q < 0.65 ? (q != null && q < 0 ? 1.5 : 0.7) : 0;
+    tx += rand(-1, 1) * spray; tz += t * rand(-1, 1) * spray * 0.8;
+    if (q != null && q < 0 && Math.random() < (q <= -0.5 ? 0.55 : 0.45) && spikeError(p, tx)) return true; // a mistimed swing can miss
   } else {
     const e = (s === 0 ? MATE : DIFF[settings.diff]).err;
     tx += rand(-1, 1) * e; tz += rand(-1, 1) * e;
   }
   // Each spike is timed rather than given a raw speed: harder hitters land it sooner,
   // but there is always enough time to react and run to the landing ring.
-  const power = q == null ? 1 : 1.1 - q * 0.3; // your timing: a perfect swing lands about 20% sooner
-  // your own spike, and any perfect spike, is a kill shot: it is on the floor in about a third of a second
-  const flight = human || special ? clamp(0.5 - p.r.pwr * 0.0015, 0.36, 0.48) * power
+  // A perfect spike, yours or the computer's, is a kill shot: on the floor in about a third of a second.
+  // Your other spikes step down by timing (good about 0.5 s, OK about 0.8 s, mistimed about 1 s), so a defender can reach them.
+  const power = q == null ? 1 : 1.1 - q * 0.3;
+  const hitter = clamp(1.08 - p.r.pwr * 0.0016, 0.92, 1.05); // harder hitters land it a little sooner
+  const flight = special ? 0.32 * hitter
+    : human ? (settings.mode === 6 ? (q == null || q < 0.65 ? (q != null && q < 0 ? 1.0 : 0.75) : 0.56) // 6 v 6 has more defenders, but they cover less each
+                                   : (q == null || q < 0.65 ? (q != null && q < 0 ? 1.35 : 0.8) : 0.5)) * hitter
     : clamp(1.3 - p.r.pwr * 0.005, 0.8, 1.15) * (settings.mode === 6 ? 0.75 : 1) * power; // 6 v 6 has more defenders to beat
   const aims = [[tx, tz]];
   for (let i = 0; i < 5; i++) aims.push([rand(-HW * 0.8, HW * 0.8), t * rand(1.5, HL - 1)]);
@@ -1015,7 +1022,7 @@ function spike(p, q = null) {
     if (!inCourt(lx, lz, 1 - s) || Math.abs(lz) < 0.5) continue;
     b.vx = vx; b.vy = vy; b.vz = vz; b.gs = g / GB;
     G.lastAttack = { p, type: 'spike' };
-    if (human || special) G.shake = Math.max(G.shake, 0.18);
+    if (special || (human && q != null && q >= 0.65)) G.shake = Math.max(G.shake, 0.18);
     if (special) {
       const ty = p.mon.types[0];
       b.special = ty;
@@ -1023,11 +1030,29 @@ function spike(p, q = null) {
       G.shake = 0.35;
     }
     Sfx.spike();
-    hitstop(special ? 0.32 : human ? 0.12 : 0.15, special ? TYPE_COLORS[p.mon.types[0]] : '#ffffff');
+    hitstop(special ? 0.32 : human && (q == null || q < 0.65) ? 0.07 : human ? 0.12 : 0.15, special ? TYPE_COLORS[p.mon.types[0]] : '#ffffff');
     burst(b.x, b.y, b.z, special ? TYPE_COLORS[p.mon.types[0]] : '#ffffff', special ? 22 : 10);
     return true;
   }
   return false;
+}
+
+// A mistimed spike that misses: half go into the net, half sail long or wide.
+function spikeError(p, tx) {
+  const s = p.side, t = toward(s), b = G.ball;
+  if (Math.random() < 0.5) { // into the net
+    const T = Math.max(0.15, Math.abs(b.z) / 4);
+    b.vx = rand(-1, 1); b.vz = -b.z / T * 1.05; b.vy = Math.min(0, (NET_H * 0.5 - b.y) / T + GB * T / 2); b.gs = 1;
+  } else { // long, or off the side
+    const long = Math.random() < 0.6;
+    const ax = long ? clamp(tx, -HW, HW) : Math.sign(tx || rand(-1, 1)) * (HW + rand(0.8, 2)), az = t * (long ? HL + rand(1, 2.5) : rand(2, HL - 1));
+    const T = 0.9, g = Math.max(2.5, 2 * (b.y - BR + 1.5 * T) / (T * T));
+    b.vx = (ax - b.x) / T; b.vz = (az - b.z) / T; b.vy = 1.5; b.gs = g / GB;
+    if (!clearsNet(b.x, b.y, b.z, b.vx, b.vy, b.vz, g)) return false;
+  }
+  G.lastAttack = { p, type: 'spike' };
+  Sfx.spike(); hitstop(0.05, '#ffffff');
+  return true;
 }
 
 function doBlock(p) {
