@@ -166,34 +166,46 @@ const Sfx = {
 };
 
 // ===================== input =====================
-const keys = { left: false, right: false, up: false, down: false, hit: false };
-const input = { jumpBuf: 0, hitQ: false, diveQ: false, specialQ: false };
+// WASD moves. The mouse aims: serves, spikes, sets and over-balls go toward the cursor.
+// Left click receives on the ground and spikes in the air; E sets; right click dives on the ground
+// and blocks in the air; hold Space to charge a jump; Shift strafes; C and V (or the wheel) work the camera.
+const keys = { left: false, right: false, up: false, down: false, hit: false, set: false, jump: false, strafe: false };
+const input = { jumpT0: null, jumpQ: null, hitQ: false, setQ: false, diveQ: false, specialQ: false, aim: null };
 const KEYMAP = {
   ArrowLeft: 'left', KeyA: 'left', ArrowRight: 'right', KeyD: 'right',
   ArrowUp: 'up', KeyW: 'up', ArrowDown: 'down', KeyS: 'down',
-  Space: 'jump', KeyJ: 'hit', Enter: 'hit', KeyL: 'dive', KeyK: 'special', ShiftLeft: 'special', ShiftRight: 'special',
+  Space: 'jump', KeyE: 'set', KeyJ: 'hit', Enter: 'hit', KeyL: 'dive', KeyF: 'special', KeyK: 'special',
+  ShiftLeft: 'strafe', ShiftRight: 'strafe', KeyC: 'cam', KeyV: 'zoom',
 };
+const JUMP_CHARGE = 0.4; // seconds of holding Space for a full-height jump
 function press(action, down) {
   Sfx.init();
-  if (action === 'jump') { if (down) input.jumpBuf = 0.12; }
+  if (action === 'jump') {
+    if (down && !keys.jump) input.jumpT0 = performance.now();
+    else if (!down && keys.jump && input.jumpT0 != null) { input.jumpQ = clamp((performance.now() - input.jumpT0) / 1000 / JUMP_CHARGE, 0, 1); input.jumpT0 = null; }
+    keys.jump = down;
+  }
   else if (action === 'hit') { if (down && !keys.hit) input.hitQ = true; keys.hit = down; }
+  else if (action === 'set') { if (down && !keys.set) input.setQ = true; keys.set = down; }
   else if (action === 'dive') { if (down) input.diveQ = true; }
   else if (action === 'special') { if (down) input.specialQ = true; }
+  else if (action === 'cam') { if (down) cycleCam(); }
+  else if (action === 'zoom') { if (down) cycleZoom(); }
   else if (action in keys) keys[action] = down;
 }
 addEventListener('keydown', e => {
   if (!G || $('#stage').hidden) return;
   if (e.code === 'KeyP' || e.code === 'Escape') { togglePause(); e.preventDefault(); return; }
   if (e.code === 'KeyM') { Sfx.muted = !Sfx.muted; return; }
-  if (/^Digit[1-4]$/.test(e.code)) { pickSet(+e.code[5] - 1); e.preventDefault(); return; }
+  if (/^Digit[1-4]$/.test(e.code)) { if (!e.repeat) quickChat(+e.code[5] - 1); e.preventDefault(); return; }
   const a = KEYMAP[e.code];
   if (a) { e.preventDefault(); if (!e.repeat) press(a, true); }
 });
 addEventListener('keyup', e => { const a = KEYMAP[e.code]; if (a) press(a, false); });
-addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
+addEventListener('blur', () => { for (const k in keys) keys[k] = false; input.jumpT0 = null; });
 
 // ===================== match state =====================
-const settings = { mode: 2, diff: 'normal', target: 15, sets: 1, role: { 2: 'B', 6: 'OH' }, venue: { 2: 'beach', 6: 'arena' }, time: 'day', club: ['cerulean', 'random'] };
+const settings = { mode: 2, diff: 'normal', target: 15, sets: 1, role: { 2: 'B', 6: 'OH' }, venue: { 2: 'beach', 6: 'arena' }, time: 'day', club: ['cerulean', 'random'], camMode: 'follow', zoom: 1 };
 let clubs = null;   // [club, club] for this match, the rival resolved from 'random'
 let draft = null;   // { starter, picks: [mon], offers: [mon], rerolls }
 let capPick = null; // { role, offers: [mon], rerolls }: your own Pokémon, offered for your position
@@ -234,7 +246,7 @@ const ROLES = {
   L:   { name: 'Libero',         short: 'L',   fit: r => r.def * 2 + r.spd + r.skl * 0.3 },
 };
 const ROLE_DESC = {
-  S: 'Takes the second touch and runs the offense: you choose who gets the set (hold left for the outside, up for the middle quick, right for the opposite, down for the pipe).',
+  S: 'Takes the second touch and runs the offense: point the mouse at the hitter you want and press E to set them (charge E for a quick set).',
   OH: 'Passes serves and hits high sets from the left side. In the back row you hit the pipe, taking off from behind the attack line.',
   MB: 'Blocks along the whole net and hits fast quick sets right next to the setter.',
   OPP: 'Hits from the right side, blocks the other team\'s outside hitter, and sets if the setter has to dig.',
@@ -517,7 +529,7 @@ function newMatch() {
     serving: 0, server: null, phase: 'serve', timer: 0, time: 0,
     meter: [0, 0], armed: [false, false], react: [0, 0], aiErr: [[0, 0], [0, 0]], leave: [false, false],
     particles: [], texts: [], shake: 0, netWobble: 0, paused: false, shown: false, rally: 0, longestRally: 0,
-    cam: { x: 0, z: -HL - CAM.back },
+    cam: { x: 0, y: CAM.y, z: -HL - CAM.back },
   };
   startServe();
 }
@@ -552,9 +564,9 @@ function startServe() {
   }
   const sv = G.server;
   sv.x = clamp(0.5 * HW, -HW + 0.6, HW - 0.6) * toward(s); sv.z = -toward(s) * (HL + 0.8); // serve from the right, behind the end line
-  input.hitQ = input.diveQ = false; G.toss = false; G.hold = null; G.setPick = null; G.meterShow = null; G.tid = (G.tid || 0) + 1;
+  input.hitQ = input.setQ = input.diveQ = false; G.toss = false; G.hold = null; G.setPick = null; G.meterShow = null; G.tid = (G.tid || 0) + 1;
   const you = G.sides[0].find(p => p.human) || G.sides[0][0];
-  G.cam.z = Math.min(-HL - CAM.back, you.z - 6.6); G.cam.x = clamp(you.x * 0.55, -HW * 0.6, HW * 0.6);
+  Object.assign(G.cam, camWant(you, false));
 }
 
 // ===================== physics and prediction =====================
@@ -579,16 +591,16 @@ function stepPlayer(p, h) {
   if (!p.onGround) p.vy -= GP * h;
   p.x += p.vx * h; p.z += p.vz * h; p.y += p.vy * h;
   if (p.y <= 0) {
-    if (!p.onGround) { p.squash = 0.78; dust(p.x, p.z, 4, '#e8d3a2'); }
+    if (!p.onGround) { p.squash = 0.78; p.blockUp = false; dust(p.x, p.z, 4, '#e8d3a2'); }
     p.y = 0; p.vy = 0; p.onGround = true;
   }
   clampPlayer(p);
-  const want = Math.abs(p.vx) > 0.6 ? Math.sign(p.vx) * 0.75 : 0;
+  const want = p.strafe && input.aim ? Math.sign(input.aim.x - p.x) * 0.75 : Math.abs(p.vx) > 0.6 ? Math.sign(p.vx) * 0.75 : 0;
   p.face += (want - p.face) * Math.min(1, h * 10);
   p.cool -= h;
   if (p.dive > 0) { // sliding along the floor, slowing down
     p.dive -= h; const f = Math.max(0, 1 - 3.2 * h); p.vx *= f; p.vz *= f;
-    if (p.dive <= 0) { p.rec = 0.34; p.vx = p.vz = 0; dust(p.x, p.z, 6, '#e8d3a2'); }
+    if (p.dive <= 0) { p.rec = p.diveSide ? 0.17 : 0.34; p.vx = p.vz = 0; dust(p.x, p.z, 6, '#e8d3a2'); }
   } else if (p.rec > 0) { p.rec -= h; p.vx = p.vz = 0; }
 }
 // Right mouse: a dive. A fast slide that reaches low balls, then a moment on the floor getting up.
@@ -601,6 +613,7 @@ function startDive(p, ix, iz) {
     if (Math.hypot(dx, dz) < 0.3) { dx = 0; dz = toward(p.side); }
   }
   const d = Math.hypot(dx, dz), v = p.speed * 1.75;
+  p.diveSide = keys.strafe && Math.abs(dx) > Math.abs(dz) * 1.2; // strafing side dives get up faster
   p.diveDir = [dx / d, dz / d]; p.vx = dx / d * v; p.vz = dz / d * v;
   p.dive = 0.36; p.squash = 0.8;
   dust(p.x, p.z, 5, '#e8d3a2');
@@ -618,11 +631,16 @@ function gradeL(L) {
   for (const [top, q, label, color] of ZONES) if (L <= top) return { q, label, color };
   return TOO_LONG;
 }
+// E is the set. Its meter is a charge, not a timing window: start holding while you run in,
+// and if it is full when you touch the ball you get a quick set (low and fast); before that, a high set.
+const SET_CHARGE = 0.55;
+const SET_HIGH = { q: 0.65, label: 'HIGH SET', color: '#8fd3ff' }, SET_QUICK = { q: 0.55, label: 'QUICK SET', color: '#7dffb0', quick: true };
 const holdLevel = h => ((h.tr ?? G.time) - h.t0) / h.C;
 // Your wind-up for the touch you are about to make, or null if you are not holding (or let go too soon).
 function holdGrade() {
   const h = G.hold;
   if (!h || (h.tr != null && G.time - h.tr > RELEASE_WIN)) return null;
+  if (h.kind === 'set') return { ...(holdLevel(h) >= 1 ? SET_QUICK : SET_HIGH), set: true };
   return gradeL(holdLevel(h));
 }
 const contactY = p => (p.dive > 0 ? p.y + p.rr * 0.55 : p.cy);
@@ -649,9 +667,10 @@ function predictContact(p) {
   }
   return best < R + 1.2 ? { T: bestT, reach: false } : null;
 }
-function jump(p) {
+// c is your Space charge from 0 to 1: a tap jumps to about two thirds of full height, a full charge a little above it.
+function jump(p, c = null) {
   if (!p.onGround) return;
-  p.vy = p.jumpV; p.onGround = false; p.squash = 1.2;
+  p.vy = p.jumpV * (c == null ? 1 : Math.sqrt(0.62 + 0.48 * c)); p.onGround = false; p.squash = 1.2; p.blockUp = false;
 }
 function moveToward(p, tx, tz, mult) {
   const dx = tx - p.x, dz = tz - p.z, d = Math.hypot(dx, dz);
@@ -702,9 +721,13 @@ function doServe(p, q = null) {
   const human = !aiControlled(p);
   let tx, depth;
   if (human) {
-    const ix = (keys.right ? 1 : 0) - (keys.left ? 1 : 0);
-    tx = ix * HW * 0.6 + rand(-0.6, 0.6);
-    depth = keys.up ? 2.6 : keys.down ? HL - 1.2 : HL * 0.6;
+    const a = aimInto(s, 0.6);
+    if (a) { tx = a[0]; depth = a[1] * t; } // serve toward the cursor
+    else { // no mouse: aim with the movement keys
+      const ix = (keys.right ? 1 : 0) - (keys.left ? 1 : 0);
+      tx = ix * HW * 0.6 + rand(-0.6, 0.6);
+      depth = keys.up ? 2.6 : keys.down ? HL - 1.2 : HL * 0.6;
+    }
     const e = q == null ? 1 : q >= 0 ? 1 - q * 0.8 : 1 - q * 2.5; // your timing tightens or sprays the aim
     tx += rand(-0.6, 0.6) * (e - 1); depth += rand(-0.5, 0.5) * e;
   } else { tx = rand(-HW * 0.8, HW * 0.8); depth = rand(2.2, HL - 0.8); }
@@ -754,7 +777,7 @@ function contact(p) {
   }
 
   // block at the net (a libero may not block)
-  if (p.role !== 'L' && !p.onGround && !p.dive && Math.abs(p.z) < p.rr + 0.9 && fromOpp && b.vz * t < 0 && b.y > NET_H - 0.3 && G.lastSide !== -1) {
+  if (p.role !== 'L' && !p.onGround && !p.dive && (aiControlled(p) || p.blockUp) && Math.abs(p.z) < p.rr + 0.9 && fromOpp && b.vz * t < 0 && b.y > NET_H - 0.3 && G.lastSide !== -1) {
     doBlock(p, wasSpecial);
     return;
   }
@@ -783,10 +806,12 @@ function contact(p) {
   const highEnough = b.y > NET_H;
   let action;
   if (!aiControlled(p)) {
-    // left click is the attack: in the air above the net it spikes; on the third touch it tips.
-    // Otherwise the hold times your pass or set. No hold still passes, just less cleanly.
-    if (tm && airborne && highEnough && !dove) action = 'spike';
-    else if (G.touches[s] >= 3) action = tm ? 'tip' : 'over';
+    // E sets (the third touch has to go over, so a set there is an over ball toward the cursor).
+    // Left click receives on the ground and spikes in the air above the net; in the air on the third touch, below the net, it tips.
+    // No hold at all still passes, just less cleanly.
+    if (tm && tm.set) action = G.touches[s] >= 3 ? 'over' : 'set';
+    else if (tm && airborne && highEnough && !dove) action = 'spike';
+    else if (G.touches[s] >= 3) action = tm && airborne ? 'tip' : 'over';
     else action = 'pass';
   } else {
     const nearNet = Math.abs(p.z) < 3;
@@ -810,7 +835,7 @@ function contact(p) {
     if (aiControlled(p) && G.meter[s] >= 100 && Math.random() < 0.6 && !(s === 0 && !AUTO)) special = true;
     if (!spike(p, special, q)) action = 'over';
   }
-  if (action === 'pass') pass(p, incoming, wasSpecial, fromOpp, q, dove);
+  if (action === 'pass' || action === 'set') pass(p, incoming, wasSpecial, fromOpp, q, dove, action === 'set' ? tm : null);
   else if (action === 'over') { over(p); G.lastAttack = { p, type: 'over' }; }
   else if (action === 'tip') { tip(p); G.lastAttack = { p, type: 'tip' }; }
 
@@ -845,19 +870,31 @@ function playOptions(s, setter) {
   }
   return opts;
 }
-function choosePlay(s, setter) {
+// The hitter you are aiming at as setter: the one nearest the cursor, left to right.
+function aimedOption(opts) {
+  if (!input.aim || !opts.length) return null;
+  const sx = proj(input.aim.x, 0, input.aim.z).x;
+  return opts.reduce((a, o) => (Math.abs(proj(o.q.x, 0, o.q.z).x - sx) < Math.abs(proj(a.q.x, 0, a.q.z).x - sx) ? o : a));
+}
+function choosePlay(s, setter, tm = null) {
   const m = toward(s), opts = playOptions(s, setter);
   let pick = null;
-  if (!aiControlled(setter) && s === 0) { pick = opts.find(o => o.type === G.setPick) || null; G.setPick = null; } // the button you picked
+  if (!aiControlled(setter) && s === 0) { // you set whoever the cursor points at (on touch screens, the button you tapped)
+    pick = aimedOption(opts) || opts.find(o => o.type === G.setPick) || null; G.setPick = null;
+  }
   if (!pick) {
-    const wt = o => o.w * (o.q.r.pwr + o.q.r.jmp) * (o.q.human && !AUTO ? 3 : 1);
+    const callMe = G.chat && G.chat.k === 1 && G.time - G.chat.t < 4; // you called for the ball
+    const wt = o => o.w * (o.q.r.pwr + o.q.r.jmp) * (o.q.human && !AUTO ? (callMe ? 12 : 3) : 1);
     let x = Math.random() * opts.reduce((a, o) => a + wt(o), 0);
     pick = opts.find(o => (x -= wt(o)) <= 0) || opts[0];
   }
+  pick = { ...pick };
+  if (tm && tm.quick && pick.type !== 'quick') { pick.apex = NET_H + 1.25; pick.call = 'QUICK'; if (pick.type !== 'pipe') pick.oz = Math.max(pick.oz, -0.9); } // the pipe stays behind the attack line // a charged E: low and fast
+  if (tm && !tm.quick && pick.type === 'quick') { pick.apex = NET_H + 1.9; pick.call = 'HIGH'; }
   return { ...pick, tx: pick.ox * m, tz: pick.oz * m, ty: pick.q.apex + pick.q.rr * 2 };
 }
 
-function pass(p, incoming, wasSpecial, fromOpp, q = null, dove = false) {
+function pass(p, incoming, wasSpecial, fromOpp, q = null, dove = false, setTm = null) {
   const s = p.side, t = toward(s), b = G.ball;
   let target, tx, tz, ty, apexY, skill;
   if (G.touches[s] === 1) { // pass to the setter's target spot
@@ -865,7 +902,7 @@ function pass(p, incoming, wasSpecial, fromOpp, q = null, dove = false) {
     const [ox, oz] = setterSpot();
     tx = ox * t; tz = oz * t; ty = 1.3; apexY = NET_H + 2.0; skill = p.r.def;
   } else { // set one of the hitters
-    const play = choosePlay(s, p);
+    const play = choosePlay(s, p, setTm);
     target = play.q; tx = play.tx; tz = play.tz; ty = play.ty; apexY = play.apex + rand(0, 0.3); skill = p.r.skl;
     G.play[s] = play.type;
     floatText(play.call, p.x, p.cy + p.rr + 0.6, p.z, '#ffe9a0', 0.9);
@@ -893,13 +930,15 @@ function pass(p, incoming, wasSpecial, fromOpp, q = null, dove = false) {
 }
 
 function over(p) {
-  const t = toward(p.side);
-  lob(rand(-HW * 0.8, HW * 0.8), t * rand(2.2, HL - 1.4), NET_H + rand(1.2, 2.4));
+  const t = toward(p.side), a = !aiControlled(p) && aimInto(p.side, 0.8);
+  if (a) lob(a[0] + rand(-0.5, 0.5), a[1] + t * rand(-0.5, 0.5), NET_H + rand(1.2, 2.0));
+  else lob(rand(-HW * 0.8, HW * 0.8), t * rand(2.2, HL - 1.4), NET_H + rand(1.2, 2.4));
   Sfx.bump();
 }
 function tip(p) {
-  const t = toward(p.side);
-  lob(clamp(G.ball.x + rand(-1.5, 1.5), -HW + 0.5, HW - 0.5), t * rand(0.8, 2.6), NET_H + rand(0.5, 0.9));
+  const t = toward(p.side), a = !aiControlled(p) && aimInto(p.side, 0.5);
+  if (a) lob(a[0], t * clamp(a[1] * t, 0.8, 3.2), NET_H + rand(0.5, 0.9)); // a soft shot toward the cursor, kept short
+  else lob(clamp(G.ball.x + rand(-1.5, 1.5), -HW + 0.5, HW - 0.5), t * rand(0.8, 2.6), NET_H + rand(0.5, 0.9));
   Sfx.bump();
 }
 
@@ -920,9 +959,13 @@ function spike(p, special, q = null) {
   const human = !aiControlled(p);
   let [tx, tz] = openSpot(s, human ? 16 : 4); // the computer does not always find the best gap
   if (human) {
-    const ix = (keys.right ? 1 : 0) - (keys.left ? 1 : 0);
-    if (ix) tx = clamp(b.x + ix * HW, -HW * 0.85, HW * 0.85);
-    if (keys.up) tz = t * 1.8; else if (keys.down) tz = t * (HL - 1);
+    const a = aimInto(s, 0.6);
+    if (a) [tx, tz] = a; // the spike goes where the cursor points
+    else { // no mouse: aim with the movement keys
+      const ix = (keys.right ? 1 : 0) - (keys.left ? 1 : 0);
+      if (ix) tx = clamp(b.x + ix * HW, -HW * 0.85, HW * 0.85);
+      if (keys.up) tz = t * 1.8; else if (keys.down) tz = t * (HL - 1);
+    }
     if (q != null && q < 0) { tx += rand(-1.5, 1.5); tz += t * rand(-1, 1); } // mistimed: it sprays
   } else {
     const e = (s === 0 ? MATE : DIFF[settings.diff]).err;
@@ -997,7 +1040,7 @@ function stepBall(h) {
     const sIn = b.z < 0 ? 0 : 1;
     if (G.lastSide === 1 - sIn) {
       for (const p of G.sides[sIn]) {
-        if (p.role === 'L' || p.onGround || p.cool > 0 || Math.abs(p.z) > p.rr + 1.0) continue;
+        if (p.role === 'L' || p.onGround || p.cool > 0 || Math.abs(p.z) > p.rr + 1.0 || !(aiControlled(p) || p.blockUp)) continue; // you block with right click in the air
         if (Math.abs(b.x - p.x) < p.rr + 0.55 && b.y <= p.y + p.rr * 2 + 0.9) { doBlock(p, b.special); break; }
       }
     }
@@ -1088,6 +1131,9 @@ function chooseReceiver(s, lx, lz) {
     + (first && settings.mode === 6 && p.role === 'S' ? 0.35 : 0) + (first && serve && !isPasser(p) ? 0.4 : 0);
   let best = null;
   for (const p of cands) if (!best || cost(p) < cost(best)) best = p;
+  // you called it: teammates leave this ball to you
+  const you = cands.find(p => p.human);
+  if (you && !AUTO && s === 0 && G.chat && G.chat.k === 0 && G.time - G.chat.t < 3 && G.chat.tid >= G.tid - 1) return you;
   // the ball is yours when it comes to you; teammates cover what you cannot reach
   if (best && best.human && !AUTO && Math.hypot(best.x - lx, best.z - lz) > 2.4) {
     const ais = cands.filter(p => !p.human);
@@ -1151,20 +1197,26 @@ function aiBlock(p, pars, dt, bxWorld) {
   } else p.ai.blockWait = -1;
 }
 
-function humanControl(p) {
+function humanControl(p, dt) {
   const ix = (keys.right ? 1 : 0) - (keys.left ? 1 : 0), iz = (keys.up ? 1 : 0) - (keys.down ? 1 : 0);
-  if (input.diveQ) { input.diveQ = false; if (G.phase === 'rally') startDive(p, ix, iz); }
-  if (p.dive > 0 || p.rec > 0) return; // the slide carries you, then you get up
-  const d = Math.hypot(ix, iz) || 1, sp = p.speed * (p.onGround ? 1 : 0.8);
-  p.vx = ix / d * sp; p.vz = iz / d * sp * toward(p.side);
-  if (input.jumpBuf > 0 && p.onGround) { jump(p); input.jumpBuf = 0; }
+  p.strafe = keys.strafe && !!input.aim;
+  if (input.diveQ) { // right click: a dive on the ground, a block in the air
+    input.diveQ = false;
+    if (G.phase === 'rally') { if (p.onGround) startDive(p, ix, iz); else if (p.role !== 'L') p.blockUp = true; }
+  }
+  if (p.dive > 0 || p.rec > 0) { input.jumpT0 = null; input.jumpQ = null; return; } // the slide carries you, then you get up
+  const d = Math.hypot(ix, iz) || 1, sp = p.speed * (p.strafe ? 0.85 : 1);
+  const wx = ix / d * sp, wz = iz / d * sp * toward(p.side);
+  if (p.onGround) { p.vx = wx; p.vz = wz; }
+  else { const k = Math.min(1, dt * 2.5); p.vx += (wx * 0.8 - p.vx) * k; p.vz += (wz * 0.8 - p.vz) * k; } // a running jump keeps its momentum
+  if (input.jumpT0 != null && p.onGround) p.squash = Math.min(p.squash, 1 - 0.14 * clamp((performance.now() - input.jumpT0) / 1000 / JUMP_CHARGE, 0, 1)); // crouch while charging
+  if (input.jumpQ != null) { if (p.onGround) jump(p, input.jumpQ); input.jumpQ = null; }
 }
 
 // ===================== main update =====================
 function update(dt) {
   if (!G || G.paused) return;
   G.time += dt;
-  input.jumpBuf -= dt;
   G.cheer = Math.max(0, (G.cheer || 0) - dt * 0.6);
   G.shake = Math.max(0, G.shake - dt); G.netWobble = Math.max(0, G.netWobble - dt * 2.5);
   for (const p of G.players) p.squash += (1 - p.squash) * Math.min(1, dt * 12);
@@ -1181,16 +1233,18 @@ function update(dt) {
   updateFormation();
   const you = G.sides[0].find(p => p.human);
   if (G.phase === 'rally' && you && !AUTO) { // the wind-up: press starts it, letting go freezes it
-    if (input.hitQ) G.hold = { t0: G.time, tr: null, C: CHARGE };
-    if (G.hold && G.hold.tr == null && !keys.hit) G.hold.tr = G.time;
+    if (input.hitQ) G.hold = { t0: G.time, tr: null, C: CHARGE, kind: 'hit' };
+    if (input.setQ) G.hold = { t0: G.time, tr: null, C: SET_CHARGE, kind: 'set' };
+    if (G.hold && G.hold.tr == null && !keys[G.hold.kind]) G.hold.tr = G.time;
     if (G.hold && G.time - (G.hold.tr ?? G.time) > RELEASE_WIN) G.hold = null;
   }
+  if (G.phase !== 'rally') input.setQ = false;
   if (G.phase === 'serve') {
     const sv = G.server, b = G.ball;
     G.timer += dt;
     for (const p of G.players) {
       if (p === sv) { p.vx = p.vz = 0; }
-      else if (!aiControlled(p)) humanControl(p);
+      else if (!aiControlled(p)) humanControl(p, dt);
       else moveToward(p, p.homeX, p.homeZ, 0.7);
       stepPlayer(p, dt);
     }
@@ -1201,7 +1255,7 @@ function update(dt) {
         b.y = sv.y + sv.rr * 2 + 0.35 + Math.sin(G.time * 4) * 0.05;
         if (input.hitQ) {
           input.hitQ = false; G.toss = true; b.vy = 4.6; sv.squash = 1.1; Sfx.tone(520, 0.05, 'triangle', 0.03, 160);
-          G.hold = { t0: G.time, tr: null, C: Math.max(0.3, timeToY({ ...b, vx: 0, vz: 0 }, hy) ?? 0.9) }; // full as it reaches your hand
+          G.hold = { kind: 'hit', t0: G.time, tr: null, C: Math.max(0.3, timeToY({ ...b, vx: 0, vz: 0 }, hy) ?? 0.9) }; // full as it reaches your hand
         }
       } else {
         b.vy -= GB * dt; b.y += b.vy * dt;
@@ -1218,9 +1272,9 @@ function update(dt) {
       if (G.timer > 1.1) doServe(sv);
     }
   } else if (G.phase === 'rally') {
-    input.hitQ = false;
+    input.hitQ = input.setQ = false;
     aiThink(dt);
-    if (you && !AUTO) humanControl(you);
+    if (you && !AUTO) humanControl(you, dt);
     const steps = Math.max(1, Math.round(dt / STEP)), h = dt / steps;
     for (let i = 0; i < steps; i++) {
       for (const p of G.players) stepPlayer(p, h);
@@ -1231,7 +1285,7 @@ function update(dt) {
     if (G.subs.length) runSubs(dt);
     for (const p of G.players) {
       if (p.subbing) continue;
-      if (!aiControlled(p)) humanControl(p); else moveToward(p, p.homeX, p.homeZ, 0.5);
+      if (!aiControlled(p)) humanControl(p, dt); else moveToward(p, p.homeX, p.homeZ, 0.5);
       stepPlayer(p, dt);
     }
     if (G.timer <= 0) {
@@ -1245,12 +1299,43 @@ function update(dt) {
     if (b.trail.length > (b.special ? 14 : 6)) b.trail.shift();
   } else b.trail.length = 0;
 
-  // the camera drifts to keep you in view
-  const focus = you || G.sides[0][0];
-  const want = clamp(focus.x * 0.55 + G.ball.x * 0.15, -HW * 0.6, HW * 0.6);
-  G.cam.x += (want - G.cam.x) * Math.min(1, dt * 2.5);
-  const wantZ = Math.min(-HL - CAM.back, focus.z - 6.6); // back up when you go deep or serve
-  G.cam.z += (wantZ - G.cam.z) * Math.min(1, dt * 3);
+  // the camera drifts to keep you in view (or holds still in fixed mode), and dollies in or out with the zoom
+  const cw = camWant(you || G.sides[0][0], true);
+  G.cam.x += (cw.x - G.cam.x) * Math.min(1, dt * 2.5);
+  G.cam.z += (cw.z - G.cam.z) * Math.min(1, dt * 3);
+  G.cam.y += (cw.y - G.cam.y) * Math.min(1, dt * 4);
+}
+// Where the camera wants to be. Zoom slides it along its own line of sight, so the court stays framed the same way.
+function camWant(focus, ball) {
+  const fixed = settings.camMode === 'fixed', d = settings.zoom;
+  const x = fixed ? 0 : clamp(focus.x * 0.55 + (ball ? G.ball.x * 0.15 : 0), -HW * 0.6, HW * 0.6);
+  const z0 = fixed ? -(HL + 0.8) - 6.6 : Math.min(-HL - CAM.back, focus.z - 6.6); // back up when you go deep or serve
+  const piv = CAM.y / Math.tan(CAM.pitch);
+  return { x, z: z0 + piv * (1 - d), y: CAM.y * d };
+}
+const ZOOMS = [1, 0.86, 1.12], ZOOM_NAMES = { 1: 'NORMAL', 0.86: 'CLOSE', 1.12: 'WIDE' };
+function cycleCam() {
+  settings.camMode = settings.camMode === 'fixed' ? 'follow' : 'fixed'; saveSettings();
+  toast(`CAMERA: ${settings.camMode === 'fixed' ? 'FIXED' : 'FOLLOW'}`);
+}
+function cycleZoom() {
+  const i = ZOOMS.indexOf(settings.zoom);
+  settings.zoom = ZOOMS[(i + 1) % ZOOMS.length]; saveSettings();
+  toast(`ZOOM: ${ZOOM_NAMES[settings.zoom]}`);
+}
+function wheelZoom(dy) {
+  settings.zoom = Math.round(clamp(settings.zoom * Math.exp(dy * 0.0012), 0.84, 1.14) * 100) / 100; saveSettings();
+  toast(`ZOOM ${Math.round(100 / settings.zoom)}%`);
+}
+function toast(text) { if (G) G.toast = { text, t: G.time }; }
+
+// 1 to 4: quick chat over your Pokémon. "Set me!" tells your setter to look for you; "Mine!" sends your teammates off the ball.
+const CHATS = ['MINE!', 'SET ME!', 'NICE!', 'MY BAD'];
+function quickChat(k) {
+  const you = G && G.sides[0].find(p => p.human);
+  if (!you || AUTO || G.paused) return;
+  G.chat = { k, t: G.time, tid: G.tid };
+  Sfx.tone([660, 880, 990, 440][k], 0.06, 'square', 0.025);
 }
 
 // ===================== effects =====================
@@ -1434,7 +1519,7 @@ function star(ctx, x, y, s) {
 const canvas = $('#court'), ctx = canvas.getContext('2d');
 const CAM = { y: 8.6, back: 3.6, pitch: 0.47, F: (H / 2) / Math.tan(31 * Math.PI / 180), cy: H * 0.56 };
 function proj(x, y, z) {
-  const dx = x - G.cam.x, dy = y - CAM.y, dz = z - G.cam.z;
+  const dx = x - G.cam.x, dy = y - G.cam.y, dz = z - G.cam.z;
   const c = Math.cos(CAM.pitch), s = Math.sin(CAM.pitch);
   const Y = dy * c + dz * s, Z = Math.max(0.3, -dy * s + dz * c);
   const k = CAM.F / Z;
@@ -2107,13 +2192,14 @@ function drawLandingCarets(lx, lz, tl) {
 // A thin vertical meter beside your Pokemon, in the style of a basketball shot meter.
 // It fills upward while you hold; the gold notch at the top is the PERFECT window.
 // Past the top it turns red. After a release it freezes in the grade colour and fades.
-function drawTimingMeter(p, L, tick, dim, result) {
+function drawTimingMeter(p, L, tick, dim, result, set = false) {
   const bx = p.box || { ...proj(p.x, p.y, p.z), w: 40, h: 60 };
   const w = 2, h = 22, x = Math.round((bx.x + bx.w / 2) * US + 3), y = Math.round((bx.y - bx.h * 0.55) * US - h / 2);
   const bow = 3, off = i => Math.round(bow * Math.sin(Math.PI * i / h)); // row i (0 = top) bows outward
-  const over = L != null && L > 1, gold = ZONES[2][0];
+  if (set && L != null) L = Math.min(L, 1); // a set charge never goes red: full is a quick set
+  const over = L != null && L > 1, gold = set ? 1 : ZONES[2][0];
   const top = l => h - Math.round(h * clamp(l, 0, 1)); // first row filled at level l
-  const fillCol = L == null ? null : result ? result.color : L > gold ? '#ffcf33' : '#ffffff';
+  const fillCol = L == null ? null : result ? result.color : set ? (L >= 1 ? SET_QUICK.color : SET_HIGH.color) : L > gold ? '#ffcf33' : '#ffffff';
   ctx.save(); ctx.globalAlpha = result ? result.a : dim ? 0.45 : 1;
   pxRect(x + off(0) - 1, y - 1, w + 2, 1, 'rgba(10,14,24,0.85)');
   pxRect(x + off(h - 1) - 1, y + h, w + 2, 1, 'rgba(10,14,24,0.85)');
@@ -2124,13 +2210,14 @@ function drawTimingMeter(p, L, tick, dim, result) {
     if (!over && fillCol && i >= top(L)) col = fillCol;
     pxRect(rx, y + i, w, 1, col);
   }
-  if (!over) pxRect(x + off(top(gold)) - 2, y + top(gold), w + 4, 1, '#ffcf33');
+  if (!over && !set) pxRect(x + off(top(gold)) - 2, y + top(gold), w + 4, 1, '#ffcf33');
+  if (set && L != null && !result) pxText(L >= 1 ? 'QUICK' : 'SET', x + 8, y + h / 2 - 4, fillCol, 8, 'left', null);
   if (tick != null && !result) { const i = clamp(top(tick), 0, h - 1); pxRect(x + off(i) - 4, y + i - 1, 2, 2, tick > 1 ? '#ff5a5a' : '#eef3ff'); }
   ctx.restore();
 }
 
-// 6 v 6, when the pass is coming to you as setter: a button over each hitter you can set.
-// Click one (or press its number) to pick the set; pressing on it also starts your wind-up.
+// 6 v 6, when the pass is coming to you as setter. With a mouse, the hitter nearest the cursor is marked:
+// that is who gets your set. On a touch screen, a button over each hitter to tap instead.
 function setChoices() {
   const you = G.sides[0].find(p => p.human);
   if (settings.mode !== 6 || AUTO || !you || G.phase !== 'rally' || G.lastSide !== 0 || G.touches[0] !== 1 || G.intended[0] !== you) return null;
@@ -2140,6 +2227,15 @@ function drawSetButtons() {
   G.setBtns = [];
   const opts = setChoices();
   if (!opts) return;
+  const aimed = aimedOption(opts);
+  if (aimed) {
+    const q = aimed.q, top = proj(q.x, q.y + q.rr * 2 + 0.3, q.z), x = Math.round(top.x * US), y = Math.round(top.y * US - 12);
+    const w = aimed.call.length * 8 + 8;
+    pxRect(x - w / 2 - 1, y - 1, w + 2, 16, '#10141f'); pxRect(x - w / 2, y, w, 14, '#ffcf33'); pxRect(x - w / 2, y + 12, w, 2, '#c48a10');
+    pxText(aimed.call, x, y + 3, '#141c33', 8, 'center', null);
+    pxRect(x - 2, y + 15, 4, 3, '#ffcf33');
+    return;
+  }
   const chip = (x, y, w, text, on, type) => {
     const h = 14;
     pxRect(x - 1, y - 1, w + 2, h + 2, '#10141f');
@@ -2166,12 +2262,12 @@ function drawSetButtons() {
   pxText('SET TO', UW / 2, UH - 64, '#c9d4ee', 8);
   for (const it of items) { const w = it.text.length * 8 + 8; chip(x, UH - 52, w, it.text, G.setPick === it.o.type, it.o.type); x += w + gap; }
 }
-function pickSet(i) { const opts = setChoices(); if (opts && opts[i]) { G.setPick = opts[i].type; Sfx.tone(700, 0.04, 'square', 0.025); } }
 
 function drawPlayer(p) {
   const back = p.side === 0, f = proj(p.x, p.y, p.z);
   const img = spriteImg(p.mon.id, back), box = SPRITE_BOX[p.mon.id];
-  if (Math.abs(p.vx) > 0.6) p.flip = back ? p.vx < 0 : p.vx > 0;
+  if (p.strafe && input.aim) p.flip = back ? input.aim.x < p.x : input.aim.x > p.x; // strafing: face the cursor
+  else if (Math.abs(p.vx) > 0.6) p.flip = back ? p.vx < 0 : p.vx > 0;
   if (img.complete && img.naturalWidth) {
     const [sx, sy, sw, sh] = back ? box.slice(4) : box.slice(0, 4);
     const k = p.rr * 3.3 * (back ? 1 : 1.3) * f.k / sh; // the far team is drawn a bit larger so it reads at a distance
@@ -2232,6 +2328,19 @@ function render() {
       const lx = b.x + b.vx * tl, lz = b.z + b.vz * tl;
       if (lz < 0) drawLandingCarets(lx, lz, tl);
     }
+  }
+  // where your serve or attack would go: the cursor, pulled inside the other court
+  const aim = you && !AUTO && (G.phase === 'rally' || (G.phase === 'serve' && G.server === you)) ? aimInto(0, 0.6) : null;
+  if (aim) {
+    const [ax, az] = aim;
+    ctx.lineWidth = 6; ctx.strokeStyle = 'rgba(16,20,31,0.6)'; groundEllipse(ax, az, 0.6, 0.6); ctx.stroke();
+    ctx.lineWidth = 3; ctx.strokeStyle = '#ffe14a'; groundEllipse(ax, az, 0.6, 0.6); ctx.stroke();
+    for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const a = proj(ax + dx * 0.3, 0, az + dz * 0.3), c = proj(ax + dx * 0.8, 0, az + dz * 0.8);
+      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(c.x, c.y); ctx.stroke();
+    }
+  }
+  if (G.phase === 'rally') {
     // where and when to block: the other team has set its hitter
     if (you && !AUTO && G.lastSide === 1 && G.touches[1] >= 1) {
       const atk = G.sides[1].find(q => !q.onGround && Math.abs(q.z) < 3.2) || (G.touches[1] >= 2 ? G.intended[1] : null);
@@ -2240,7 +2349,7 @@ function render() {
         ctx.strokeStyle = up ? '#ff4d4d' : 'rgba(255,90,90,0.75)'; ctx.lineWidth = 6;
         groundEllipse(bx, bz, 0.7, 0.4); ctx.stroke();
         const lab = proj(bx, 0, bz);
-        if (!up || Math.floor(G.time * 8) % 2 === 0) labels.push([up ? 'JUMP!' : 'BLOCK HERE', lab.x * US, lab.y * US + 6, '#ff8a8a']);
+        if (!up || Math.floor(G.time * 8) % 2 === 0) labels.push([up ? 'JUMP + RIGHT CLICK' : 'BLOCK HERE', lab.x * US, lab.y * US + 6, '#ff8a8a']);
       }
     }
     if (you && !AUTO && G.intended[0] === you && G.lastSide === 0) {
@@ -2277,13 +2386,21 @@ function render() {
     if (mk > 0) drawTimingMeter(you, m.L, null, false, { color: m.color, a: Math.min(1, mk * 2) });
     else if (G.phase === 'serve' && G.toss && G.server === you && G.hold) drawTimingMeter(you, holdLevel(G.hold), null, false);
     else if (G.phase === 'rally') {
-      const pr = predictContact(you), h = G.hold, L = h ? holdLevel(h) : null;
-      const tick = pr && pr.reach ? (h && h.tr != null ? null : (L || 0) + pr.T / CHARGE) : null;
-      if (h || (pr && pr.T <= CHARGE * 1.6)) drawTimingMeter(you, L, tick, !h && !(pr && pr.reach));
+      const pr = predictContact(you), h = G.hold, L = h ? holdLevel(h) : null, set = !!h && h.kind === 'set';
+      const tick = pr && pr.reach && !set ? (h && h.tr != null ? null : (L || 0) + pr.T / CHARGE) : null;
+      if (h || (pr && pr.T <= CHARGE * 1.6)) drawTimingMeter(you, L, tick, !h && !(pr && pr.reach), null, set);
     }
     if (G.phase === 'rally') {
       drawSetButtons();
     }
+  }
+  if (you && !AUTO && you.blockUp && !you.onGround) { const c = proj(you.x, you.y + you.rr * 2 + 0.5, you.z); pxText('BLOCK', c.x * US, c.y * US - 10, '#ffffff', 8); }
+  if (you && G.chat && G.time - G.chat.t < 1.6) { // quick chat bubble over your Pokémon
+    const text = CHATS[G.chat.k], c = proj(you.x, you.y + you.rr * 2 + 0.9, you.z), w = text.length * 8 + 10;
+    const x = Math.round(clamp(c.x * US, w / 2 + 2, UW - w / 2 - 2)), y = Math.round(c.y * US - 34);
+    pxRect(x - w / 2 - 1, y - 1, w + 2, 16, '#10141f'); pxRect(x - w / 2, y, w, 14, '#ffffff');
+    pxRect(x - 3, y + 14, 6, 2, '#ffffff'); pxRect(x - 1, y + 16, 2, 2, '#ffffff');
+    pxText(text, x, y + 3, '#141c33', 8, 'center', null);
   }
   for (const t of G.texts) if (!t.big) {
     const k = t.t / t.life, p = proj(t.x, t.y, t.z);
@@ -2297,6 +2414,7 @@ function drawHud() {
   ctx.setTransform(U, 0, 0, U, 0, 0);
   const cx = UW / 2;
   drawScoreboard();
+  if (G.toast && G.time - G.toast.t < 1.2) pxText(G.toast.text, cx, UH - 84, '#ffffff', 8);
   for (let s = 0; s < 2; s++) {
     const w = 96, x = s === 0 ? 8 : UW - 8 - w, y = UH - 12;
     const lead = s === 0 ? G.sides[0].find(p => p.human) || G.sides[0][0] : G.sides[1].find(p => p.entry.captain) || G.sides[1][0];
@@ -2304,7 +2422,7 @@ function drawHud() {
     const fill = Math.floor((w * G.meter[s] / 100) / 4) * 4; // fills in 4 px steps
     pxRect(x, y, fill, 6, TYPE_COLORS[lead.mon.types[0]]);
     let label = 'TYPE SPIKE';
-    if (s === 0 && !AUTO) label = G.armed[0] ? 'ARMED!' : G.meter[0] >= 100 ? 'PRESS K' : 'TYPE SPIKE';
+    if (s === 0 && !AUTO) label = G.armed[0] ? 'ARMED!' : G.meter[0] >= 100 ? 'PRESS F' : 'TYPE SPIKE';
     const blink = G.meter[s] >= 100 && Math.floor(G.time * 4) % 2;
     pxText(label, s === 0 ? x : x + w, y - 11, blink ? '#ffe14a' : '#ffffff', 8, s === 0 ? 'left' : 'right');
   }
@@ -2391,7 +2509,7 @@ function frame(now) {
   }
   requestAnimationFrame(frame);
 }
-// mouse: left button hits (serve, pass, set, spike), right button dives
+// mouse: the cursor aims; left button receives, spikes and serves; right button dives, or blocks in the air
 function setButtonAt(e) { // a setter button under the pointer, if any
   if (!G || !G.setBtns || !G.setBtns.length) return null;
   const r = canvas.getBoundingClientRect(), ux = (e.clientX - r.left) / r.width * UW, uy = (e.clientY - r.top) / r.height * UH;
@@ -2401,12 +2519,31 @@ canvas.addEventListener('pointerdown', e => {
   const btn = setButtonAt(e);
   if (btn) { G.setPick = btn.type; Sfx.tone(700, 0.04, 'square', 0.025); }
   if (e.pointerType === 'touch') { if (btn) e.preventDefault(); return; }
+  aimAt(e);
   if (e.button === 0) press('hit', true); // held until the button comes back up
   else if (e.button === 2) { press('dive', true); press('dive', false); }
   else return;
   e.preventDefault();
 });
 addEventListener('pointerup', e => { if (e.pointerType !== 'touch' && e.button === 0 && keys.hit) press('hit', false); });
+canvas.addEventListener('pointermove', e => { if (e.pointerType !== 'touch') aimAt(e); });
+canvas.addEventListener('wheel', e => { if (G && !G.paused) { e.preventDefault(); wheelZoom(e.deltaY); } }, { passive: false });
+// The point on the floor under the cursor, in world metres. Kept fixed on the floor while the camera drifts.
+function aimAt(e) {
+  if (!G) return;
+  const r = canvas.getBoundingClientRect();
+  const u = (CAM.cy - (e.clientY - r.top) / r.height * H) / CAM.F, v = ((e.clientX - r.left) / r.width * W - W / 2) / CAM.F;
+  const c = Math.cos(CAM.pitch), sn = Math.sin(CAM.pitch), den = sn - u * c;
+  if (den <= 0.02) return; // at or above the horizon
+  const dz = G.cam.y * (c + u * sn) / den, Z = G.cam.y * sn + dz * c;
+  input.aim = { x: G.cam.x + v * Z, z: G.cam.z + dz };
+}
+// The cursor's floor point, pulled inside the other team's court with a margin, or null without a mouse.
+function aimInto(s, margin = 0.5) {
+  if (!input.aim) return null;
+  const t = toward(s);
+  return [clamp(input.aim.x, -HW + margin, HW - margin), t * clamp(input.aim.z * t, 1.2, HL - margin)];
+}
 canvas.addEventListener('contextmenu', e => e.preventDefault());
 
 // ===================== screens =====================
@@ -2483,6 +2620,8 @@ function loadSettings() {
   if ([11, 15, 25].includes(o.target)) settings.target = o.target;
   if ([1, 3, 5].includes(o.sets)) settings.sets = o.sets;
   if (TIMES[o.time]) settings.time = o.time;
+  if (['follow', 'fixed'].includes(o.camMode)) settings.camMode = o.camMode;
+  if (typeof o.zoom === 'number' && o.zoom >= 0.84 && o.zoom <= 1.14) settings.zoom = o.zoom;
   for (const n of [2, 6]) {
     if (o.role && YOUR_ROLES[n].includes(o.role[n])) settings.role[n] = o.role[n];
     if (o.venue && VENUES[o.venue[n]] && VENUES[o.venue[n]].mode === n) settings.venue[n] = o.venue[n];

@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>VolleyDex: Gen 1 Draft Volleyball</title>
 <meta name="description" content="Pick a Gen 1 Pokémon, draft teammates by their stats, and play arcade volleyball in the browser.">
-<link rel="stylesheet" href="style.css?v=18">
+<link rel="stylesheet" href="style.css?v=19">
 </head>
 <body class="on-title">
 <main id="menu">
@@ -55,15 +55,19 @@
     <details class="howto">
       <summary><h2>How to play</h2></summary>
       <ul class="keys">
-        <li><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> or arrow keys<span>Move around the court</span></li>
-        <li><kbd>Space</kbd><span>Jump</span></li>
-        <li>Left click<span>Hit. Press and hold to wind up, let go to swing. Hold to toss your serve and let go as it drops. In the air above the net: spike. On the third touch: tip it over. Any other touch: time your pass or set.</span></li>
-        <li><kbd>1</kbd> to <kbd>4</kbd><span>6 v 6 setter: pick which hitter to set, or click their button</span></li>
-        <li>Right click<span>Dive for a low or wide ball, then get back up</span></li>
-        <li><kbd>K</kbd> or <kbd>Shift</kbd><span>Arm your Type Spike when the meter is full</span></li>
+        <li><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd><span>Move. You only move when you press them: the cursor never walks for you.</span></li>
+        <li>Mouse<span>Aim. Your serves, spikes, tips and over-balls go where the cursor points (the white ring on the other court), and as setter you set the hitter it points at.</span></li>
+        <li>Left click<span>On the ground: receive. In the air above the net: spike. Hold to wind up, let go to swing. Hold to toss your serve and let go as it drops.</span></li>
+        <li><kbd>E</kbd><span>Set. Hold it to charge while you run in: if the meter is full when you touch the ball it is a quick set, low and fast; before that, a high set.</span></li>
+        <li>Right click<span>On the ground: dive for a low or wide ball. In the air: put your block up. A block does not use one of your team's 3 touches.</span></li>
+        <li><kbd>Space</kbd> (hold)<span>Charge your jump, let go to jump. A full charge jumps higher than a tap. Jump while running and you keep your speed in the air.</span></li>
+        <li><kbd>Shift</kbd><span>Strafe: your Pokémon keeps facing the cursor while you move, and gets up faster after a dive to the side.</span></li>
+        <li><kbd>C</kbd> / <kbd>V</kbd><span>Camera: follow you or hold still / zoom (close, normal, wide). The mouse wheel zooms too.</span></li>
+        <li><kbd>1</kbd> to <kbd>4</kbd><span>Quick chat: Mine! (your teammates leave the ball to you), Set me! (your setter looks for you), Nice!, My bad.</span></li>
+        <li><kbd>F</kbd><span>Arm your Type Spike when the meter is full</span></li>
         <li><kbd>P</kbd><span>Pause</span> <kbd>M</kbd><span>Sound</span></li>
       </ul>
-      <p>The camera sits behind your team, looking at the net. When a ball comes to you, a thin wind-up meter appears beside your Pokémon. Press and hold the left button and it fills upward: meet the ball, or let go just before, with the fill in the gold notch at the top for a PERFECT touch. The small dot beside the meter shows how full it will be when the ball reaches you. Hold too long and the meter turns red for a bad hit. A good wind-up makes your pass or set land on target and your spikes and serves hit harder, a weak one sprays it. If you do not hold at all you still pass it, just less cleanly. In 6 v 6, when the pass comes to you as setter, a button appears over each hitter: click one, or press its number, to choose who gets the set. Each side gets 3 touches. Four orange carets on the sand close in on where the ball will land, and when a teammate sets you a green ring shows where to jump. When you spike, it goes to the open spot on its own; hold left or right to aim across, forward for a short shot or back to hit deep. To block, stand at the net and jump just after the other team's hitter jumps. A red ring at the net shows where, and flashes JUMP when it is time. Before the draft you choose your position, and you get three Pokémon suited to it to pick from: Setter, Outside hitter, Middle blocker, Opposite or Libero in 6 v 6 (with real rotations and the overlap rule: stand on the green YOUR SPOT ring when the ball is served), or Blocker or Defender in 2 v 2.</p>
+      <p>The camera sits behind your team, looking at the net. When a ball comes to you, a thin wind-up meter appears beside your Pokémon. Press and hold the left button and it fills upward: meet the ball, or let go just before, with the fill in the gold notch at the top for a PERFECT touch. The small dot beside the meter shows how full it will be when the ball reaches you. Hold too long and the meter turns red for a bad hit. A good wind-up makes your pass land on target and your spikes and serves hit harder, a weak one sprays it. If you do not hold anything you still pass it, just less cleanly. Setting with <kbd>E</kbd> uses its own blue meter, which never goes red: it only decides between a high set and a quick one. In 6 v 6, when the pass comes to you as setter, a gold tag shows which hitter the cursor points at. Each side gets 3 touches. Four orange carets on the floor close in on where the ball will land, and when a teammate sets you a green ring shows where to jump. To block, stand at the net, jump just after the other team's hitter jumps and right click. A red ring at the net shows where. Before the draft you choose your position, and you get three Pokémon suited to it to pick from: Setter, Outside hitter, Middle blocker, Opposite or Libero in 6 v 6 (with real rotations and the overlap rule: stand on the green YOUR SPOT ring when the ball is served), or Blocker or Defender in 2 v 2. On a touch screen, use the on-screen buttons; shots then go to the open spot on their own.</p>
       <p>Ratings come from each Pokémon's base stats: <b>SPD</b> from Speed, <b>JMP</b> from Speed and Attack (heavy Pokémon jump lower), <b>PWR</b> from Attack and Sp. Atk, <b>DEF</b> from HP and Defense, <b>SKL</b> from Sp. Atk and Sp. Def.</p>
     </details>
   </section>
@@ -241,16 +245,17 @@
       <button type="button" data-act="down" aria-label="Move back">▼</button>
     </div>
     <div class="pad">
-      <button type="button" data-act="special" class="small" aria-label="Type Spike">K</button>
+      <button type="button" data-act="special" class="small" aria-label="Type Spike">Type</button>
       <button type="button" data-act="dive" class="small" aria-label="Dive">Dive</button>
+      <button type="button" data-act="set" class="small" aria-label="Set">Set</button>
       <button type="button" data-act="jump" aria-label="Jump">Jump</button>
       <button type="button" data-act="hit" aria-label="Hit">Hit</button>
     </div>
   </div>
 </div>
 
-<script src="data.js?v=18"></script>
-<script src="sprites.js?v=18"></script>
-<script src="game.js?v=18"></script>
+<script src="data.js?v=19"></script>
+<script src="sprites.js?v=19"></script>
+<script src="game.js?v=19"></script>
 </body>
 </html>

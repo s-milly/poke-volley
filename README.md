@@ -8,10 +8,16 @@ Open `index.html` in a browser, or serve the folder (for example `python3 -m htt
 
 | Key | Action |
 | --- | --- |
-| W A S D or arrow keys | Move around your half of the court |
-| Space | Jump |
-| J or left click | Serve. In the air: spike. On the ground: tip the ball over |
-| K or Shift | Arm your Type Spike when the meter is full |
+| W A S D | Move. Manual: the cursor does not walk for you |
+| Mouse | Aim. Serves, spikes, tips and over-balls go toward the cursor; as setter you set the hitter it points at |
+| Left click | Receive on the ground, spike in the air. Hold to wind up; hold to toss your serve |
+| E | Set. Hold to charge while you run in: full charge at contact is a quick set |
+| Right click | Dive on the ground, block in the air. A block does not use a team touch |
+| Space (hold) | Charge your jump. A full charge jumps higher; running jumps keep their speed |
+| Shift | Strafe: face the cursor while you move, get up faster from a side dive |
+| C / V | Camera mode (follow or fixed) / zoom. The mouse wheel zooms too |
+| 1 2 3 4 | Quick chat: Mine!, Set me!, Nice!, My bad |
+| F | Arm your Type Spike when the meter is full |
 | P or Esc | Pause |
 | M | Sound on or off |
 
