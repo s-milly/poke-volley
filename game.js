@@ -2518,25 +2518,27 @@ function drawSpecialTrail(b, ty) {
   ctx.globalAlpha = 1;
 }
 
-// Where the ball will land, on either side of the net: four black carets painted flat on the floor
-// at the corners of a square, each pointing at the spot. They start wide, then close in and shrink as the ball drops.
-// What is drawn eases toward the prediction instead of jumping: after a touch the carets glide to the new spot
-// and open back up, they fade in when a rally starts and fade out where the ball came down.
-const CARET = { x: 0, z: 0, vx: 0, vz: 0, r: 1.1, a: 0, t: 0 };
-function updateCarets(target) { // target: { x, z, tl } while the ball is in the air, or null
+// One marker for where the ball goes: four carets painted flat on the floor at the corners of a square, each
+// pointing at the spot. They start wide, then close in and shrink as the ball comes down.
+// When the ball is coming to you they mark where you meet it, not where it would hit the floor:
+// where you pass it (the ball at your hands), or with JUMP + HIT under them where you spike it (the ball at the top of your jump).
+// Anywhere else they mark the landing spot, faint. The prediction is exact in flight, so the carets sit on it;
+// after a touch they jump to the new spot and drop in from a little wider, and they fade out where the ball came down.
+const CARET = { x: 0, z: 0, r: 1.1, a: 0, aT: 1, t: 0, mode: '' };
+function updateCarets(target) { // target: { x, z, tl, mode: 'land' | 'meet' | 'spike' } while the ball is in the air, or null
   const now = performance.now(), dt = clamp((now - (CARET.t || now)) / 1000, 0, 0.05);
   CARET.t = now;
   const ease = (rate) => 1 - Math.exp(-rate * dt);
   if (target) {
-    const k = clamp(target.tl / 1.4, 0, 1), rT = 0.24 + 0.86 * k * k * (3 - 2 * k); // smoothstep: no hard start or stop
-    if (CARET.a < 0.03) { CARET.x = target.x; CARET.z = target.z; CARET.vx = CARET.vz = 0; CARET.r = rT; } // nothing on screen yet: start in place
-    const W = 16; // a critically damped spring: speeds up into the glide and settles without overshoot (about 0.3 s)
-    for (let n = Math.ceil(dt * 240), h = dt / Math.max(n, 1); n > 0; n--) {
-      CARET.vx += (-2 * W * CARET.vx - W * W * (CARET.x - target.x)) * h; CARET.x += CARET.vx * h;
-      CARET.vz += (-2 * W * CARET.vz - W * W * (CARET.z - target.z)) * h; CARET.z += CARET.vz * h;
-    }
-    CARET.r += (rT - CARET.r) * ease(16);
-    CARET.a += (1 - CARET.a) * ease(14);
+    const k = clamp(target.tl / 1.4, 0, 1), rT = 0.24 + 0.86 * k * k * (3 - 2 * k);
+    const moved = Math.hypot(target.x - CARET.x, target.z - CARET.z) > 0.6;
+    if (CARET.a < 0.03) CARET.r = rT; // nothing on screen yet: start in place
+    else if ((moved || target.mode !== CARET.mode) && target.tl > 0.3) CARET.r = rT + 0.45; // a new ball: drop in from a little wider
+    CARET.mode = target.mode;
+    CARET.x = target.x; CARET.z = target.z;
+    CARET.r += (rT - CARET.r) * ease(18);
+    CARET.aT = target.mode === 'land' ? 0.45 : 1;
+    CARET.a += (CARET.aT - CARET.a) * ease(14);
   } else {
     CARET.r += (0.16 - CARET.r) * ease(10);
     CARET.a += (0 - CARET.a) * ease(9);
@@ -2555,7 +2557,7 @@ function drawLandingCarets(lx, lz, r, alpha) {
     ctx.save();
     ctx.transform((ex.x - o.x) * 10, (ex.y - o.y) * 10, (ez.x - o.x) * 10, (ez.y - o.y) * 10, o.x, o.y);
     const pts = [pt(-0.75, -0.9), pt(0, 0), pt(-0.75, 0.9)];
-    for (const [col, lw] of [['rgba(255,250,235,0.6)', 0.46 * L], ['#000000', 0.3 * L]]) { // black, with a thin light rim for dark floors
+    for (const [col, lw] of [['rgba(16,20,31,0.7)', 0.5 * L], ['#50e68c', 0.3 * L]]) { // green, with a dark rim for light floors
       ctx.strokeStyle = col; ctx.lineWidth = lw; ctx.lineJoin = 'miter'; ctx.lineCap = 'square';
       ctx.beginPath(); ctx.moveTo(...pts[0]); ctx.lineTo(...pts[1]); ctx.lineTo(...pts[2]); ctx.stroke();
     }
@@ -2718,9 +2720,19 @@ function render() {
     groundEllipse(you.homeX, you.homeZ, 0.55, 0.55); ctx.stroke();
     const lab = proj(you.homeX, 0, you.homeZ); labels.push(['YOUR SPOT', lab.x * US, lab.y * US + 6, bad ? '#ff8a8a' : '#7dffb0']);
   }
-  { // the landing carets, eased (see updateCarets)
-    const tl = G.phase === 'rally' ? timeToY(b, BR) : null;
-    updateCarets(tl != null ? { x: b.x + b.vx * tl, z: b.z + b.vz * tl, tl } : null);
+  { // the carets (see updateCarets): where you meet the ball when it is coming to you, else where it lands
+    let target = null;
+    if (G.phase === 'rally') {
+      const at = (h, mode) => { const tl = timeToY(b, h); return tl == null ? null : { x: b.x + b.vx * tl, z: b.z + b.vz * tl, tl, mode }; };
+      const land = at(BR, 'land');
+      const mine = you && !AUTO && land && land.z < 0; // it comes down on your half (side 0 is z < 0)
+      if (mine && G.lastSide === 0 && G.intended[0] === you) target = at(you.apex + you.rr * 2 + 0.05, 'spike'); // your teammate set you
+      else if (mine && G.lastSide !== 0) target = at(you.rr, 'meet'); // it comes over the net to you
+      else if (mine && G.intended[0] === you) target = at(you.rr, 'meet');
+      if (!target && land) target = mine && (G.lastSide !== 0 || G.intended[0] === you) ? { ...land, mode: 'meet' } : land; // past your hands: follow it down
+      if (target && target.mode === 'spike') { const lab = proj(target.x, 0, target.z); labels.push(['JUMP + HIT', lab.x * US, lab.y * US + 6, '#7dffb0']); }
+    }
+    updateCarets(target);
   }
   // where your serve or attack would go: the cursor, pulled inside the other court
   const aim = you && !AUTO && (G.phase === 'rally' || (G.phase === 'serve' && G.server === you)) ? aimInto(0, 0.6) : null;
@@ -2733,18 +2745,6 @@ function render() {
       ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(c.x, c.y); ctx.stroke();
     }
   }
-  if (G.phase === 'rally') {
-    if (you && !AUTO && G.intended[0] === you && G.lastSide === 0) {
-      const tc = timeToY(b, you.apex + you.rr * 2 + 0.05);
-      if (tc != null) {
-        const mx = b.x + b.vx * tc, mz = b.z + b.vz * tc;
-        ctx.strokeStyle = '#50e68c'; ctx.lineWidth = 6;
-        groundEllipse(mx, mz, 0.6, 0.6); ctx.stroke(); groundEllipse(mx, mz, 0.25, 0.25); ctx.stroke();
-        const lab = proj(mx, 0, mz); labels.push(['JUMP + HIT', lab.x * US, lab.y * US + 6, '#7dffb0']);
-      }
-    }
-  }
-
   // far side, the net, then the near side
   const items = [...G.players, ...G.bench[0], ...G.bench[1]].map(p => ({ z: p.z, d: () => drawPlayer(p) }));
   items.push({ z: b.z, d: () => drawBall(b) });
@@ -3787,12 +3787,12 @@ const TUT_BASICS = [
   { title: 'Camera', text: 'Press C to switch between a camera that follows you and one that holds still. V or the mouse wheel zooms.', ev: 'cam' },
 ];
 const T_SERVE = { title: 'Serve', text: 'Hold left click to toss, then let go as the ball drops back to your hand. The serve goes where the cursor points.', ev: 'serve', test: d => d.q > 0, serve: 'you' };
-const T_PASS = { title: 'Receive', text: 'Their serve is yours: get under the black carets, hold left click as the ball comes in and let go to pass.', ev: 'pass', test: d => d.first, mine: true };
+const T_PASS = { title: 'Receive', text: 'Their serve is yours: get to the green carets, hold left click as the ball comes in and let go to pass.', ev: 'pass', test: d => d.first, mine: true };
 const T_PERFECT = { title: 'Perfect pass', text: 'Pass again, and let go with the meter in the gold notch at the top for a PERFECT pass.', ev: 'pass', test: d => d.first && d.q >= 1, mine: true };
 const T_DIVE = { title: 'Dive', text: 'Right click on the ground to dive. Hold a direction to dive that way; hold none and you dive at the ball.', ev: 'dive' };
 const T_BLOCKUP = { title: 'Block', text: 'When they attack, stand at the net, jump just after their hitter jumps and right click in the air to put your block up.', ev: 'blockup', test: d => d.net, serve: 'us' };
 const T_BLOCK = { title: 'Touch a spike', get text() { return 'Now get a hand on one of their spikes: stand at the net in front of their hitter, jump just after they jump and right click. ' + (settings.mode === 2 ? 'On the beach a block counts as one of your 3 touches.' : 'Indoors a block does not use one of your 3 touches.'); }, ev: 'block', serve: 'us' };
-const T_SPIKE = { title: 'Spike', text: 'Your setter is looking for you. Follow the green ring, jump as the ball comes down and hold left click; let go to swing.', ev: 'spike', callMe: true };
+const T_SPIKE = { title: 'Spike', text: 'Your setter is looking for you. Get to the green carets, jump as the ball comes down and hold left click; let go to swing.', ev: 'spike', callMe: true };
 const TUT_ROLE = {
   B: [T_SERVE, T_BLOCKUP, T_BLOCK, T_SPIKE],
   D: [T_PASS, T_PERFECT, T_DIVE,
