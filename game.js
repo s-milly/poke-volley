@@ -228,7 +228,7 @@ class Player {
     this.entry = entry; this.mon = entry.mon; this.r = entry.r; this.side = side; this.human = human;
     this.rr = clamp(0.24 + Math.sqrt(this.mon.h) * 0.075, 0.3, 0.72) * size; // body radius
     this.speed = 5.2 + this.r.spd * 0.065;
-    this.apex = 1.1 + this.r.jmp * 0.017;
+    this.apex = 0.85 + this.r.jmp * 0.013;
     this.jumpV = jumpVFor(this.apex); this.tUp = timeUp(this.jumpV);
     this.x = 0; this.y = 0; this.z = 0; this.vx = 0; this.vy = 0; this.vz = 0; this.onGround = true;
     this.face = 0; this.cool = 0; this.squash = 1; this.homeX = 0; this.homeZ = 0;
