@@ -2189,10 +2189,10 @@ function drawBall(b) {
   if (b.special) { ctx.strokeStyle = b.special; ctx.lineWidth = 5; ctx.strokeRect(p.x - r - 7, p.y - r - 7, r * 2 + 14, r * 2 + 14); }
 }
 
-// Where the ball will land: four small carets painted flat on the floor at the corners of a square,
-// each pointing at the spot, closing in as the ball drops.
+// Where the ball will land, on either side of the net: four small carets painted flat on the floor
+// at the corners of a square, each pointing at the spot. They close in and shrink as the ball drops.
 function drawLandingCarets(lx, lz, tl) {
-  const r = 0.38 + 0.45 * clamp(tl / 1.2, 0, 1), L = 0.3;
+  const k = clamp(tl / 1.2, 0, 1), r = 0.24 + 0.32 * k, L = 0.15 + 0.07 * k;
   for (const [sx, sz] of [[1, 1], [-1, 1], [-1, -1], [1, -1]]) {
     const cx = lx + sx * r, cz = lz + sz * r;
     // lay a local frame on the ground at this corner: one world metre along x and along z, in canvas px
@@ -2202,7 +2202,7 @@ function drawLandingCarets(lx, lz, tl) {
     ctx.save();
     ctx.transform((ex.x - o.x) * 10, (ex.y - o.y) * 10, (ez.x - o.x) * 10, (ez.y - o.y) * 10, o.x, o.y);
     const pts = [pt(-0.75, -0.9), pt(0, 0), pt(-0.75, 0.9)];
-    for (const [col, lw] of [['#2a1606', 0.15], ['#ff8c28', 0.08]]) {
+    for (const [col, lw] of [['#2a1606', 0.5 * L], ['#ff8c28', 0.27 * L]]) {
       ctx.strokeStyle = col; ctx.lineWidth = lw; ctx.lineJoin = 'miter'; ctx.lineCap = 'square';
       ctx.beginPath(); ctx.moveTo(...pts[0]); ctx.lineTo(...pts[1]); ctx.lineTo(...pts[2]); ctx.stroke();
     }
@@ -2336,6 +2336,10 @@ function render() {
   }
   ctx.fillStyle = `rgba(60,40,20,${0.45 - clamp(b.y / 8, 0, 0.25)})`;
   groundEllipse(b.x, b.z, BR * 1.5, BR * 1.2); ctx.fill();
+  if (G.phase === 'rally') { // a faint ring on the floor right under the ball, wherever it is now
+    ctx.strokeStyle = 'rgba(255,255,255,0.28)'; ctx.lineWidth = 2;
+    groundEllipse(b.x, b.z, 0.45, 0.45); ctx.stroke();
+  }
 
   const you = G.sides[0].find(p => p.human);
   const labels = [];
@@ -2349,7 +2353,7 @@ function render() {
     const tl = timeToY(b, BR);
     if (tl != null) {
       const lx = b.x + b.vx * tl, lz = b.z + b.vz * tl;
-      if (lz < 0) drawLandingCarets(lx, lz, tl);
+      drawLandingCarets(lx, lz, tl);
     }
   }
   // where your serve or attack would go: the cursor, pulled inside the other court
@@ -2364,17 +2368,6 @@ function render() {
     }
   }
   if (G.phase === 'rally') {
-    // where and when to block: the other team has set its hitter
-    if (you && !AUTO && G.lastSide === 1 && G.touches[1] >= 1) {
-      const atk = G.sides[1].find(q => !q.onGround && Math.abs(q.z) < 3.2) || (G.touches[1] >= 2 ? G.intended[1] : null);
-      if (atk && Math.abs(atk.z) < 4.5) {
-        const bx = clamp(atk.x, -HW + 0.4, HW - 0.4), bz = -(you.rr + 0.35), up = !atk.onGround;
-        ctx.strokeStyle = up ? '#ff4d4d' : 'rgba(255,90,90,0.75)'; ctx.lineWidth = 6;
-        groundEllipse(bx, bz, 0.7, 0.4); ctx.stroke();
-        const lab = proj(bx, 0, bz);
-        if (!up || Math.floor(G.time * 8) % 2 === 0) labels.push([up ? 'JUMP + RIGHT CLICK' : 'BLOCK HERE', lab.x * US, lab.y * US + 6, '#ff8a8a']);
-      }
-    }
     if (you && !AUTO && G.intended[0] === you && G.lastSide === 0) {
       const tc = timeToY(b, you.apex + you.rr * 2 + 0.05);
       if (tc != null) {
@@ -3351,7 +3344,7 @@ const T_PASS = { title: 'Receive', text: 'Their serve is yours: get under the or
 const T_PERFECT = { title: 'Perfect pass', text: 'Pass again, and let go with the meter in the gold notch at the top for a PERFECT pass.', ev: 'pass', test: d => d.first && d.q >= 1, mine: true };
 const T_DIVE = { title: 'Dive', text: 'Right click on the ground to dive. Hold a direction to dive that way; hold none and you dive at the ball.', ev: 'dive' };
 const T_BLOCKUP = { title: 'Block', text: 'When they attack, stand at the net, jump just after their hitter jumps and right click in the air to put your block up.', ev: 'blockup', test: d => d.net, serve: 'us' };
-const T_BLOCK = { title: 'Touch a spike', text: 'Now get a hand on one of their spikes. The red ring at the net shows where to stand. A block does not use one of your 3 touches.', ev: 'block', serve: 'us' };
+const T_BLOCK = { title: 'Touch a spike', text: 'Now get a hand on one of their spikes: stand at the net in front of their hitter, jump just after they jump and right click. A block does not use one of your 3 touches.', ev: 'block', serve: 'us' };
 const T_SPIKE = { title: 'Spike', text: 'Your setter is looking for you. Follow the green ring, jump as the ball comes down and hold left click; let go to swing.', ev: 'spike', callMe: true };
 const TUT_ROLE = {
   B: [T_SERVE, T_BLOCKUP, T_BLOCK, T_SPIKE],
