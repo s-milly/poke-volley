@@ -2440,8 +2440,8 @@ function sceneStands(g, V, C) {
   g.fillStyle = '#0b0f1c'; g.fillRect(0, top - 3, SCENE_W, 4);                // the fascia under the roof, with a ribbon board
   g.fillStyle = night ? '#ff5d5d' : '#3fa7ff'; g.fillRect(0, top - 2, SCENE_W, 1);
   g.fillStyle = '#ffcf33'; for (let x = 6; x < SCENE_W; x += 18) g.fillRect(x, top - 2, 6, 1);
-  if (ex.includes('led')) { // LED ad boards around the court: along the far end, then down both sidelines
-    const zb = C.hl + 1.6, xb = C.hw + 1.6, H = 0.9, cols = ['#3fa7ff', '#ff5d5d', '#ffcf33', '#6bd88a'];
+  if (ex.includes('led')) { // LED ad boards on the front wall of the stands: along the far end, then down both sidelines
+    const zb = z0 - 0.05, xb = X - 0.05, H = 1, cols = ['#3fa7ff', '#ff5d5d', '#ffcf33', '#6bd88a'];
     poly([[-xb, 0, zb], [xb, 0, zb], [xb, H, zb], [-xb, H, zb]], '#0b0f1c');
     const n = Math.round(2 * xb / 3);
     for (let i = 0; i < n; i++) {
