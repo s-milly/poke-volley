@@ -114,18 +114,20 @@ function renderSlots() {
   careers.forEach((c, i) => {
     const li = el('div', 'panel rtg-slot' + (c ? '' : ' empty'));
     if (!c) {
-      li.innerHTML = `<p class="rtg-slot-n">Slot ${i + 1}</p><p class="rtg-slot-empty">Empty</p>`;
+      li.innerHTML = `<p class="rtg-slot-n">Slot ${i + 1}</p><div class="rtg-slot-plus" aria-hidden="true">+</div><p class="rtg-slot-empty">Empty. Create a rookie and start from the draft.</p>`;
       const b = el('button', 'cta', 'New career'); b.type = 'button';
       b.addEventListener('click', () => openCreate(i));
       li.appendChild(b);
     } else {
-      const mon = BY_ID.get(c.mon);
+      const mon = BY_ID.get(c.mon), club = c.league ? c.league.myClub : null;
+      li.style.setProperty('--tc', TYPE_COLORS[mon.types[0]]);
       li.innerHTML = `<p class="rtg-slot-n">Slot ${i + 1}</p>`;
-      const row = el('div', 'rtg-slot-who');
-      row.appendChild(portrait(mon, 96, 64));
-      row.appendChild(el('div', 'ri-text', `<b>${escHtml(careerName(c))}</b><span>${ROLES[c.pos].short} · ${buildName(c)}</span><span>Season ${c.season}</span>`));
-      row.appendChild(el('div', 'ri-ovr', String(careerOvr(c))));
-      li.appendChild(row);
+      const top = el('div', 'rtg-slot-top');
+      top.appendChild(portrait(mon, 192, 128));
+      top.appendChild(el('div', 'ovr', `<b>${careerOvr(c)}</b><span>OVR</span>`));
+      li.appendChild(top);
+      li.appendChild(el('div', 'rtg-slot-who', `<b>${escHtml(careerName(c))}</b><span>${ROLES[c.pos].name} · ${buildName(c)}</span>
+        <span class="rtg-club">${club ? `${crestImg(club, 20)}${CLUBS[club].name}` : 'Not drafted yet'}</span><span>Season ${c.season} · ${ageLabel(c.season)}${(c.trophies || []).length ? ` · ${c.trophies.length} troph${c.trophies.length === 1 ? 'y' : 'ies'}` : ''}</span>`));
       const acts = el('div', 'rtg-actions');
       const go = el('button', 'cta', 'Continue'); go.type = 'button';
       go.addEventListener('click', () => openHub(i));
@@ -518,7 +520,7 @@ function careerCallIn() {
 function coachSays(text) { toast(`COACH: ${text}`, 2.5); return true; }
 
 // ---------- playing your match ----------
-const MU_BACK = $('#scr-matchup [data-back]'), MU_BACK_TEXT = MU_BACK.textContent;
+const MU_BACK = $('#scr-matchup [data-back]'), MU_BACK_TEXT = MU_BACK.innerHTML;
 function setupCareerMatch() {
   const c = careers[slot], L = c.league, g = myGame(L); if (!g) return;
   const ph = phaseOf(L), opp = g.h === L.myClub ? g.a : g.h;
@@ -531,7 +533,7 @@ function setupCareerMatch() {
   renderMatchup();
   if (careerMatch.bench) $('#mu-you').appendChild(el('p', 'rot-note rtg-bench-note', `<b>${escHtml(careerName(c))} starts on the bench.</b> The coach sends you on for ${rivalStarter(c).mon.name} during the match: after a lost set, when the team falls 5 behind, or once a team reaches ${callLate(FMT[ph].target)} points in set 2 or later.`));
   $('#mu-meta').textContent = `${ROUND_NAMES[ph]}${ph === 'regular' ? `, week ${L.week + 1}` : ''} · ${careerMatch.home ? 'Home' : 'Away'} · ${VENUES[VENUE_FOR[ph]].name} · You play ${ROLES[c.pos].name} · ${cap(c.diff)} · ${matchFormat()} · Coach's goal: ${goalText(coachGoal(c))}`;
-  MU_BACK.textContent = '← Career'; MU_BACK.dataset.back = 'scr-rtg-hub';
+  MU_BACK.innerHTML = '<span aria-hidden="true">◀</span> Career'; MU_BACK.dataset.back = 'scr-rtg-hub';
   show('scr-matchup');
 }
 // Back to the hub: your own settings come back (keeping any camera, zoom or serve change made in the match).
@@ -542,7 +544,7 @@ function careerBack() {
     Object.assign(settings, careerMatch.saved, keep);
     careerMatch = null; saveSettings();
   }
-  MU_BACK.textContent = MU_BACK_TEXT; MU_BACK.dataset.back = 'scr-pick';
+  MU_BACK.innerHTML = MU_BACK_TEXT; MU_BACK.dataset.back = 'scr-pick';
   $('#res-xp').hidden = true;
   renderHub(); show('scr-rtg-hub');
 }
@@ -910,7 +912,7 @@ function renderTraining(c) {
     return;
   }
   for (const [kind, d] of Object.entries(DRILLS)) {
-    const b = el('button', 'rtg-build', `<b>${d.name}</b><span>Trains ${d.stat.toUpperCase()} (${c.r[d.stat]} / ${c.cap[d.stat]}) · plays as ${ROLES[d.role].name.toLowerCase()}</span>`);
+    const b = el('button', 'rtg-build rtg-drill', `<i class="drill-stat" aria-hidden="true">${d.stat.toUpperCase()}</i><b>${d.name}</b><span>Trains ${d.stat.toUpperCase()} (${c.r[d.stat]} / ${c.cap[d.stat]}) · plays as ${ROLES[d.role].name.toLowerCase()}</span>`);
     b.type = 'button'; b.addEventListener('click', () => startDrill(kind));
     box.appendChild(b);
   }

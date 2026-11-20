@@ -3145,14 +3145,36 @@ function aimInto(s, margin = 0.5) {
 canvas.addEventListener('contextmenu', e => e.preventDefault());
 
 // ===================== screens =====================
+// The menu screens sit over a blurred still of the last arena frame: the title match, or the match you just played.
+function snapMenuBg() {
+  try {
+    const c = document.createElement('canvas'); c.width = 320; c.height = 180;
+    c.getContext('2d').drawImage(canvas, 0, 0, c.width, c.height);
+    $('#menu-bg').style.backgroundImage = `url(${c.toDataURL('image/jpeg', 0.7)})`;
+  } catch (e) {}
+}
+// The steps of a quick play setup, shown at the top of each of its screens.
+const flowSteps = () => ['Teams', 'Venue', 'Position', settings.mode === 2 ? 'Partner' : 'Draft', 'Matchup'];
+function renderFlow(id) {
+  for (const ol of document.querySelectorAll(`#${id} .flow`)) {
+    const at = Number(ol.dataset.flow);
+    ol.hidden = !!careerMatch;
+    ol.innerHTML = flowSteps().map((t, i) => `<li class="${i < at ? 'done' : i === at ? 'now' : ''}"${i === at ? ' aria-current="step"' : ''}><i aria-hidden="true">${i < at ? '✓' : i + 1}</i><span>${t}</span></li>`).join('');
+  }
+  for (const p of document.querySelectorAll(`#${id} [data-eyebrow]`))
+    p.textContent = careerMatch ? 'Road to Glory' : `Quick play · ${settings.mode} v ${settings.mode}`;
+}
 function show(id) {
+  const title = id === 'scr-title', menuScreen = !title && id !== 'stage';
+  if (menuScreen && !$('#stage').hidden) snapMenuBg();
   for (const s of document.querySelectorAll('.screen')) s.hidden = s.id !== id;
-  const title = id === 'scr-title';
+  if (menuScreen) renderFlow(id);
   if (title) startDemo(); else stopDemo();
   $('#stage').hidden = id !== 'stage' && !title; // on the title screen the stage is the background
   $('#stage').classList.toggle('demo-bg', title);
   $('#menu').hidden = id === 'stage';
   document.body.classList.toggle('on-title', title);
+  document.body.classList.toggle('on-menu', menuScreen);
   for (const d of document.querySelectorAll('#scr-title dialog[open]')) if (!title) d.close();
   window.scrollTo(0, 0);
   const first = id === 'stage' ? null : document.querySelector(`#${id} [data-autofocus]`);
@@ -3185,7 +3207,7 @@ function baseLine(mon) {
 function monCard(entryOrMon, opts = {}) {
   const e = entryOrMon.mon ? entryOrMon : null, mon = e ? e.mon : entryOrMon;
   const r = e ? e.r : mon.r, ovr = e ? e.ovr : mon.ovr;
-  const card = el(opts.button ? 'button' : 'div', 'card' + (mon.leg ? ' legend' : ''));
+  const card = el(opts.button ? 'button' : 'div', 'card' + (mon.leg ? ' legend' : '') + ` tier-${ovr >= 80 ? 'gold' : ovr >= 65 ? 'silver' : 'bronze'}`);
   if (opts.button) card.type = 'button';
   card.style.setProperty('--tc', TYPE_COLORS[mon.types[0]]);
   const top = el('div', 'card-top');
@@ -3243,8 +3265,10 @@ function renderVenuePick() {
   const box = $('#opt-venue'); box.innerHTML = '';
   for (const [id, v] of Object.entries(VENUES)) {
     if (v.mode !== settings.mode) continue;
-    const b = el('button', '', v.name); b.type = 'button'; b.setAttribute('aria-pressed', String(settings.venue[settings.mode] === id));
-    b.addEventListener('click', () => { settings.venue[settings.mode] = id; renderVenuePick(); });
+    const img = `img/venues/${id}-${v.mode === 2 ? settings.time : 'day'}.jpg`;
+    const b = el('button', 'venue-card', `<span class="vc-img"><img src="${img}" alt="" width="640" height="360" decoding="async"></span><b>${v.name}</b>`);
+    b.type = 'button'; b.setAttribute('aria-pressed', String(settings.venue[settings.mode] === id));
+    b.addEventListener('click', () => { settings.venue[settings.mode] = id; renderVenuePick(); $('#opt-venue [aria-pressed="true"]').focus(); });
     box.appendChild(b);
   }
   $('#venue-sub').textContent = settings.mode === 2 ? '2 v 2 on the sand. Pick a beach and a time of day.' : '6 v 6 in the arena. Arenas are indoors, so there is no time of day to pick.';
@@ -3253,7 +3277,7 @@ function renderVenuePick() {
   $('#time-pick').hidden = settings.mode !== 2; // the arenas are indoors
   for (const [id, name] of Object.entries(TIMES)) {
     const b = el('button', '', name); b.type = 'button'; b.setAttribute('aria-pressed', String(settings.time === id));
-    b.addEventListener('click', () => { settings.time = id; renderVenuePick(); });
+    b.addEventListener('click', () => { settings.time = id; renderVenuePick(); $('#opt-time [aria-pressed="true"]').focus(); });
     tbox.appendChild(b);
   }
 }
@@ -3276,6 +3300,11 @@ function renderClubPick() {
     const id = settings.club[k];
     $(k ? '#opt-rival-name' : '#opt-club-name').textContent = id === 'random' ? 'Random rival' : CLUBS[id].name;
   }
+  const side = k => {
+    const id = settings.club[k], c = id === 'random' ? null : CLUBS[id];
+    return `<div class="fo-side ${k ? 'rival' : 'you'}" style="--cc:${c ? c.color : '#5b6a92'}">${crestImg(id, 96)}<p><small>${k ? 'Rival' : 'Your team'}</small><b>${c ? c.name : 'Random rival'}</b></p></div>`;
+  };
+  $('#team-faceoff').innerHTML = `${side(0)}<span class="fo-vs">VS</span>${side(1)}`;
 }
 renderClubPick();
 // Menu flow: game mode on the title screen, then teams, then venue, time of day and rules.
@@ -3905,7 +3934,9 @@ function renderRoster() {
     list.appendChild(li);
   });
   for (let i = es.length; i < teamSize(); i++) list.appendChild(el('li', 'roster-item empty', `<span>${settings.mode === 6 && i === 6 ? 'Open slot (libero)' : 'Open slot'}</span>`));
-  $('#roster-ovr').textContent = `Team rating ${teamOvr(es)}`;
+  $('#roster-ovr-n').textContent = String(teamOvr(es));
+  $('#roster-ovr').textContent = `Team rating · ${es.length} of ${teamSize()} picked`;
+  $('#roster-meter').style.width = `${es.length / teamSize() * 100}%`;
 }
 $('#btn-reroll').addEventListener('click', () => {
   if (draft.rerolls <= 0) return;
@@ -3945,10 +3976,16 @@ function buildTeams() {
 
 function renderMatchup() {
   const n = settings.mode;
+  const side = s => {
+    const c = clubs && clubs[s];
+    return `<div class="mub-side ${s ? 'rival' : 'you'}" style="--cc:${c ? c.color : s ? 'var(--rival)' : 'var(--you)'}">${c ? crestImg(clubId(c), 96) : ''}
+      <p><small>${s ? 'Rival' : 'Your team'}</small><b>${teamName(s)}</b></p><span class="mub-ovr"><b>${teamOvr(sideLineup(s).map(x => x.entry))}</b><small>OVR</small></span></div>`;
+  };
+  $('#mu-banner').innerHTML = `${side(0)}<span class="mub-vs" aria-hidden="true">VS</span>${side(1)}`;
   for (let s = 0; s < 2; s++) {
     const box = $(s === 0 ? '#mu-you' : '#mu-rival');
     box.innerHTML = '';
-    box.appendChild(el('h3', '', `<span class="mu-name">${clubs ? crestImg(clubId(clubs[s]), 28) : ''}${teamName(s)}</span> <span class="mu-ovr">${teamOvr(sideLineup(s).map(x => x.entry))}</span>`));
+    box.appendChild(el('h3', 'panel-h', `<span class="mu-name">${clubs ? crestImg(clubId(clubs[s]), 20) : ''}${teamName(s)}</span><span class="mu-ovr">Lineup</span>`));
     const lu = sideLineup(s);
     const ul = el('ul', 'mu-list');
     for (const { entry: e, role } of lu) {
@@ -4144,6 +4181,7 @@ function togglePause() {
   if (!G || G.phase === 'over' || (TUT && TUT.wait)) return;
   G.paused = !G.paused;
   $('#pause').hidden = !G.paused; showTabStats(false);
+  $('#pause-score').textContent = `${teamName(0)} ${G.score[0]} : ${G.score[1]} ${teamName(1)}${settings.sets > 1 ? ` · Sets ${G.sets[0]} - ${G.sets[1]}` : ''}`;
   if (G.paused) $('#btn-resume').focus();
 }
 $('#btn-resume').addEventListener('click', togglePause);
@@ -4181,14 +4219,24 @@ function showResult() {
   showTabStats(false);
   const w = G.winner;
   $('#res-title').textContent = w === 0 ? 'You win!' : `${teamName(1)} wins`;
+  $('#res-head').classList.toggle('win', w === 0); $('#res-head').classList.toggle('loss', w !== 0);
+  $('#res-kicker').textContent = careerMatch ? 'Road to Glory · Final' : `Final · ${settings.mode} v ${settings.mode}`;
+  for (const s of [0, 1]) {
+    const t = $(`#res-t${s}`);
+    t.innerHTML = `${clubs ? crestImg(clubId(clubs[s]), 72) : ''}<b>${teamName(s)}</b>`;
+    t.classList.toggle('won', w === s);
+  }
   const multi = settings.sets > 1;
   $('#res-score').textContent = multi ? `${G.sets[0]} : ${G.sets[1]}` : `${G.score[0]} : ${G.score[1]}`;
-  $('#res-meta').textContent = (multi ? `Sets: ${G.setLog.map(x => x.join('-')).join(', ')} · ` : '') + `Longest rally: ${G.longestRally} touches`;
+  $('#res-sets').innerHTML = multi ? G.setLog.map((x, i) => `<span class="${x[0] > x[1] ? 'w' : 'l'}">Set ${i + 1} <b>${x[0]}-${x[1]}</b></span>`).join('') : '';
+  $('#res-meta').textContent = `Longest rally: ${G.longestRally} touches`;
   boxScore($('#res-box'));
   const mvp = G.players.reduce((a, p) => (val(p) > val(a) ? p : a));
   $('#res-mvp').innerHTML = '';
   $('#res-mvp').appendChild(portrait(mvp.mon, 192, 128));
-  $('#res-mvp').appendChild(el('div', '', `<span>MVP</span><b>${mvp.mon.name}</b><small>${teamName(mvp.side)}</small>`));
+  const ms = mvp.stats;
+  $('#res-mvp').appendChild(el('div', '', `<span>Most valuable player</span><b>${mvp.mon.name}</b><small>${teamName(mvp.side)}</small>
+    <small class="mvp-line">${ms.kills} K · ${ms.aces} ACE · ${ms.blocks} BLK · ${ms.digs} DIG</small>`));
   $('#btn-rematch').hidden = $('#btn-redraft').hidden = !!careerMatch;
   $('#btn-menu').textContent = careerMatch ? 'Continue' : 'Main menu';
   if (careerMatch) careerMatchOver(); // records the result and the XP before the screen shows

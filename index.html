@@ -5,9 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>VolleyDex: Gen 1 Draft Volleyball</title>
 <meta name="description" content="Pick a Gen 1 Pokémon, draft teammates by their stats, and play arcade volleyball in the browser.">
-<link rel="stylesheet" href="style.css?v=57">
+<link rel="stylesheet" href="style.css?v=58">
 </head>
 <body class="on-title">
+<div id="menu-bg" class="menu-bg" aria-hidden="true"></div>
 <main id="menu">
 
   <section id="scr-title" class="screen">
@@ -109,52 +110,65 @@
 
   <section id="scr-team" class="screen" hidden>
     <header class="bar-head">
-      <button type="button" class="ghost" data-back="scr-title">← Back</button>
+      <button type="button" class="ghost back" data-back="scr-title"><span aria-hidden="true">◀</span> Back</button>
       <div>
+        <p class="eyebrow" data-eyebrow>Quick play</p>
         <h2>Choose your team</h2>
         <p class="sub" id="team-sub">Pick the club you play for, then the club you face.</p>
       </div>
+      <ol class="flow" data-flow="0" aria-label="Match setup steps"></ol>
     </header>
-    <div class="settings-grid">
-      <section class="panel set-group" aria-label="Teams">
+    <div class="faceoff" id="team-faceoff" aria-hidden="true"></div>
+    <div class="club-cols">
+      <section class="panel club-panel you" aria-labelledby="club-you-h">
+        <h3 class="panel-h" id="club-you-h">Your team</h3>
         <fieldset class="club-set">
-          <legend>Your team</legend>
+          <legend class="vh">Your team</legend>
           <div class="club-grid" id="opt-club"></div>
           <p class="club-name" id="opt-club-name" aria-live="polite"></p>
         </fieldset>
+      </section>
+      <section class="panel club-panel rival" aria-labelledby="club-riv-h">
+        <h3 class="panel-h" id="club-riv-h">Rival</h3>
         <fieldset class="club-set">
-          <legend>Rival</legend>
+          <legend class="vh">Rival</legend>
           <div class="club-grid" id="opt-rival"></div>
           <p class="club-name" id="opt-rival-name" aria-live="polite"></p>
         </fieldset>
       </section>
     </div>
-    <button type="button" class="cta step-next" id="btn-team-next" data-autofocus>Next: venue <span aria-hidden="true">▶</span></button>
+    <div class="dock">
+      <button type="button" class="cta big" id="btn-team-next" data-autofocus>Next: venue <span aria-hidden="true">▶</span></button>
+    </div>
   </section>
 
   <section id="scr-venue" class="screen" hidden>
     <header class="bar-head">
-      <button type="button" class="ghost" data-back="scr-team">← Back</button>
+      <button type="button" class="ghost back" data-back="scr-team"><span aria-hidden="true">◀</span> Back</button>
       <div>
-        <h2>Venue and time of day</h2>
+        <p class="eyebrow" data-eyebrow>Quick play</p>
+        <h2>Venue and rules</h2>
         <p class="sub" id="venue-sub"></p>
       </div>
+      <ol class="flow" data-flow="1" aria-label="Match setup steps"></ol>
     </header>
-    <div class="settings-grid">
-      <section class="panel set-group" aria-labelledby="sg-venue">
-        <h3 id="sg-venue">Venue</h3>
+    <div class="venue-layout">
+      <section class="panel venue-panel" aria-labelledby="sg-venue">
+        <div class="panel-row">
+          <h3 class="panel-h" id="sg-venue">Venue</h3>
+          <fieldset id="time-pick" class="time-pick">
+            <legend>Time of day</legend>
+            <div class="seg" id="opt-time"></div>
+          </fieldset>
+        </div>
         <fieldset>
           <legend class="vh">Venue</legend>
-          <div class="seg" id="opt-venue"></div>
-          <p class="role-desc" id="venue-desc"></p>
-        </fieldset>
-        <fieldset id="time-pick">
-          <legend>Time of day</legend>
-          <div class="seg" id="opt-time"></div>
+          <div class="venue-cards" id="opt-venue"></div>
+          <p class="venue-desc" id="venue-desc"></p>
         </fieldset>
       </section>
-      <section class="panel set-group" aria-labelledby="sg-rules">
-        <h3 id="sg-rules">Rules</h3>
+      <section class="panel rules-panel" aria-labelledby="sg-rules">
+        <h3 class="panel-h" id="sg-rules">Rules</h3>
         <fieldset>
           <legend>Difficulty</legend>
           <div class="seg" id="opt-diff">
@@ -181,46 +195,53 @@
         </fieldset>
       </section>
     </div>
-    <div class="step-actions">
-      <button type="button" class="cta big" id="btn-start" data-autofocus><span aria-hidden="true">▶</span> Choose your position</button>
+    <div class="dock">
       <div class="quick-row">
-        <button type="button" class="ghost small" id="btn-quick" aria-describedby="quick-hint">Quick match</button>
+        <button type="button" class="ghost" id="btn-quick" aria-describedby="quick-hint">Quick match</button>
         <p class="start-hint" id="quick-hint">Skips the draft: your team is picked for you.</p>
       </div>
+      <button type="button" class="cta big" id="btn-start" data-autofocus>Choose your position <span aria-hidden="true">▶</span></button>
     </div>
   </section>
 
   <section id="scr-pick" class="screen" hidden>
     <header class="bar-head">
-      <button type="button" class="ghost" data-back="scr-venue">← Back</button>
+      <button type="button" class="ghost back" data-back="scr-venue"><span aria-hidden="true">◀</span> Back</button>
       <div>
+        <p class="eyebrow" data-eyebrow>Quick play</p>
         <h2>Choose your position</h2>
         <p class="sub" id="pick-help">Pick where you play, then choose your Pokémon from three offers suited to that spot. As captain it gets +14 to every rating.</p>
       </div>
-      <button type="button" class="ghost" id="btn-reroll-cap">New offers</button>
+      <ol class="flow" data-flow="2" aria-label="Match setup steps"></ol>
     </header>
-    <fieldset class="pos-pick">
-      <legend>Your position</legend>
-      <div class="seg" id="opt-role"></div>
+    <fieldset class="panel pos-pick">
+      <legend class="panel-h">Your position</legend>
+      <div class="seg tabs" id="opt-role"></div>
       <p class="role-desc" id="role-desc"></p>
     </fieldset>
+    <div class="offers-head"><h3 class="panel-h">Your captain: pick one</h3><button type="button" class="ghost small" id="btn-reroll-cap">New offers</button></div>
     <div class="offers" id="pick-grid"></div>
   </section>
 
   <section id="scr-draft" class="screen" hidden>
     <header class="bar-head">
-      <button type="button" class="ghost" data-back="scr-pick">← Back</button>
+      <button type="button" class="ghost back" data-back="scr-pick"><span aria-hidden="true">◀</span> Back</button>
       <div>
+        <p class="eyebrow" data-eyebrow>Quick play</p>
         <h2 id="draft-round">Round 1</h2>
         <p class="sub" id="draft-help">Pick one teammate from these three offers.</p>
       </div>
-      <button type="button" class="ghost" id="btn-reroll">New offers</button>
+      <ol class="flow" data-flow="3" aria-label="Match setup steps"></ol>
     </header>
     <div class="draft-wrap">
-      <div class="offers" id="offers"></div>
+      <div>
+        <div class="offers-head"><h3 class="panel-h">On the board</h3><button type="button" class="ghost small" id="btn-reroll">New offers</button></div>
+        <div class="offers" id="offers"></div>
+      </div>
       <aside class="team-panel">
-        <h3>Your team</h3>
-        <p class="sub" id="roster-ovr"></p>
+        <h3 class="panel-h">Your team</h3>
+        <div class="team-rating"><b id="roster-ovr-n"></b><span id="roster-ovr"></span></div>
+        <div class="meter" aria-hidden="true"><span id="roster-meter"></span></div>
         <ul id="roster"></ul>
       </aside>
     </div>
@@ -228,30 +249,42 @@
 
   <section id="scr-matchup" class="screen" hidden>
     <header class="bar-head">
-      <button type="button" class="ghost" data-back="scr-pick">← Redraft</button>
+      <button type="button" class="ghost back" data-back="scr-pick"><span aria-hidden="true">◀</span> Redraft</button>
       <div>
+        <p class="eyebrow" data-eyebrow>Quick play</p>
         <h2>Matchup</h2>
         <p class="sub" id="mu-meta"></p>
       </div>
+      <ol class="flow" data-flow="4" aria-label="Match setup steps"></ol>
     </header>
+    <div class="mu-banner" id="mu-banner"></div>
     <div class="matchup">
       <div class="mu-team you" id="mu-you"></div>
-      <div class="vs" aria-hidden="true">VS</div>
       <div class="mu-team rival" id="mu-rival"></div>
     </div>
-    <button type="button" class="cta" id="btn-play" data-autofocus>Play</button>
+    <div class="dock">
+      <button type="button" class="cta big" id="btn-play" data-autofocus><span aria-hidden="true">▶</span> Play</button>
+    </div>
   </section>
 
   <section id="scr-result" class="screen" hidden>
-    <div class="result-head">
+    <div class="result-head" id="res-head">
+      <p class="eyebrow" id="res-kicker">Final</p>
       <h2 id="res-title">You win!</h2>
-      <p class="score" id="res-score">15 : 10</p>
+      <div class="res-board">
+        <div class="res-team" id="res-t0"></div>
+        <p class="score" id="res-score">15 : 10</p>
+        <div class="res-team" id="res-t1"></div>
+      </div>
+      <p class="res-sets" id="res-sets"></p>
       <p class="sub" id="res-meta"></p>
       <p class="rtg-res" id="res-xp" hidden></p>
     </div>
-    <div class="mvp" id="res-mvp"></div>
-    <div class="box-wrap" id="res-box"></div>
-    <div class="actions">
+    <div class="res-body">
+      <div class="mvp panel" id="res-mvp"></div>
+      <div class="box-wrap" id="res-box"></div>
+    </div>
+    <div class="dock actions">
       <button type="button" class="cta" id="btn-rematch" data-autofocus>Rematch</button>
       <button type="button" class="ghost" id="btn-redraft">New draft</button>
       <button type="button" class="ghost" id="btn-menu">Main menu</button>
@@ -261,8 +294,9 @@
 
   <section id="scr-rtg" class="screen" hidden>
     <header class="bar-head">
-      <button type="button" class="ghost" data-back="scr-title">← Back</button>
+      <button type="button" class="ghost back" data-back="scr-title"><span aria-hidden="true">◀</span> Back</button>
       <div>
+        <p class="eyebrow">Career mode</p>
         <h2>Road to Glory</h2>
         <p class="sub">Create a rookie, get drafted and play your way into the starting lineup. Three careers can be saved on this device.</p>
       </div>
@@ -286,8 +320,9 @@
 
   <section id="scr-rtg-new" class="screen" hidden>
     <header class="bar-head">
-      <button type="button" class="ghost" data-back="scr-rtg">← Back</button>
+      <button type="button" class="ghost back" data-back="scr-rtg"><span aria-hidden="true">◀</span> Back</button>
       <div>
+        <p class="eyebrow">Road to Glory</p>
         <h2>Create your rookie</h2>
         <p class="sub">In Road to Glory your Pokémon only sets your look and type. Your stats come from your build.</p>
       </div>
@@ -329,8 +364,9 @@
 
   <section id="scr-rtg-hub" class="screen" hidden>
     <header class="bar-head">
-      <button type="button" class="ghost" data-back="scr-rtg">← Careers</button>
+      <button type="button" class="ghost back" data-back="scr-rtg"><span aria-hidden="true">◀</span> Careers</button>
       <div>
+        <p class="eyebrow">Road to Glory</p>
         <h2 id="hub-title">Road to Glory</h2>
         <p class="sub" id="hub-sub"></p>
       </div>
@@ -390,6 +426,7 @@
   <section id="scr-rtg-draft" class="screen" hidden>
     <header class="bar-head">
       <div>
+        <p class="eyebrow">Road to Glory</p>
         <h2>Rookie draft</h2>
         <p class="sub" id="draft-sub"></p>
       </div>
@@ -406,8 +443,9 @@
 
   <section id="scr-rtg-stats" class="screen" hidden>
     <header class="bar-head">
-      <button type="button" class="ghost" data-back="scr-rtg-hub">← Career</button>
+      <button type="button" class="ghost back" data-back="scr-rtg-hub"><span aria-hidden="true">◀</span> Career</button>
       <div>
+        <p class="eyebrow">Road to Glory</p>
         <h2 id="stats-title">Career</h2>
         <p class="sub" id="stats-sub"></p>
       </div>
@@ -445,6 +483,7 @@
     <div id="pause" class="overlay" hidden>
       <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="pause-h">
         <h2 id="pause-h">Paused</h2>
+        <p class="pause-score" id="pause-score"></p>
         <button type="button" class="cta" id="btn-resume">Resume</button>
         <button type="button" class="ghost" id="btn-quit">Quit to menu</button>
       </div>
@@ -466,9 +505,9 @@
   </div>
 </div>
 
-<script src="data.js?v=57"></script>
-<script src="sprites.js?v=57"></script>
-<script src="game.js?v=57"></script>
-<script src="career.js?v=57"></script>
+<script src="data.js?v=58"></script>
+<script src="sprites.js?v=58"></script>
+<script src="game.js?v=58"></script>
+<script src="career.js?v=58"></script>
 </body>
 </html>
