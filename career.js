@@ -62,6 +62,9 @@ function validCareer(c) {
   }
   if (!(Number.isInteger(c.xp) && c.xp >= 0 && Number.isInteger(c.season) && c.season >= 1)) return false;
   if (c.league != null && !validLeague(c.league)) c.league = null; // a broken league sends you back to the draft, not the whole career
+  if (c.league && (!c.league.ps || typeof c.league.ps !== 'object')) c.league.ps = {};
+  if (!c.log || typeof c.log !== 'object') c.log = {};
+  if (!Array.isArray(c.trophies)) c.trophies = [];
   return true;
 }
 function validLeague(L) {
@@ -392,11 +395,26 @@ function newSeason(c) {
   L.weeks = makeSchedule(); L.week = 0;
   L.results = L.weeks.map(w => w.map(() => null));
   L.po = null; L.champion = null;
+  L.ps = {};        // regular-season stat lines for every player in the league, for the awards: key -> line
+  L.awards = null;  // filled in when the final is played
+  careerLog(c);     // your own line for the new season
 }
-// The draft screen comes later. For now the worst club (the lowest rated) takes you, as it would pick first.
+// The rookie draft: you and nine other prospects, one pick per club. Clubs pick worst first (by team rating in your
+// first season, as there are no standings yet) and each takes the best prospect left, by OVR plus a little scouting
+// noise. So where you go depends on your build and stats. The other prospects are the draft show's supporting cast:
+// they do not join the rosters.
 function joinLeague(c) {
   c.league = { clubs: makeRosters(c.mon), myClub: null };
-  c.league.myClub = Object.keys(CLUBS).reduce((a, b) => (clubAvg(c.league, b) < clubAvg(c.league, a) ? b : a));
+  const L = c.league, order = Object.keys(CLUBS).sort((a, b) => clubAvg(L, a) - clubAvg(L, b));
+  const taken = new Set([c.mon, ...Object.values(L.clubs).flat()]);
+  const pool = DEX.filter(m => !m.leg && !taken.has(m.id)).sort(() => Math.random() - 0.5).slice(0, 9);
+  const scout = () => (Math.random() - 0.5) * 6;
+  const prospects = [{ you: true, mon: c.mon, pos: c.pos, ovr: careerOvr(c), v: careerOvr(c) + scout() },
+    ...pool.map(m => { const ovr = 33 + Math.floor(Math.random() * 14); /* 33 to 46, so a new rookie (41 to 43) usually goes early, to a weak club */ return { mon: m.id, pos: pickOne(RTG_POS), ovr, v: ovr + scout() }; })];
+  prospects.sort((a, b) => b.v - a.v);
+  L.draft = order.map((club, i) => ({ club, ...prospects[i], v: undefined }));
+  const mine = L.draft.findIndex(d => d.you);
+  L.myClub = L.draft[mine].club; c.draftPick = { n: mine + 1, club: L.myClub, season: c.season };
   newSeason(c);
 }
 const clubAvg = (L, id) => teamOvr(clubEntries(L, id));
@@ -440,13 +458,18 @@ const myGame = L => roundGames(L).find(g => g.h === L.myClub || g.a === L.myClub
 // Finish the round: your match's result (if you had one) goes in, the rest are simulated, then the season moves on.
 function finishRound(c, mySets) {
   const L = c.league, ph = phaseOf(L);
-  for (const g of roundGames(L)) g.set(mySets && (g.h === L.myClub || g.a === L.myClub) ? mySets : simMatch(c, g.h, g.a, FMT[ph]));
+  for (const g of roundGames(L)) {
+    if (mySets && (g.h === L.myClub || g.a === L.myClub)) { g.set(mySets); continue; }
+    const sets = simMatch(c, g.h, g.a, FMT[ph]);
+    g.set(sets);
+    if (ph === 'regular') simStats(c, g.h, g.a, sets);
+  }
   if (ph === 'regular') { L.week++; if (L.week === WEEKS) seedPlayoffs(c); }
   else if (ph === 'semi') {
     const w = L.po.semis.map(([h, a], i) => (homeWon(L.po.semiRes[i]) ? h : a)), t = standings(c);
     const better = (x, y) => t[y].w - t[x].w || (t[y].sw - t[y].sl) - (t[x].sw - t[x].sl);
     L.po.final = w.sort(better);
-  } else if (ph === 'final') L.champion = homeWon(L.po.finalRes) ? L.po.final[0] : L.po.final[1];
+  } else if (ph === 'final') { L.champion = homeWon(L.po.finalRes) ? L.po.final[0] : L.po.final[1]; endSeason(c); }
 }
 
 // ---------- XP from a match ----------
@@ -464,11 +487,12 @@ function matchXp(c, st, won, ph) {
 // for a position already fits it about as well as a weak club's starter does.)
 const TRUST_START = 100, BENCH_XP = 5;
 const callLate = target => Math.round(target * 2 / 3); // 10 in a set to 15, 17 in a set to 25
-// 10 for coming on, 2.5 per point of your box score share (as in matchXp, up to 45) and 10 for a win:
-// about 20 to 30 for a usual outing off the bench, so a starting spot in four or five matches.
+// 10 for coming on, 1.5 per point of your box score share (as in matchXp, up to 25) and 10 for a win (a met coach's
+// goal adds GOAL_TRUST): about 20 to 35 for a usual outing off the bench, so a starting spot in three to five
+// matches, and never fewer than two.
 function trustGain(c, st, won) {
   const perf = POS_XP[c.pos] * (2 * st.kills + 3 * st.aces + 3 * st.blocks + 1.5 * st.digs + 0.5 * st.ast);
-  return 10 + Math.min(45, Math.round(perf * 2.5)) + (won ? 10 : 0);
+  return 10 + Math.min(25, Math.round(perf * 1.5)) + (won ? 10 : 0);
 }
 // The starter ahead of you: the weaker (by position fit) of those your club puts at your position without you.
 function rivalStarter(c) {
@@ -504,7 +528,7 @@ function setupCareerMatch() {
   careerMatch.bench = c.starter ? null : teams[0][0]; // the lineup leaves you out and you wait on the sideline
   renderMatchup();
   if (careerMatch.bench) $('#mu-you').appendChild(el('p', 'rot-note rtg-bench-note', `<b>${escHtml(careerName(c))} starts on the bench.</b> The coach sends you on for ${rivalStarter(c).mon.name} during the match: after a lost set, when the team falls 5 behind, or once a team reaches ${callLate(FMT[ph].target)} points in set 2 or later.`));
-  $('#mu-meta').textContent = `${ROUND_NAMES[ph]}${ph === 'regular' ? `, week ${L.week + 1}` : ''} · ${careerMatch.home ? 'Home' : 'Away'} · ${VENUES[VENUE_FOR[ph]].name} · You play ${ROLES[c.pos].name} · ${cap(c.diff)} · ${matchFormat()}`;
+  $('#mu-meta').textContent = `${ROUND_NAMES[ph]}${ph === 'regular' ? `, week ${L.week + 1}` : ''} · ${careerMatch.home ? 'Home' : 'Away'} · ${VENUES[VENUE_FOR[ph]].name} · You play ${ROLES[c.pos].name} · ${cap(c.diff)} · ${matchFormat()} · Coach's goal: ${goalText(coachGoal(c))}`;
   MU_BACK.textContent = '← Career'; MU_BACK.dataset.back = 'scr-rtg-hub';
   show('scr-matchup');
 }
@@ -527,18 +551,25 @@ function careerMatchOver() {
   m.done = true;
   const me = G.rookie || G.all[0].find(p => p.human), won = G.winner === 0, played = !G.rookie || G.rookie.on;
   const sets = G.setLog.map(([x, y]) => (m.home ? [x, y] : [y, x])); // home side first
-  const xp = played ? matchXp(c, me.stats, won, m.ph) : BENCH_XP;
+  const goal = c.goal, met = goal && played && (me.stats[goal.stat] || 0) >= goal.n;
+  const bonus = met ? Math.round(GOAL_XP * (m.ph === 'regular' ? 1 : 1.5)) : 0;
+  const xp = (played ? matchXp(c, me.stats, won, m.ph) : BENCH_XP) + bonus;
   c.xp += xp; c.xpEarned += xp;
+  if (m.ph === 'regular') realStats(c, m.opp);
+  const log = careerLog(c);
+  if (played) { log.gp++; for (const k of [...STAT_LINE, 'att']) log[k] += me.stats[k] || 0; }
+  c.goal = null;
   let trust = '';
   if (!c.starter) {
-    const gain = played ? trustGain(c, me.stats, won) : 0;
+    const gain = played ? trustGain(c, me.stats, won) + (met ? GOAL_TRUST : 0) : 0;
     c.trust = Math.min(TRUST_START, (c.trust || 0) + gain);
     trust = promote(c) ? ` · <b class="rtg-up-msg">You earned a starting spot!</b>` : ` · Coach's trust +${gain} (${c.trust}/${TRUST_START})`;
   }
   finishRound(c, sets);
   saveCareers();
   $('#res-xp').hidden = false;
-  $('#res-xp').innerHTML = `<b>+${xp} XP</b> for ${escHtml(careerName(c))}${played ? '' : ' for being there (you did not come on)'}${m.ph === 'regular' ? '' : ' (playoff bonus included)'}${trust}`;
+  const goalLine = goal ? `<br>Coach's goal, ${goalText(goal)}: ${met ? `<b class="rtg-up-msg">done, +${bonus} XP</b>` : `missed (${played ? me.stats[goal.stat] || 0 : 0} of ${goal.n})`}` : '';
+  $('#res-xp').innerHTML = `<b>+${xp} XP</b> for ${escHtml(careerName(c))}${played ? '' : ' for being there (you did not come on)'}${m.ph === 'regular' ? '' : ' (playoff bonus included)'}${trust}${goalLine}`;
 }
 
 // ---------- the hub's league panels ----------
@@ -546,14 +577,16 @@ function renderNext(c) {
   const info = $('#hub-next-info'), btn = $('#hub-next'), L = c.league;
   btn.disabled = false;
   if (!L) {
-    info.innerHTML = '<p class="settings-note">Rookies join through the draft. The worst club picks first.</p>';
-    btn.innerHTML = '<span aria-hidden="true">▶</span> Go to the draft'; btn.onclick = () => { joinLeague(c); saveCareers(); renderHub(); toast2(`${CLUBS[c.league.myClub].name} drafted you`); };
+    info.innerHTML = '<p class="settings-note">Rookies join through the draft. Ten clubs pick, the lowest rated first, and each takes the best prospect left. Where you go depends on your stats.</p>';
+    btn.innerHTML = '<span aria-hidden="true">▶</span> Go to the draft'; btn.onclick = () => { joinLeague(c); saveCareers(); openDraft(); };
     return;
   }
   const ph = phaseOf(L), g = myGame(L);
   if (ph === 'done') {
     const champ = CLUBS[L.champion], won = L.champion === L.myClub;
-    info.innerHTML = `<div class="rtg-champ">${crestImg(L.champion, 48)}<p><b>${won ? 'Champions!' : `${champ.name} win the title`}</b><span>Final: ${CLUBS[L.po.final[0]].name} ${setLine(L.po.finalRes)} ${CLUBS[L.po.final[1]].name}</span></p></div>`;
+    const aw = (L.awards || []).map(a => `<li class="${a.key === 'you' ? 'you' : ''}"><b>${a.name}</b><span>${a.key === 'you' ? escHtml(careerName(c)) : lineName(L, a.key)} · ${CLUBS[a.club].abbr} · ${a.what}</span></li>`).join('');
+    info.innerHTML = `<div class="rtg-champ">${crestImg(L.champion, 48)}<p><b>${won ? 'Champions!' : `${champ.name} win the title`}</b><span>Final: ${CLUBS[L.po.final[0]].name} ${setLine(L.po.finalRes)} ${CLUBS[L.po.final[1]].name}</span></p></div>
+      ${aw ? `<h4 class="rtg-aw-h">Season awards</h4><ul class="rtg-awards">${aw}</ul>` : ''}`;
     btn.innerHTML = `<span aria-hidden="true">▶</span> Start season ${c.season + 1}`;
     btn.onclick = () => { c.season++; newSeason(c); saveCareers(); renderHub(); };
     return;
@@ -563,6 +596,7 @@ function renderNext(c) {
     const home = g.h === L.myClub, opp = home ? g.a : g.h;
     info.innerHTML = `<p class="rtg-round">${label}</p><div class="rtg-vs">${crestImg(L.myClub, 40)}<b>${CLUBS[L.myClub].abbr}</b><span>${home ? 'vs' : 'at'}</span><b>${CLUBS[opp].abbr}</b>${crestImg(opp, 40)}</div>
       <p class="settings-note">${home ? 'Home' : 'Away'} against ${CLUBS[opp].name} (team rating ${clubOvr(c, opp)}). ${ph === 'regular' ? 'Best of 3 sets to 15.' : 'Best of 3 sets to 25.'}</p>
+      <p class="rtg-goal"><b>Coach's goal:</b> ${goalText(coachGoal(c))} (+${Math.round(GOAL_XP * (ph === 'regular' ? 1 : 1.5))} XP${c.starter ? '' : `, +${GOAL_TRUST} trust`})</p>
       ${c.starter ? '' : `<p class="settings-note">You start on the bench behind ${rivalStarter(c).mon.name} (OVR ${rivalStarter(c).ovr}), and the coach will call you in during the match. To start, earn ${TRUST_START} trust or raise your OVR to ${rivalStarter(c).ovr}.</p>`}`;
     btn.innerHTML = '<span aria-hidden="true">▶</span> Play match'; btn.onclick = setupCareerMatch;
   } else { // your club is out: the rest of the playoffs are simulated
@@ -599,3 +633,166 @@ function renderLeague(c) {
   }
   const now = sched.querySelector('li:not(.w):not(.l)'); if (now) now.classList.add('now');
 }
+
+// ===================== stats, awards and coach goals =====================
+const STAT_LINE = ['kills', 'aces', 'blocks', 'digs', 'ast'];
+const blankLine = club => ({ club, gp: 0, kills: 0, aces: 0, blocks: 0, digs: 0, ast: 0 });
+// Add one match to a player's season line. Players are keyed by Pokémon (no Pokémon is on two clubs); you are 'you'.
+function addLine(L, key, club, st) {
+  const ln = L.ps[key] || (L.ps[key] = blankLine(club));
+  ln.club = club; ln.gp++;
+  for (const k of STAT_LINE) ln[k] += st[k] || 0;
+}
+// Simulated matches get stat lines too, so the awards cover the whole league. Each point a team wins is a kill (55%),
+// an ace (7%), a block (10%) or an error by the other side (28%), and goes to a player picked by role and rating;
+// 85% of kills come from a set, credited to the setter. Digs: about one per point the other side wins, mostly to the
+// libero and the outsides.
+function simStats(c, h, a, sets) {
+  const L = c.league, pts = [0, 0];
+  for (const [x, y] of sets) { pts[0] += x; pts[1] += y; }
+  [h, a].forEach((id, t) => {
+    const lu = lineup(clubEntries(L, id), null, c.pos, 6), st = lu.map(() => ({ kills: 0, aces: 0, blocks: 0, digs: 0, ast: 0 }));
+    const pick = w => { const ws = lu.map(w), sum = ws.reduce((x, y) => x + y, 0); let r = Math.random() * sum, i = 0; while ((r -= ws[i]) > 0 && i < ws.length - 1) i++; return i; };
+    const W = {
+      kills: ({ entry: e, role }) => e.r.pwr * ({ OH: 1, OPP: 1.2, MB: 0.6, S: 0.05 }[role] || 0),
+      aces: ({ entry: e, role }) => (role === 'L' ? 0 : e.r.pwr),
+      blocks: ({ entry: e, role }) => e.r.jmp * ({ MB: 1.5, OPP: 0.8, OH: 0.5, S: 0.3 }[role] || 0),
+      digs: ({ entry: e, role }) => e.r.def * ({ L: 1.6, OH: 1, S: 0.5, OPP: 0.4, MB: 0.3 }[role] || 0.4),
+    };
+    const setter = lu.findIndex(x => x.role === 'S');
+    for (let i = 0; i < pts[t]; i++) {
+      const r = Math.random();
+      if (r < 0.55) { st[pick(W.kills)].kills++; if (setter >= 0 && Math.random() < 0.85) st[setter].ast++; }
+      else if (r < 0.62) st[pick(W.aces)].aces++;
+      else if (r < 0.72) st[pick(W.blocks)].blocks++;
+    }
+    for (let i = 0; i < pts[1 - t]; i++) if (Math.random() < 0.9) st[pick(W.digs)].digs++;
+    lu.forEach((x, i) => addLine(L, String(x.entry.mon.id), id, st[i]));
+  });
+}
+// Your match: the real box score of everyone who took the court. You only count if you came on.
+function realStats(c, oppId) {
+  const L = c.league;
+  for (let s = 0; s < 2; s++) for (const p of G.all[s]) {
+    if (p === G.rookie && !p.on) continue;
+    addLine(L, p.entry.career ? 'you' : String(p.mon.id), s === 0 ? L.myClub : oppId, p.stats);
+  }
+}
+// Your career log: one line per season, including the playoffs.
+function careerLog(c) {
+  c.log = c.log || {};
+  return c.log[c.season] || (c.log[c.season] = { ...blankLine(c.league ? c.league.myClub : null), att: 0, finish: null });
+}
+const lineName = (L, key) => (key === 'you' ? null : BY_ID.get(Number(key)).name);
+// Season awards from the regular-season lines. A player needs 6 matches (about half the season) to qualify.
+// Most valuable player: the most per match of 3 x (kills + aces + blocks) + digs + half the assists. Rookie of the Year:
+// the league's only first-year player is you, so it is yours if you finish your first season as a starter.
+const AWARDS = [
+  { id: 'mvp', name: 'Most valuable player', val: l => (3 * (l.kills + l.aces + l.blocks) + l.digs + 0.5 * l.ast) / l.gp, fmt: l => `${((3 * (l.kills + l.aces + l.blocks) + l.digs + 0.5 * l.ast) / l.gp).toFixed(1)} a match` },
+  { id: 'kills', name: 'Top scorer', val: l => l.kills, fmt: l => `${l.kills} kills` },
+  { id: 'aces', name: 'Top server', val: l => l.aces, fmt: l => `${l.aces} aces` },
+  { id: 'blocks', name: 'Top blocker', val: l => l.blocks, fmt: l => `${l.blocks} blocks` },
+  { id: 'digs', name: 'Top digger', val: l => l.digs, fmt: l => `${l.digs} digs` },
+  { id: 'ast', name: 'Top setter', val: l => l.ast, fmt: l => `${l.ast} assists` },
+];
+function endSeason(c) {
+  const L = c.league, lines = Object.entries(L.ps).filter(([, l]) => l.gp >= 6);
+  L.awards = AWARDS.map(a => {
+    if (!lines.length) return null;
+    const [key, l] = lines.reduce((x, y) => (a.val(y[1]) > a.val(x[1]) ? y : x));
+    return { id: a.id, name: a.name, key, club: l.club, what: a.fmt(l) };
+  }).filter(Boolean);
+  const first = c.draftPick && c.draftPick.season === c.season;
+  if (first && c.starter) L.awards.push({ id: 'roy', name: 'Rookie of the Year', key: 'you', club: L.myClub, what: 'won a starting spot in year one' });
+  c.trophies = c.trophies || [];
+  for (const a of L.awards) if (a.key === 'you') c.trophies.push({ season: c.season, title: a.name, club: L.myClub });
+  if (L.champion === L.myClub) c.trophies.push({ season: c.season, title: 'Champion', club: L.myClub });
+  const t = standings(c)[L.myClub], log = careerLog(c), div = divTable(c, divOf(L.myClub)).findIndex(r => r.id === L.myClub) + 1;
+  log.rec = `${t.w}-${t.l}`;
+  log.finish = L.champion === L.myClub ? 'Champion' : L.po.final.includes(L.myClub) ? 'Lost the final'
+    : L.po.semis.flat().includes(L.myClub) ? 'Lost a semi-final' : `${['1st', '2nd', '3rd', '4th', '5th'][div - 1]} in the ${DIV_NAMES[divOf(L.myClub)].split(' ')[0]}`;
+}
+
+// Coach goals: before each match the coach sets one goal for your position. Off the bench (fewer minutes) it is half
+// as big, in the playoffs (sets to 25) half as big again. Meeting it gives GOAL_XP (and coach's trust while you sit).
+const GOALS = { OH: [['kills', 5], ['digs', 5]], OPP: [['kills', 5], ['aces', 2]], MB: [['blocks', 2], ['kills', 3]], S: [['ast', 12], ['aces', 1]], L: [['digs', 4]] };
+const GOAL_NAMES = { kills: ['kill', 'kills'], digs: ['dig', 'digs'], aces: ['ace', 'aces'], blocks: ['block', 'blocks'], ast: ['assist', 'assists'] };
+const GOAL_XP = 15, GOAL_TRUST = 10;
+const goalText = g => `${g.n} ${GOAL_NAMES[g.stat][g.n === 1 ? 0 : 1]}`;
+function roundKey(L) { const ph = phaseOf(L); return `${ph}-${ph === 'regular' ? L.week : 0}`; }
+function coachGoal(c) { // the goal for the coming match, set once and saved so a reload does not change it
+  const L = c.league, key = `${c.season}-${roundKey(L)}`;
+  if (c.goal && c.goal.key === key) return c.goal;
+  const [stat, base] = pickOne(GOALS[c.pos]), ph = phaseOf(L);
+  let n = c.starter ? base : Math.ceil(base / 2);
+  if (ph !== 'regular') n = Math.round(n * 1.5);
+  c.goal = { key, stat, n: Math.max(1, n) };
+  saveCareers();
+  return c.goal;
+}
+
+// ---------- the draft show ----------
+let draftTimer = null;
+function openDraft() {
+  const c = careers[slot], L = c.league;
+  $('#draft-sub').textContent = `Season ${c.season} · ${L.draft.length} clubs, one pick each, the lowest-rated club first. Clubs take the best prospect left.`;
+  const list = $('#draft-list'); list.innerHTML = '';
+  L.draft.forEach((d, i) => {
+    const li = el('li', 'rtg-pick' + (d.you ? ' you' : ''));
+    const mon = BY_ID.get(d.mon);
+    li.innerHTML = `<span class="rtg-pick-n">${i + 1}</span><span class="rtg-club">${crestImg(d.club, 24)}${CLUBS[d.club].name}</span>
+      <span class="rtg-pick-who">${portrait(mon, 96, 40).outerHTML}<span><b>${d.you ? escHtml(careerName(c)) : mon.name}</b><i>${ROLES[d.pos].short} · OVR ${d.ovr}${d.you ? ' · YOU' : ''}</i></span></span>`;
+    list.appendChild(li);
+  });
+  $('#draft-go').hidden = true; $('#draft-skip').hidden = false;
+  $('#draft-result').textContent = '';
+  show('scr-rtg-draft');
+  revealPick(0, reduceMotion.matches ? 0 : 650);
+}
+function revealPick(i, wait) {
+  clearTimeout(draftTimer);
+  const rows = $('#draft-list').children, c = careers[slot];
+  if (i >= rows.length || !c) { draftDone(); return; }
+  rows[i].classList.add('shown');
+  if (rows[i].classList.contains('you')) {
+    Sfx.point(true);
+    $('#draft-result').textContent = `With pick ${i + 1}, the ${CLUBS[c.league.myClub].name} select ${careerName(c)}!`;
+  }
+  draftTimer = setTimeout(() => revealPick(i + 1, wait), rows[i].classList.contains('you') ? wait * 2.5 : wait);
+}
+function draftDone() {
+  clearTimeout(draftTimer);
+  for (const r of $('#draft-list').children) r.classList.add('shown');
+  const c = careers[slot];
+  $('#draft-result').textContent = `With pick ${c.draftPick.n}, the ${CLUBS[c.league.myClub].name} select ${careerName(c)}!`;
+  $('#draft-skip').hidden = true; $('#draft-go').hidden = false;
+  $('#draft-go').textContent = `Join the ${CLUBS[c.league.myClub].name}`;
+  $('#draft-go').focus();
+}
+$('#draft-skip').addEventListener('click', draftDone);
+$('#draft-go').addEventListener('click', () => { clearTimeout(draftTimer); renderHub(); show('scr-rtg-hub'); });
+
+// ---------- the career stats page ----------
+function openStats() {
+  const c = careers[slot]; if (!c) return;
+  $('#stats-title').textContent = `${careerName(c)}: career`;
+  const dp = c.draftPick;
+  $('#stats-sub').textContent = dp ? `Drafted with pick ${dp.n} by the ${CLUBS[dp.club].name} in season ${dp.season}.`
+    : c.league ? `Plays for the ${CLUBS[c.league.myClub].name}.` : 'Not drafted yet.';
+  const tro = c.trophies || [], titles = tro.filter(t => t.title === 'Champion').length;
+  $('#stats-trophies').innerHTML = tro.length
+    ? tro.map(t => `<li class="${t.title === 'Champion' ? 'champ' : ''}"><b>${t.title}</b><span>Season ${t.season} · ${CLUBS[t.club].abbr}</span></li>`).join('')
+    : '<li class="none">Nothing yet. Titles and season awards will show here.</li>';
+  const seasons = Object.keys(c.log || {}).map(Number).sort((a, b) => a - b), tot = { gp: 0, kills: 0, aces: 0, blocks: 0, digs: 0, ast: 0 };
+  const rows = seasons.map(n => {
+    const l = c.log[n];
+    for (const k in tot) tot[k] += l[k];
+    return `<tr><th scope="row">${n}</th><td class="rtg-club">${l.club ? `${crestImg(l.club, 20)}${CLUBS[l.club].abbr}` : '-'}</td><td>${l.gp}</td><td>${l.kills}</td><td>${l.aces}</td><td>${l.blocks}</td><td>${l.digs}</td><td>${l.ast}</td><td>${l.rec || (n === c.season ? 'In progress' : '-')}</td><td>${l.finish || ''}</td></tr>`;
+  }).join('');
+  $('#stats-table').innerHTML = `<caption class="vh">Season by season</caption>
+    <thead><tr><th scope="col">Season</th><th scope="col">Club</th><th scope="col" title="Matches you played in">GP</th><th scope="col">K</th><th scope="col">ACE</th><th scope="col">BLK</th><th scope="col">DIG</th><th scope="col">AST</th><th scope="col" title="Club's regular-season record">Record</th><th scope="col">Finish</th></tr></thead>
+    <tbody>${rows}</tbody>
+    <tfoot><tr><th scope="row">Total</th><td></td><td>${tot.gp}</td><td>${tot.kills}</td><td>${tot.aces}</td><td>${tot.blocks}</td><td>${tot.digs}</td><td>${tot.ast}</td><td></td><td>${titles ? `${titles} title${titles > 1 ? 's' : ''}` : ''}</td></tr></tfoot>`;
+  show('scr-rtg-stats');
+}
+$('#hub-stats').addEventListener('click', openStats);

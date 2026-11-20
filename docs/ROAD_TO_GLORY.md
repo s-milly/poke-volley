@@ -41,7 +41,7 @@ Archetypes:
 ## Growth
 
 - **XP from matches.** 10 XP for playing and 10 for a win, plus your box score: 2 per kill, 3 per ace, 3 per block, 1.5 per dig and 0.5 per assist. Middles get 1.4 times the box score share, setters 1.2 times and liberos 3 times, because the box score counts less of what they do. Playoff matches give 1.5 times the total. A bench player who doesn't come in earns a small amount for being there.
-- **Coach goals.** Before each match the coach sets one goal, such as 3 aces or 10 digs. Meeting it gives bonus XP.
+- **Coach goals.** Before each match the coach sets one goal for your position (OH: 5 kills or 5 digs; OPP: 5 kills or 2 aces; MB: 2 blocks or 3 kills; S: 12 assists or 1 ace; L: 4 digs). Off the bench it is half as big, and in the playoffs half as big again. Meeting it gives 15 XP (22 in the playoffs) and, while you are on the bench, 10 coach's trust. The goal is saved, so reloading does not change it.
 - **Training.** One drill between matches. Pick from serve targets, passing, block timing or spike accuracy. Your drill score sets how much XP you get **(proposal: the XP goes into the stat the drill trains)**.
 - **Spending.** You spend XP on the stat of your choice. A point costs 5 XP while the stat is in the 30s, plus 2 more for each band of ten above that (7 in the 40s, 9 in the 50s, up to 17 in the 90s). No stat can pass its cap.
 - **Aging.** You grow through about season 6 and hold steady in seasons 7 and 8. From season 9, every stat drops a little each off-season, and the drop gets larger each year.
@@ -60,8 +60,7 @@ Archetypes:
 
 ## Draft
 
-The draft is a short show before season 1. Clubs pick in reverse order of last season's standings. Your draft position depends on your build and stats, so a rookie usually goes to a weak club.
-
+A short draft show before season 1. Ten prospects, one pick per club: you and nine others rated 33 to 46. Clubs pick from the lowest team rating up (there are no standings yet in season 1), and each takes the best prospect left by OVR plus a little scouting noise, so where you go depends on your stats. A new rookie (41 to 43) usually goes in the first five picks, to a weaker club. The picks are revealed one at a time, or all at once with "Show every pick". The other prospects are part of the show only and do not join the rosters.
 ## Transfers
 
 Once your rating is high enough, other clubs make offers between seasons. You can accept or turn them down. Your club never trades you without asking.
@@ -70,7 +69,7 @@ Once your rating is high enough, other clubs make offers between seasons. You ca
 
 - **Starting out.** You start on the bench, including in season 1, behind the weaker of your club's starters at your position.
 - **Earning the spot.** You become a starter when either:
-  - the coach's trust reaches 100. Each match you come on for gives 10, plus 2.5 per point of your box score share (up to 45), plus 10 for a win. That is about 20 to 30 a match, so four or five matches;
+  - the coach's trust reaches 100. Each match you come on for gives 10, plus 1.5 per point of your box score share (up to 25), plus 10 for a win, plus 10 for a met coach's goal. That is about 20 to 35 a match, so three to five matches and never fewer than two;
   - or your OVR reaches the starter's. A new rookie is 11 to 18 OVR behind.
   Once you start, you keep the spot.
 - **Coming in.** You wait on the sideline. At a dead ball the coach sends you on in place of that starter, with the usual walk to the sub zone, when:
@@ -82,10 +81,11 @@ Once your rating is high enough, other clubs make offers between seasons. You ca
 
 ## Rewards and records
 
-- **Season awards:** MVP, Rookie of the Year, top server, top blocker, top digger and others. They go in the trophy case.
-- **Career stats page:** totals and season-by-season lines for kills, aces, blocks, digs and assists.
+- **Season awards** from regular-season stats, for players with at least 6 matches: Most valuable player (most per match of 3 x (kills + aces + blocks) + digs + half the assists), Top scorer, Top server, Top blocker, Top digger and Top setter. Simulated matches get stat lines too, so the whole league counts: each point is a kill (55%), an ace (7%), a block (10%) or an error by the other side, credited by role and rating.
+- **Rookie of the Year** goes to you if you finish your first season as a starter (you are the league's only first-year player).
+- **Trophy case:** your awards and titles.
+- **Career stats page:** draft pick, trophy case, and a line per season (matches played, kills, aces, blocks, digs, assists, your club's record and finish) with career totals. It counts playoffs; the awards do not.
 - **Retire.** You can retire at any time. Retiring ends the career and adds it to a Hall of Fame list of past careers.
-
 ## Saves
 
 Three save slots in localStorage. Each slot holds one career.

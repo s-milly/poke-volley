@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>VolleyDex: Gen 1 Draft Volleyball</title>
 <meta name="description" content="Pick a Gen 1 Pokémon, draft teammates by their stats, and play arcade volleyball in the browser.">
-<link rel="stylesheet" href="style.css?v=55">
+<link rel="stylesheet" href="style.css?v=56">
 </head>
 <body class="on-title">
 <main id="menu">
@@ -347,6 +347,7 @@
         <section class="panel rtg-step" aria-labelledby="hub-car-h">
           <h3 id="hub-car-h">Career</h3>
           <dl class="rtg-facts" id="hub-facts"></dl>
+          <button type="button" class="ghost small" id="hub-stats">Career stats and trophies</button>
           <fieldset><legend>Difficulty</legend><div class="seg" id="hub-diff"><button type="button" data-v="easy" aria-pressed="false">Easy</button><button type="button" data-v="normal" aria-pressed="false">Normal</button><button type="button" data-v="hard" aria-pressed="false">Hard</button></div></fieldset>
         </section>
       </div>
@@ -360,6 +361,43 @@
         <ol class="rtg-sched" id="hub-sched"></ol>
       </section>
     </div>
+  </section>
+
+
+  <section id="scr-rtg-draft" class="screen" hidden>
+    <header class="bar-head">
+      <div>
+        <h2>Rookie draft</h2>
+        <p class="sub" id="draft-sub"></p>
+      </div>
+    </header>
+    <div class="panel rtg-draft">
+      <ol class="rtg-picks" id="draft-list"></ol>
+      <p class="rtg-draft-res" id="draft-result" role="status"></p>
+      <div class="rtg-actions">
+        <button type="button" class="ghost small" id="draft-skip">Show every pick</button>
+        <button type="button" class="cta" id="draft-go" hidden></button>
+      </div>
+    </div>
+  </section>
+
+  <section id="scr-rtg-stats" class="screen" hidden>
+    <header class="bar-head">
+      <button type="button" class="ghost" data-back="scr-rtg-hub">← Career</button>
+      <div>
+        <h2 id="stats-title">Career</h2>
+        <p class="sub" id="stats-sub"></p>
+      </div>
+    </header>
+    <section class="panel rtg-step" aria-labelledby="stats-tro-h">
+      <h3 id="stats-tro-h">Trophy case</h3>
+      <ul class="rtg-trophies" id="stats-trophies"></ul>
+    </section>
+    <section class="panel rtg-step rtg-stats-wrap" aria-labelledby="stats-tbl-h">
+      <h3 id="stats-tbl-h">Season by season</h3>
+      <p class="settings-note">Your own numbers in every match you played, playoffs included. The season awards count the regular season only.</p>
+      <div class="rtg-scroll"><table class="box rtg-stats" id="stats-table"></table></div>
+    </section>
   </section>
 
   <footer class="foot">Fan project, not affiliated with Nintendo, Game Freak or The Pokémon Company. Sprites and stats from PokeAPI.</footer>
@@ -405,9 +443,9 @@
   </div>
 </div>
 
-<script src="data.js?v=55"></script>
-<script src="sprites.js?v=55"></script>
-<script src="game.js?v=55"></script>
-<script src="career.js?v=55"></script>
+<script src="data.js?v=56"></script>
+<script src="sprites.js?v=56"></script>
+<script src="game.js?v=56"></script>
+<script src="career.js?v=56"></script>
 </body>
 </html>

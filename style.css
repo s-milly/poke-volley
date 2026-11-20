@@ -574,7 +574,7 @@ body.on-title .foot { display: none; }
 .rtg-confirm p { margin: 0 0 20px; color: var(--text); }
 
 .rtg-new { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 300px; gap: 20px; align-items: start; }
-.rtg-new h3, .rtg-hub h3 { font-size: 13px; color: var(--accent); text-shadow: 2px 2px 0 var(--ink); }
+.rtg-new h3, .rtg-hub h3, #scr-rtg-stats h3 { font-size: 13px; color: var(--accent); text-shadow: 2px 2px 0 var(--ink); }
 .rtg-dex { display: grid; gap: 12px; padding: 18px; }
 .rtg-dex-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .rtg-search input, .rtg-name input {
@@ -702,3 +702,39 @@ table.rtg-table tr.cut th, table.rtg-table tr.cut td { border-bottom: 3px dashed
 .rtg-facts .rtg-status { grid-column: 1 / -1; }
 .rtg-res .rtg-up-msg { font: inherit; color: #6bd88a; text-shadow: none; margin: 0; }
 .rtg-bench-note b { color: var(--accent); font-weight: 400; }
+
+/* Road to Glory: draft show, awards, coach goals and the career page */
+.rtg-draft { max-width: 760px; margin: 0 auto; padding: 18px; display: grid; gap: 16px; }
+.rtg-picks { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.rtg-pick { display: grid; grid-template-columns: 3ch minmax(0, 1fr) minmax(0, 1.2fr); align-items: center; gap: 12px; min-height: 52px; padding: 4px 10px; background: var(--panel2); border: 2px solid var(--ink); box-shadow: inset 0 0 0 2px var(--line); }
+.rtg-pick-n { font: 12px/1 var(--px); color: var(--muted); text-align: right; }
+.rtg-pick-who { display: flex; align-items: center; gap: 8px; min-width: 0; opacity: 0; }
+.rtg-pick-who > span { display: grid; gap: 2px; min-width: 0; }
+.rtg-pick-who b { font: 10px/1.3 var(--px); overflow-wrap: anywhere; }
+.rtg-pick-who i { font-style: normal; color: var(--muted); font-size: 19px; line-height: 1; }
+.rtg-pick.shown .rtg-pick-who { opacity: 1; }
+.rtg-pick.you.shown { background: #2b3a5e; box-shadow: inset 0 0 0 3px var(--accent); }
+.rtg-pick.you.shown i { color: var(--accent); }
+@media (prefers-reduced-motion: no-preference) { .rtg-pick-who { transition: opacity 200ms ease-out; } }
+.rtg-draft-res { margin: 0; min-height: 1.3em; font: 12px/1.5 var(--px); color: var(--accent); text-shadow: 2px 2px 0 var(--ink); text-align: center; }
+.rtg-draft .rtg-actions { justify-content: center; }
+.rtg-goal { margin: 0; padding: 8px 10px; color: var(--text); background: rgba(255, 207, 51, 0.1); border-left: 3px solid var(--accent); }
+.rtg-goal b { font-weight: 400; color: var(--accent); }
+.rtg-aw-h { margin: 16px 0 8px; font: 10px/1 var(--px); color: var(--text); }
+.rtg-awards, .rtg-trophies { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.rtg-awards li, .rtg-trophies li { display: grid; gap: 2px; padding: 6px 10px; background: var(--panel2); border-left: 3px solid var(--line); }
+.rtg-awards b, .rtg-trophies b { font: 9px/1.4 var(--px); color: var(--text); }
+.rtg-awards span, .rtg-trophies span { color: var(--muted); font-size: 19px; line-height: 1.05; }
+.rtg-awards li.you, .rtg-trophies li { border-left-color: var(--accent); }
+.rtg-awards li.you b, .rtg-trophies li.champ b { color: var(--accent); }
+.rtg-trophies { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
+.rtg-trophies li.none { grid-column: 1 / -1; border-left-color: var(--line); color: var(--muted); }
+#scr-rtg-stats .rtg-step { max-width: 920px; margin: 0 auto 20px; }
+.rtg-scroll { overflow-x: auto; overscroll-behavior-x: contain; }
+table.rtg-stats { box-shadow: none; border: 0; background: none; min-width: 640px; }
+table.rtg-stats td { font-variant-numeric: tabular-nums; }
+table.rtg-stats td.rtg-club { display: table-cell; }
+table.rtg-stats td.rtg-club .crest { display: inline-block; vertical-align: middle; margin-right: 6px; }
+table.rtg-stats tfoot th, table.rtg-stats tfoot td { color: var(--accent); border-bottom: 0; }
+#hub-stats { justify-self: start; }
+@media (max-width: 560px) { .rtg-pick-who b { font-size: 8px; } .rtg-pick { gap: 8px; } }
