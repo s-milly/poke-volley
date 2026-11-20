@@ -1176,7 +1176,7 @@ body:has(#scr-rtg-hub:not([hidden])) #menu { padding-bottom: 0; }
 /* Standings and schedule */
 .rtg-hub table.rtg-table th, .rtg-hub table.rtg-table td { padding: 6px 8px; }
 .rtg-hub table.rtg-table .rtg-club { white-space: nowrap; }
-.rtg-sched { gap: 0 20px; }
+.rtg-sched { gap: 0 20px; grid-auto-flow: column; grid-template-rows: repeat(var(--rows, 8), auto); }
 .rtg-sched li { grid-template-columns: 4ch minmax(0, 1fr) auto; gap: 8px; padding: 5px 2px; }
 .rtg-wk { font: 9px/1 var(--px); }
 .rtg-sched .rtg-club { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

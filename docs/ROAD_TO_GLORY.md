@@ -91,7 +91,7 @@ The hub fills the window and no tab scrolls: whatever does not fit goes to its o
 - **Home:** this week's tasks. 1. Train: one optional drill before the match. 2. Play the match (or join the draft, follow the playoffs, or start the next season). The list starts again each week. In the off-season it shows the champion and any offers from other clubs.
 - **Upgrades:** spend XP on your stats, each shown with a bar and its cap. The tab shows your XP when you can afford a point.
 - **Standings:** both division tables.
-- **Schedule:** your matches and results.
+- **Schedule:** your matches and results, down the first column and then the second.
 - **Stats:** your season line and the league leaders.
 - **Awards:** the season awards. Only in the off-season.
 - **Career:** draft details, XP earned, difficulty, Retire, the trophy case and the season table. The table shows as many seasons as fit, with Older and Newer buttons when there are more; the totals count every season.

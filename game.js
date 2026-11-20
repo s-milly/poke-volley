@@ -721,10 +721,19 @@ const TAP = 0.12;
 const tapGone = h => h.tap && holdLevel(h) > 1.6;
 const ZONES = [[0.4, -0.25, 'WEAK', '#ff8a8a', '#3a2630'], [0.65, 0.3, 'OK', '#c9d4ee', '#5d6b8a'], [0.85, 0.65, 'GOOD', '#7dffb0', '#2f9e63'], [1, 1, 'PERFECT', '#ffe14a', '#ffcf33']];
 const TOO_LONG = { q: -0.5, label: 'TOO LONG', color: '#ff5a5a' };
-function gradeL(L) {
-  for (const [top, q, label, color] of ZONES) if (L <= top) return { q, label, color };
-  return TOO_LONG;
+function gradeL(L, win = 1 - ZONES[2][0]) { // win: how much of the top of the meter is PERFECT
+  if (L > 1) return TOO_LONG;
+  if (L > 1 - win) return { q: ZONES[3][1], label: ZONES[3][2], color: ZONES[3][3] };
+  for (const [top, q, label, color] of ZONES.slice(0, 3)) if (L <= top) return { q, label, color };
+  return { q: ZONES[2][1], label: ZONES[2][2], color: ZONES[2][3] }; // between GOOD's old top and the narrower PERFECT window
 }
+// Serves and spikes: the PERFECT window shrinks with the hitter's power (PWR, "how hard it spikes and serves").
+// PWR 30 leaves 4% of the meter, PWR 53 about 6.5%, PWR 99 about 11.5%. Passes keep the full 15%.
+const perfectWin = p => clamp(0.04 + (p.r.pwr - 30) * 0.0011, 0.04, 0.12);
+// How far a serve or spike can land from where you aimed, in metres, by timing: a PERFECT lands almost on the spot,
+// a WEAK can land a few metres off. Aim at a line and anything short of PERFECT can carry it out.
+const aimRadius = q => (q == null ? 2.4 : q >= 1 ? 0.4 : q >= 0.65 ? 1.3 : q >= 0.3 ? 2.4 : 3.4);
+function scatter(x, z, R) { const a = rand(0, Math.PI * 2), r = R * Math.sqrt(Math.random()); return [x + Math.cos(a) * r, z + Math.sin(a) * r]; }
 // E is the set. Its meter is a charge, not a timing window: start holding while you run in,
 // and if it is full when you touch the ball you get a quick set (low and fast); before that, a high set.
 const SET_CHARGE = 0.4;
@@ -888,8 +897,8 @@ function doServe(p, q = null) {
       tx = ix * HW * 0.6 + rand(-0.6, 0.6);
       depth = keys.up ? 2.6 : keys.down ? HL - 1.2 : HL * 0.6;
     }
-    const e = q == null ? 1 : q >= 0 ? 1 - q * 0.8 : 1 - q * 2.5; // your timing tightens or sprays the aim
-    tx += rand(-0.6, 0.6) * (e - 1); depth += rand(-0.5, 0.5) * e;
+    [tx, depth] = scatter(tx, depth, aimRadius(q)); // your timing sets how far from the aim it can land, in or out
+    depth = Math.max(depth, 1.5);
   } else if (TUT) { // the tutorial's serves are soft and in: at you when the drill is your pass, else deep and central
     const you = tutYou(), st = tutStep();
     if (s === 1 && you && st && st.mine) { tx = clamp(you.x + rand(-0.4, 0.4), -HW * 0.8, HW * 0.8); depth = clamp(you.z * t, 2.5, HL - 1); }
@@ -900,13 +909,13 @@ function doServe(p, q = null) {
   if (!human) { // the computer mixes its serves; better teams strike them better
     const pars = parsOf(s), d = TUT ? null : s === 0 ? 'normal' : settings.diff;
     kind = TUT ? 'float' : Math.random() < 0.3 + p.r.pwr / 250 ? 'topspin' : 'float';
-    sq = !d ? 0.3 : Math.random() < pars.perfect ? 1 : Math.random() < { easy: 0.2, normal: 0.5, hard: 0.8 }[d] ? 0.65 : 0.3;
+    sq = !d ? 0.3 : Math.random() < pars.perfect * perfectWin(p) / 0.08 ? 1 : Math.random() < { easy: 0.2, normal: 0.5, hard: 0.8 }[d] ? 0.65 : 0.3;
   }
   const S = SERVES[kind], gi = serveGrade(sq ?? 0.3);
   const dist = Math.hypot(tx - G.ball.x, t * depth - G.ball.z);
   const T = S.T[gi] * clamp(dist / 22, 0.75, 1.2) * clamp(1.08 - p.r.pwr * 0.0016, 0.92, 1.05) * (settings.mode === 2 ? 1.1 : 1) * (TUT && !human ? 1.15 : 1); // harder servers are a little quicker; two can't cover the beach like six
   const wob = TUT && !human ? 0 : S.wob[gi];
-  if (wob) tx = clamp(tx, -(HW - wob - 0.2), HW - wob - 0.2); // a float is aimed so its wobble keeps it in
+  if (wob && !human) tx = clamp(tx, -(HW - wob - 0.2), HW - wob - 0.2); // the computer aims a float so its wobble keeps it in
   const miss = human ? (q != null && q < 0 && Math.random() < (q <= -0.5 ? 0.5 : 0.25)) : (s === 1 && Math.random() < parsOf(s).serveFault);
   if (miss) serveMiss(kind, s, tx, T, S.gs[gi]);
   else serveLaunch(tx, t * depth, T, S.gs[gi]);
@@ -948,8 +957,10 @@ function contact(p) {
   const fromOpp = G.lastSide !== s;
   G.serveLive = false;
   const human = !aiControlled(p);
-  const tm = human ? holdGrade() : null; // your wind-up for this ball
-  if (human && tm) G.meterShow = { p, L: holdLevel(G.hold), color: tm.color, t: G.time };
+  let tm = human ? holdGrade() : null; // your wind-up for this ball
+  // a spike (held, in the air above the net) is graded on the hitter's own, narrower PERFECT window
+  if (tm && !tm.set && !p.onGround && b.y > NET_H && !(p.dive > 0) && tm !== TOO_LONG) tm = gradeL(holdLevel(G.hold), perfectWin(p));
+  if (human && tm) G.meterShow = { p, L: holdLevel(G.hold), color: tm.color, t: G.time, win: !p.onGround && b.y > NET_H ? perfectWin(p) : undefined };
   if (human) G.hold = null;
   const q = tm ? tm.q : null, dove = p.dive > 0;
   if (tm) {
@@ -1017,7 +1028,7 @@ function contact(p) {
   if (action === 'spike') {
     // a perfectly timed spike lets loose the hitter's type move. The computer times one perfectly now and then.
     let sq = q;
-    if (!human && Math.random() < parsOf(s).perfect) sq = 1;
+    if (!human && Math.random() < parsOf(s).perfect * perfectWin(p) / 0.08) sq = 1; // stronger hitters find it more often
     if (!spike(p, sq)) action = 'over';
   }
   if (action === 'pass' || action === 'set') pass(p, incoming, fromOpp, q, dove, action === 'set' ? tm : null);
@@ -1164,9 +1175,8 @@ function spike(p, q = null) {
       if (ix) tx = clamp(b.x + ix * HW, -HW * 0.85, HW * 0.85);
       if (keys.up) tz = t * 1.8; else if (keys.down) tz = t * (HL - 1);
     }
-    // your timing decides how true the aim is: perfect and good go where you point, OK drifts, a miss sprays
-    const spray = q == null || q < 0.65 ? (q != null && q < 0 ? 1.5 : 0.7) : 0;
-    tx += rand(-1, 1) * spray; tz += t * rand(-1, 1) * spray * 0.8;
+    // your timing sets how far from the aim it can land: PERFECT almost on the spot, WEAK a few metres off, in or out
+    [tx, tz] = scatter(tx, tz, aimRadius(q));
     if (q != null && q < 0 && Math.random() < (q <= -0.5 ? 0.55 : 0.45) && spikeError(p, tx)) return true; // a mistimed swing can miss
   } else {
     const e = parsOf(s).err;
@@ -1182,18 +1192,22 @@ function spike(p, q = null) {
     : human ? (settings.mode === 6 ? (q == null || q < 0.65 ? (q != null && q < 0 ? 1.0 : 0.75) : 0.56) // 6 v 6 has more defenders, but they cover less each
                                    : (q == null || q < 0.65 ? (q != null && q < 0 ? 1.35 : 0.8) : 0.5)) * hitter
     : clamp(1.3 - p.r.pwr * 0.005, 0.8, 1.15) * (settings.mode === 6 ? 0.75 : 1) * power * (TUT ? 1.35 : 1); // 6 v 6 has more defenders to beat; the tutorial's are slower to read
-  const aims = [[tx, tz]];
-  for (let i = 0; i < 5; i++) aims.push([rand(-HW * 0.8, HW * 0.8), t * rand(1.5, HL - 1)]);
+  // The spike goes to its (scattered) target if any swing gets it over the net. If none can, it is pulled a step at a
+  // time toward the middle of their court, so it still lands near where you aimed, never somewhere random.
+  // Your own target may be out: aim at a line, time it badly, and it goes out.
+  const aims = [[tx, tz, human]];
+  for (const f of [0.15, 0.3, 0.5, 0.75]) aims.push([tx * (1 - f), tz + (t * HL * 0.55 - tz) * f, false]);
+  for (let i = 0; i < 4; i++) aims.push([rand(-HW * 0.8, HW * 0.8), t * rand(1.5, HL - 1), false]); // last resort
   const tries = [];
-  for (const k of [1, 0.85, 1.15, 0.7]) for (const [ax, az] of aims) tries.push([ax, az, flight * k]);
+  for (const [ax, az, mayOut] of aims) for (const k of [1, 0.85, 1.15, 0.7]) for (const c of [0.6, -0.8, -2]) tries.push([ax, az, flight * k, c, mayOut]);
   // A spike leaves the hand going down, like a line drive. It gets its own lighter gravity
   // (until someone touches it) so it still takes about `flight` seconds to land.
-  for (const c of [0.6, -0.8, -2]) for (const [ax, az, T] of tries) {
+  for (const [ax, az, T, c, mayOut] of tries) {
     const g = Math.max(2.5, 2 * (b.y - BR - c * T) / (T * T));
     const vx = (ax - b.x) / T, vz = (az - b.z) / T, vy = -c;
     if (!clearsNet(b.x, b.y, b.z, vx, vy, vz, g)) continue;
     const [lx, lz] = landAt(b.x, b.y, b.z, vx, vy, vz, g);
-    if (!inCourt(lx, lz, 1 - s) || Math.abs(lz) < 0.5) continue;
+    if ((!mayOut && !inCourt(lx, lz, 1 - s)) || lz * t < 0.5) continue;
     b.vx = vx; b.vy = vy; b.vz = vz; b.gs = g / GB;
     G.lastAttack = { p, type: 'spike' };
     if (TUT && TUT.drill && s === 1) TUT.drill.oppSpike = true; // the block drill only counts rallies where they attack
@@ -1571,9 +1585,9 @@ function update(dt) {
           if (h.tr - h.t0 < TAP) { h.tap = true; h.tr = null; } else hitNow = true;
         }
         if (hitNow) {
-          const gr = gradeL(holdLevel(h));
+          const gr = gradeL(holdLevel(h), perfectWin(sv));
           floatText(gr.label, sv.x, sv.cy + sv.rr + 1.1, sv.z, gr.color, 0.7);
-          G.meterShow = { p: sv, L: holdLevel(h), color: gr.color, t: G.time };
+          G.meterShow = { p: sv, L: holdLevel(h), color: gr.color, t: G.time, win: perfectWin(sv) };
           G.hold = null; doServe(sv, gr.q); tutEvent('serve', { q: gr.q });
         } else if (e > G.toss.fail) { floatText(TOO_LONG.label, sv.x, sv.cy + sv.rr + 1.1, sv.z, TOO_LONG.color, 0.7); G.meterShow = { p: sv, L: 1.2, color: TOO_LONG.color, t: G.time }; G.hold = null; doServe(sv, -0.4); }
       }
@@ -2776,12 +2790,12 @@ function drawLandingCarets(lx, lz, r, alpha) {
 // A thin vertical meter beside your Pokemon, in the style of a basketball shot meter.
 // It fills upward while you hold; the gold notch at the top is the PERFECT window.
 // Past the top it turns red. After a release it freezes in the grade colour and fades.
-function drawTimingMeter(p, L, tick, dim, result, set = false) {
+function drawTimingMeter(p, L, tick, dim, result, set = false, win = 1 - ZONES[2][0]) {
   const bx = p.box || { ...proj(p.x, p.y, p.z), w: 40, h: 60 };
   const w = 2, h = 22, x = Math.round((bx.x + bx.w / 2) * US + 3), y = Math.round((bx.y - bx.h * 0.55) * US - h / 2);
   const bow = 3, off = i => Math.round(bow * Math.sin(Math.PI * i / h)); // row i (0 = top) bows outward
   if (set && L != null) L = Math.min(L, 1); // a set charge never goes red: full is a quick set
-  const over = L != null && L > 1, gold = set ? 1 : ZONES[2][0];
+  const over = L != null && L > 1, gold = set ? 1 : 1 - win;
   const top = l => h - Math.round(h * clamp(l, 0, 1)); // first row filled at level l
   const fillCol = L == null ? null : result ? result.color : set ? (L >= 1 ? SET_QUICK.color : SET_HIGH.color) : L > gold ? '#ffcf33' : '#ffffff';
   ctx.save(); ctx.globalAlpha = result ? result.a : dim ? 0.45 : 1;
@@ -2986,12 +3000,12 @@ function render() {
   G.setBtns = [];
   if (you && !AUTO) {
     const m = G.meterShow, mk = m && m.p === you ? 1 - (G.time - m.t) / 0.45 : 0;
-    if (mk > 0) drawTimingMeter(you, m.L, null, false, { color: m.color, a: Math.min(1, mk * 2) });
-    else if (G.phase === 'serve' && G.toss && G.server === you && G.hold) drawTimingMeter(you, holdLevel(G.hold), null, false);
+    if (mk > 0) drawTimingMeter(you, m.L, null, false, { color: m.color, a: Math.min(1, mk * 2) }, false, m.win);
+    else if (G.phase === 'serve' && G.toss && G.server === you && G.hold) drawTimingMeter(you, holdLevel(G.hold), null, false, null, false, perfectWin(you));
     else if (G.phase === 'rally') {
       const pr = predictContact(you), h = G.hold, L = h ? holdLevel(h) : null, set = !!h && h.kind === 'set';
       const tick = pr && pr.reach && !set ? (h && h.tr != null ? null : (L || 0) + pr.T / CHARGE) : null;
-      if (h || (pr && pr.T <= CHARGE * 1.6)) drawTimingMeter(you, L, tick, !h && !(pr && pr.reach), null, set);
+      if (h || (pr && pr.T <= CHARGE * 1.6)) drawTimingMeter(you, L, tick, !h && !(pr && pr.reach), null, set, you.onGround ? undefined : perfectWin(you)); // in the air it is a spike
     }
     if (G.phase === 'rally') {
       drawSetButtons();

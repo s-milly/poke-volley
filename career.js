@@ -708,6 +708,7 @@ function renderLeague(c) {
     if (L.po.final && L.po.final.includes(L.myClub)) line('Final', 'F', ...L.po.final, L.po.finalRes);
   }
   const now = sched.querySelector('li:not(.w):not(.l)'); if (now) now.classList.add('now');
+  sched.style.setProperty('--rows', Math.ceil(sched.children.length / 2)); // fills down the first column, then the second
   const t2 = t[L.myClub]; $('#sched-rec').textContent = `Record ${t2.w}-${t2.l}`;
 }
 
