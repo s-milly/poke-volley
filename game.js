@@ -215,7 +215,7 @@ addEventListener('keyup', e => { if (e.code === 'Tab') showTabStats(false); cons
 addEventListener('blur', () => { for (const k in keys) keys[k] = false; input.jumpT0 = null; showTabStats(false); });
 
 // ===================== match state =====================
-const settings = { mode: 2, diff: 'normal', target: 15, sets: 1, role: { 2: 'B', 6: 'OH' }, venue: { 2: 'beach', 6: 'arena' }, time: 'day', club: ['cerulean', 'random'], camMode: 'follow', zoom: 1, guide: 'on' };
+const settings = { mode: 2, diff: 'normal', target: 15, sets: 1, role: { 2: 'B', 6: 'OH' }, venue: { 2: 'beach', 6: 'arena' }, time: 'day', club: ['cerulean', 'random'], camMode: 'follow', zoom: 1, guide: 'on', serve: 'float' };
 let clubs = null;   // [club, club] for this match, the rival resolved from 'random'
 let draft = null;   // { starter, picks: [mon], offers: [mon], rerolls }
 let capPick = null; // { role, offers: [mon], rerolls }: your own Pokémon, offered for your position
@@ -583,7 +583,7 @@ function startServe() {
   G.subs = [];
   G.players = [...G.sides[0], ...G.sides[1]];
   G.server = tutServer() || G.sides[s][0];
-  Object.assign(G.ball, { vx: 0, vy: 0, vz: 0, gs: 1, trail: [], special: null, noHit: 0 });
+  Object.assign(G.ball, { vx: 0, vy: 0, vz: 0, gs: 1, trail: [], special: null, noHit: 0, knuck: null, top: false });
   G.touches = [0, 0]; G.lastSide = -1; G.lastToucher = null; G.serveLive = false; G.intended = [null, null]; G.lastAttack = null; G.setBy = null; G.killCam = null;
   G.setterNow = [null, null]; G.play = [null, null];
   G.phase = 'serve'; G.timer = 0; G.rally = 0;
@@ -753,6 +753,35 @@ function lob(tx, tz, apexY) {
 
 // ===================== serving =====================
 const serveY = p => p.y + p.rr * 2 + 0.6; // where your hand meets the toss
+// Two serves. Your timing (WEAK, OK, GOOD, PERFECT) sets how fast it travels and how much it moves.
+// T is the flight time in seconds over a 6 v 6 serve (scaled to the distance), one value per grade.
+// Float: slower and flat with no spin, so it knuckles: it wobbles side to side in the air and the landing spot moves.
+// Topspin: faster, and the spin pulls it down hard (heavier gravity), so it dives late.
+const SERVES = {
+  float:   { name: 'FLOAT',   T: [1.8, 1.6, 1.42, 1.3],   wob: [0.3, 0.7, 1.1, 1.5], gs: [1, 1, 1, 1] },
+  topspin: { name: 'TOPSPIN', T: [1.35, 1.15, 1.0, 0.88], wob: [0, 0, 0, 0],            gs: [1.5, 1.8, 2.1, 2.4] },
+};
+const serveGrade = q => (q >= 1 ? 3 : q >= 0.65 ? 2 : q >= 0.3 ? 1 : 0);
+// Launch a serve that lands on (tx, tz) after about T seconds under its own gravity, raising the arc until it clears the net.
+function serveLaunch(tx, tz, T, gs) {
+  const b = G.ball, g = GB * gs;
+  for (let k = 0; k < 16; k++, T *= 1.06) {
+    b.vx = (tx - b.x) / T; b.vz = (tz - b.z) / T; b.vy = (BR - b.y) / T + 0.5 * g * T;
+    if (clearsNet(b.x, b.y, b.z, b.vx, b.vy, b.vz, g)) break;
+  }
+  b.gs = gs;
+}
+// A missed serve: a topspin is driven into the net, a float sails long or wide.
+function serveMiss(kind, s, tx, T, gs) {
+  const b = G.ball, t = toward(s);
+  if (kind === 'topspin') {
+    const tn = T * Math.abs(b.z) / (Math.abs(b.z) + HL * 0.6), yN = NET_H * rand(0.35, 0.75), g = GB * gs;
+    b.vx = (tx * 0.5 - b.x) / tn; b.vz = -b.z / tn; b.vy = (yN - b.y) / tn + 0.5 * g * tn; b.gs = gs;
+  } else {
+    const long = Math.random() < 0.65;
+    serveLaunch(long ? tx : Math.sign(tx || rand(-1, 1)) * (HW + rand(0.8, 2)), t * (long ? HL + rand(0.8, 2.5) : rand(HL * 0.4, HL - 1)), T, 1);
+  }
+}
 // A serve must cross the net to the other team. Until they touch it, the serving team may not play it,
 // so a serve that drops back on your own side is a fault.
 const ownServe = p => G.serveLive && p.side === G.lastSide;
@@ -782,9 +811,25 @@ function doServe(p, q = null) {
     if (s === 1 && you && st && st.mine) { tx = clamp(you.x + rand(-0.4, 0.4), -HW * 0.8, HW * 0.8); depth = clamp(you.z * t, 2.5, HL - 1); }
     else { tx = rand(-HW * 0.35, HW * 0.35); depth = rand(HL * 0.45, HL * 0.7); }
   } else { tx = rand(-HW * 0.8, HW * 0.8); depth = rand(2.2, HL - 0.8); }
-  if (!human && s === 1 && Math.random() < parsOf(s).serveFault) depth = HL + rand(0.6, 2);
-  const apex = NET_H + 2.6 - p.r.pwr / 99 * 1.3 + rand(0, 0.6) - (q == null ? 0 : q * 0.9) + (TUT && !human ? 0.7 : 0); // a perfect hit is flatter and faster
-  lob(tx, t * depth, apex);
+  // which serve, and how well it was struck
+  let kind = human ? settings.serve : null, sq = q;
+  if (!human) { // the computer mixes its serves; better teams strike them better
+    const pars = parsOf(s), d = TUT ? null : s === 0 ? 'normal' : settings.diff;
+    kind = TUT ? 'float' : Math.random() < 0.3 + p.r.pwr / 250 ? 'topspin' : 'float';
+    sq = !d ? 0.3 : Math.random() < pars.perfect ? 1 : Math.random() < { easy: 0.2, normal: 0.5, hard: 0.8 }[d] ? 0.65 : 0.3;
+  }
+  const S = SERVES[kind], gi = serveGrade(sq ?? 0.3);
+  const dist = Math.hypot(tx - G.ball.x, t * depth - G.ball.z);
+  const T = S.T[gi] * clamp(dist / 22, 0.75, 1.2) * clamp(1.08 - p.r.pwr * 0.0016, 0.92, 1.05) * (settings.mode === 2 ? 1.1 : 1) * (TUT && !human ? 1.15 : 1); // harder servers are a little quicker; two can't cover the beach like six
+  const wob = TUT && !human ? 0 : S.wob[gi];
+  if (wob) tx = clamp(tx, -(HW - wob - 0.2), HW - wob - 0.2); // a float is aimed so its wobble keeps it in
+  const miss = human ? (q != null && q < 0 && Math.random() < (q <= -0.5 ? 0.5 : 0.25)) : (s === 1 && Math.random() < parsOf(s).serveFault);
+  if (miss) serveMiss(kind, s, tx, T, S.gs[gi]);
+  else serveLaunch(tx, t * depth, T, S.gs[gi]);
+  const b = G.ball;
+  b.knuck = wob && !miss ? { t: 0, amp: wob * rand(0.75, 1), w: rand(2.6, 3.6), ph: rand(0, 6.28), ph2: rand(0, 6.28), ox: 0, oz: 0 } : null;
+  b.top = kind === 'topspin';
+  floatText(S.name, b.x, b.y + 0.7, b.z, kind === 'topspin' ? '#ffb36b' : '#bfe6ff', 0.8);
   G.lastToucher = p; G.lastSide = s; G.touches = [0, 0]; G.tid++; G.toss = false;
   G.lastAttack = { p, type: 'serve' }; G.serveLive = true;
   G.phase = 'rally'; G.rally = 0;
@@ -979,8 +1024,13 @@ function pass(p, incoming, fromOpp, q = null, dove = false, setTm = null) {
   tz = -t * Math.max(0.5, -tz * t);
 
   // a hard spike can shank off the arms
-  if (G.touches[s] === 1 && fromOpp && incoming > 12.5) {
-    const shank = clamp((incoming - 12.5) / 8, 0, 1) * (1.35 - p.r.def / 100) * (q == null ? 1 : clamp(1 - q, 0, 1.3));
+  // (a serve has to travel the length of the court, so it shanks on a gentler curve than a spike: a hard topspin is a threat, not a coin flip)
+  const fromServe = G.lastAttack && G.lastAttack.type === 'serve';
+  // A knuckling float is hard to pass cleanly too: the more it is moving, the likelier a shank.
+  const kn = fromServe && b.knuck ? b.knuck.amp : 0;
+  if (G.touches[s] === 1 && fromOpp && (incoming > (fromServe ? 15 : 12.5) || kn)) {
+    const heavy = fromServe ? clamp((incoming - 15) / 12, 0, 1) * 0.6 + kn * 0.1 : clamp((incoming - 12.5) / 8, 0, 1);
+    const shank = heavy * (1.35 - p.r.def / 100) * (q == null ? 1 : clamp(1 - q, 0, 1.3));
     if (Math.random() < shank) {
       const sx = Math.random() < 0.5 ? -1 : 1;
       tx = b.x + sx * rand(2.5, 7); tz = b.z - t * rand(1, 8); apexY = b.y + rand(0.2, 1.4); target = null;
@@ -1132,7 +1182,14 @@ function hitstop(sec, color) {
 function stepBall(h) {
   const b = G.ball, pz = b.z;
   b.vy -= GB * (b.gs || 1) * h; b.x += b.vx * h; b.y += b.vy * h; b.z += b.vz * h;
-  b.spin += h * Math.hypot(b.vx, b.vz) * 0.8; b.noHit -= h;
+  if (!G.serveLive) b.knuck = null, b.top = false;
+  const kn = b.knuck;
+  if (kn) { // a float knuckles: it drifts side to side (and a little long or short) after it leaves the hand, so its landing spot moves
+    kn.t += h;
+    const env = Math.min(1, kn.t / 0.45), ox = kn.amp * env * Math.sin(kn.w * kn.t + kn.ph), oz = kn.amp * 0.35 * env * Math.sin(kn.w * 0.7 * kn.t + kn.ph2);
+    b.x += ox - kn.ox; b.z += oz - kn.oz; kn.ox = ox; kn.oz = oz;
+  }
+  b.spin += h * Math.hypot(b.vx, b.vz) * (kn ? 0.05 : b.top ? 2.4 : 0.8); b.noHit -= h; // a float barely turns; a topspin whips over
   // a block: the ball crosses the net within reach of a jumping blocker's raised arms
   if ((pz < 0) !== (b.z < 0) && b.y - BR >= NET_H - 0.05) {
     const sIn = b.z < 0 ? 0 : 1;
@@ -1151,7 +1208,7 @@ function stepBall(h) {
     } else {
       b.z = Math.sign(pz || -1) * (BR + 0.02); b.vz *= -0.3; b.vx *= 0.6;
     }
-    G.netWobble = 1; b.special = null; b.gs = 1;
+    G.netWobble = 1; b.special = null; b.gs = 1; b.knuck = null; b.top = false;
   }
   for (const p of G.players) {
     if (!canContact(p, b)) continue;
@@ -1391,6 +1448,10 @@ function update(dt) {
       if (G.hold.kind === 'hit' && tr - G.hold.t0 < TAP) G.hold.tap = true; else G.hold.tr = tr;
     }
     if (G.hold && (G.time - (G.hold.tr ?? G.time) > holdWin(G.hold) || tapGone(G.hold))) G.hold = null;
+  }
+  if (G.phase === 'serve' && input.setQ && G.server && !aiControlled(G.server) && !G.toss) { // E switches your serve before the toss
+    settings.serve = settings.serve === 'float' ? 'topspin' : 'float'; saveSettings();
+    Sfx.tone(settings.serve === 'topspin' ? 660 : 440, 0.05, 'square', 0.03);
   }
   if (G.phase !== 'rally') input.setQ = false;
   if (G.phase === 'serve') {
@@ -2880,6 +2941,10 @@ function drawHud() {
     pxText(G.toss ? 'LET GO AS IT DROPS' : 'HOLD CLICK TO TOSS', cx, 52, '#ffffff', 8);
     pxText(input.aim ? 'THE CURSOR AIMS' : 'WASD AIMS', cx, 63, '#c9d4ee', 8);
   }
+  if (G.phase === 'serve' && !aiControlled(G.server) && !G.toss) { // your serve, always shown so you can see what you picked
+    const k = settings.serve, nm = SERVES[k].name;
+    pxText(`${nm} SERVE (${isTouch ? 'SET' : 'E'})`, cx, 76, k === 'topspin' ? '#ffb36b' : '#bfe6ff', 8);
+  }
   for (const t of G.texts) if (t.big && t.t >= 0) {
     const k = t.t / t.life;
     if (k > 0.8 && Math.floor(t.t * 20) % 2) continue;
@@ -3074,6 +3139,7 @@ function loadSettings() {
   if (TIMES[o.time]) settings.time = o.time;
   if (['follow', 'fixed'].includes(o.camMode)) settings.camMode = o.camMode;
   if (['on', 'off'].includes(o.guide)) settings.guide = o.guide;
+  if (SERVES[o.serve]) settings.serve = o.serve;
   if (typeof o.zoom === 'number' && o.zoom >= 0.84 && o.zoom <= 1.14) settings.zoom = o.zoom;
   for (const n of [2, 6]) {
     if (o.role && YOUR_ROLES[n].includes(o.role[n])) settings.role[n] = o.role[n];
@@ -3847,7 +3913,7 @@ const TUT_BASICS = [
   { title: 'Jump', text: 'Hold Space to crouch and charge, let go to jump. Charge it all the way for a full-height jump.', ev: 'jump', test: d => d.c >= 0.95 },
   { title: 'Camera', text: 'Press C to switch between a camera that follows you and one that holds still. V or the mouse wheel zooms.', ev: 'cam' },
 ];
-const T_SERVE = { title: 'Serve', text: 'Hold left click to toss, then let go as the ball drops back to your hand. The serve goes where the cursor points.', ev: 'serve', test: d => d.q > 0, serve: 'you' };
+const T_SERVE = { title: 'Serve', text: 'Hold left click to toss, then let go as the ball drops back to your hand. The serve goes where the cursor points. Before you toss, E switches between a slow, knuckling FLOAT and a fast, diving TOPSPIN.', ev: 'serve', test: d => d.q > 0, serve: 'you' };
 const T_PASS = { title: 'Receive', text: 'Their serve is yours: get to the green carets, hold left click as the ball comes in and let go to pass.', ev: 'pass', test: d => d.first, mine: true };
 const T_PERFECT = { title: 'Perfect pass', text: 'Pass again, and let go with the meter in the gold notch at the top for a PERFECT pass.', ev: 'pass', test: d => d.first && d.q >= 1, mine: true };
 const T_DIVE = { title: 'Dive', text: 'Right click on the ground to dive. Hold a direction to dive that way; hold none and you dive at the ball.', ev: 'dive' };
