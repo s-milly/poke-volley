@@ -593,7 +593,7 @@ function startServe() {
     p.dive = p.rec = 0;
   }
   const sv = G.server;
-  sv.x = clamp(0.5 * HW, -HW + 0.6, HW - 0.6) * toward(s); sv.z = -toward(s) * (HL + 0.8); // serve from the right, behind the end line
+  sv.x = clamp(0.5 * HW, -HW + 0.6, HW - 0.6) * toward(s); sv.z = -toward(s) * (HL + 0.8 + SERVE_RUN); // serve from the right, back from the end line to leave room for the run-up
   input.hitQ = input.setQ = input.diveQ = false; G.toss = false; G.hold = null; G.setPick = null; G.meterShow = null; G.tid = (G.tid || 0) + 1;
   const you = G.sides[0].find(p => p.human) || G.sides[0][0];
   Object.assign(G.cam, camWant(you, false));
@@ -753,6 +753,38 @@ function lob(tx, tz, apexY) {
 
 // ===================== serving =====================
 const serveY = p => p.y + p.rr * 2 + 0.6; // where your hand meets the toss
+// The jump serve. The toss keeps its timing: the meter fills in C seconds and TOO LONG comes a moment after,
+// the same as a plain toss straight up. But the ball is lobbed high and out in front, and the server takes
+// a short run-up and jumps so their hand meets it at the top of the jump, right as the meter fills.
+const SERVE_RUN = 1.7;  // metres of run-up behind the end line
+const SERVE_DRIFT = 1.2; // forward speed carried into the jump
+function startToss(sv) {
+  const b = G.ball, t = toward(sv.side), hy = serveY(sv);
+  b.vy = 4.6; // the timing comes from this plain toss
+  const flat = { ...b, vx: 0, vz: 0 };
+  const C = Math.max(0.3, timeToY(flat, hy) ?? 0.9), fail = timeToY(flat, hy - 0.4) ?? C + 0.1;
+  const tj = Math.max(0.3, C - sv.tUp), r0 = Math.min(0.12, tj * 0.4); // take off so the top of the jump lands on C
+  const zc = sv.z + t * (SERVE_RUN + SERVE_DRIFT * sv.tUp + 0.3), xc = sv.x + 0.2, yc = sv.apex + sv.rr * 2 + 0.6;
+  G.toss = { t0: G.time, C, fail, tj, r0, vRun: SERVE_RUN / (tj - r0), x0: b.x, y0: b.y, z0: b.z, xc, yc, zc,
+    vy0: (yc - b.y) / C + 0.5 * GB * C, jumped: false };
+  sv.squash = 1.1; Sfx.tone(520, 0.05, 'triangle', 0.03, 160);
+  return C;
+}
+// One frame of the toss: the ball on its lob, the server on the run-up and the jump.
+function stepToss(sv, dt) {
+  const T = G.toss, b = G.ball, t = toward(sv.side), e = G.time - T.t0, u = e / T.C;
+  b.vx = (T.xc - T.x0) / T.C; b.vz = (T.zc - T.z0) / T.C; b.vy = T.vy0 - GB * e;
+  b.x = T.x0 + (T.xc - T.x0) * u; b.z = T.z0 + (T.zc - T.z0) * u; b.y = T.y0 + T.vy0 * e - 0.5 * GB * e * e;
+  sv.vx = 0;
+  if (e < T.r0) sv.vz = 0; // the toss
+  else if (e < T.tj) { // the run-up, crouching into the last step
+    sv.vz = t * T.vRun;
+    if (T.tj - e < 0.1) sv.squash = Math.min(sv.squash, 0.84);
+  } else if (!T.jumped) { T.jumped = true; sv.vz = t * SERVE_DRIFT; jump(sv); }
+  else if (sv.onGround) sv.vz = 0; // landed without hitting it
+  stepPlayer(sv, dt);
+  return e;
+}
 // Two serves. Your timing (WEAK, OK, GOOD, PERFECT) sets how fast it travels and how much it moves.
 // T is the flight time in seconds over a 6 v 6 serve (scaled to the distance), one value per grade.
 // Float: slower and flat with no spin, so it knuckles: it wobbles side to side in the air and the landing spot moves.
@@ -1458,22 +1490,21 @@ function update(dt) {
     const sv = G.server, b = G.ball;
     G.timer += dt;
     for (const p of G.players) {
-      if (p === sv) { p.vx = p.vz = 0; }
+      if (p === sv) { if (!G.toss) { p.vx = p.vz = 0; stepPlayer(p, dt); } continue; }
       else if (!aiControlled(p)) humanControl(p, dt);
       else moveToward(p, p.homeX, p.homeZ, 0.7);
       stepPlayer(p, dt);
     }
-    b.x = sv.x + 0.15; b.z = sv.z + toward(sv.side) * 0.15;
+    const e = G.toss ? stepToss(sv, dt) : 0;
+    if (!G.toss) { b.x = sv.x + 0.15; b.z = sv.z + toward(sv.side) * 0.15; b.y = sv.y + sv.rr * 2 + 0.35 + Math.sin(G.time * 4) * 0.05; }
     if (!aiControlled(sv)) { // press to toss and hold; let go as the ball drops back to your hand
-      const hy = serveY(sv);
       if (!G.toss) {
-        b.y = sv.y + sv.rr * 2 + 0.35 + Math.sin(G.time * 4) * 0.05;
         if (input.hitQ) {
-          input.hitQ = false; G.toss = true; b.vy = 4.6; sv.squash = 1.1; Sfx.tone(520, 0.05, 'triangle', 0.03, 160);
-          G.hold = { kind: 'hit', t0: G.time, tr: null, C: Math.max(0.3, timeToY({ ...b, vx: 0, vz: 0 }, hy) ?? 0.9) }; // full as it reaches your hand
+          input.hitQ = false;
+          const C = startToss(sv);
+          G.hold = { kind: 'hit', t0: G.time, tr: null, C }; // full as it reaches your hand
         }
       } else {
-        b.vy -= GB * dt; b.y += b.vy * dt;
         const h = G.hold;
         let hitNow = false;
         if (h && h.tap) { if (input.hitQ) { input.hitQ = false; h.tr = Math.max(h.t0, evTime(input.downAt)); hitNow = true; } } // the second tap hits
@@ -1486,12 +1517,10 @@ function update(dt) {
           floatText(gr.label, sv.x, sv.cy + sv.rr + 1.1, sv.z, gr.color, 0.7);
           G.meterShow = { p: sv, L: holdLevel(h), color: gr.color, t: G.time };
           G.hold = null; doServe(sv, gr.q); tutEvent('serve', { q: gr.q });
-        } else if (b.vy < 0 && b.y < hy - 0.4) { floatText(TOO_LONG.label, sv.x, sv.cy + sv.rr + 1.1, sv.z, TOO_LONG.color, 0.7); G.meterShow = { p: sv, L: 1.2, color: TOO_LONG.color, t: G.time }; G.hold = null; doServe(sv, -0.4); }
+        } else if (e > G.toss.fail) { floatText(TOO_LONG.label, sv.x, sv.cy + sv.rr + 1.1, sv.z, TOO_LONG.color, 0.7); G.meterShow = { p: sv, L: 1.2, color: TOO_LONG.color, t: G.time }; G.hold = null; doServe(sv, -0.4); }
       }
-    } else {
-      b.y = sv.y + sv.rr * 2 + 0.35 + Math.sin(G.time * 4) * 0.05;
-      if (G.timer > 1.1) doServe(sv);
-    }
+    } else if (!G.toss) { if (G.timer > 0.35) startToss(sv); }
+    else if (e >= G.toss.C) doServe(sv);
   } else if (G.phase === 'rally') {
     input.hitQ = input.setQ = false;
     aiThink(dt);
@@ -1543,7 +1572,7 @@ function update(dt) {
 function camWant(focus, ball) {
   const fixed = settings.camMode === 'fixed', b = G.ball;
   const x = fixed ? 0 : clamp(focus.x * 0.55 + (ball ? b.x * 0.15 : 0), -HW * 0.6, HW * 0.6);
-  const z0 = fixed ? -(HL + 0.8) - 6.6 : Math.min(-HL - CAM.back, focus.z - 6.6); // back up when you go deep or serve
+  const z0 = fixed ? Math.min(-(HL + 0.8), focus.z) - 6.6 : Math.min(-HL - CAM.back, focus.z - 6.6); // back up when you go deep or serve (the fixed view only past the old serving spot, for the run-up)
   let d = settings.zoom, yaw = 0, pitch = CAM.pitch;
   if (!fixed && ball) {
     const bx = clamp(b.x, -HW - 2, HW + 2), bz = clamp(b.z, -HL - 2, HL + 2);
@@ -3960,7 +3989,7 @@ function tutNext(done) {
   TUT.si++;
   if (done) { toast(`${st.title.toUpperCase()}: DONE`); Sfx.tone(880, 0.08, 'square', 0.03); Sfx.tone(1320, 0.12, 'square', 0.03, 0, 0.08); }
   if (TUT.si >= TUT.steps.length) TUT.endAt = G.time + 1.4; // let the play finish, then the card
-  else if (G.phase === 'serve' && !G.toss && G.timer < 0.9) { // a new drill can change who serves: set the serve up again
+  else if (G.phase === 'serve' && (!G.toss || aiControlled(G.server)) && G.timer < 0.9) { // a new drill can change who serves: set the serve up again
     const before = G.server; tutServe(); if ((tutServer() || G.sides[G.serving][0]) !== before) startServe();
   }
   renderCoach();
