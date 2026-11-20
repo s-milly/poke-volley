@@ -3708,7 +3708,7 @@ function pickMode(n) { // Quick play: the court you pick starts the usual setup,
   saveSettings(); renderClubPick(); show('scr-team');
 }
 $('#opt-mode').addEventListener('click', e => { const b = e.target.closest('button'); if (b) pickMode(Number(b.dataset.v)); });
-for (const b of document.querySelectorAll('#main-menu [aria-disabled="true"]')) b.addEventListener('click', e => e.preventDefault()); // Franchise and Road to Glory: not yet
+for (const b of document.querySelectorAll('#main-menu [aria-disabled="true"]')) b.addEventListener('click', e => e.preventDefault()); // Franchise: not yet
 // up and down arrows move through the menu, like a console game
 $('#main-menu').addEventListener('keydown', e => {
   if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
