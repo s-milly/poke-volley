@@ -138,6 +138,7 @@ function renderSlots() {
     box.appendChild(li);
   });
   const first = box.querySelector('button'); if (first) first.setAttribute('data-autofocus', '');
+  renderHof();
 }
 let delSlot = -1;
 function askDelete(i) {
@@ -271,7 +272,8 @@ function openHub(i) { slot = i; renderHub(); show('scr-rtg-hub'); }
 function renderHub(focusStat) {
   const c = careers[slot]; if (!c) return;
   $('#hub-title').textContent = careerName(c);
-  $('#hub-sub').textContent = `Slot ${slot + 1} · Season ${c.season} · ${c.season === 1 ? 'Rookie' : `Year ${c.season}`}`;
+  c.peak = Math.max(c.peak || 0, careerOvr(c));
+  $('#hub-sub').textContent = `Slot ${slot + 1} · Season ${c.season} · ${ageLabel(c.season)}`;
   $('#hub-card').innerHTML = careerCard(c);
   $('#hub-xp').innerHTML = `<b>${c.xp}</b> XP to spend`;
   const ups = $('#hub-ups'); ups.innerHTML = '';
@@ -292,7 +294,7 @@ function renderHub(focusStat) {
     <div><dt>Build</dt><dd>${buildName(c)}</dd></div><div><dt>XP earned</dt><dd>${c.xpEarned}</dd></div>
     ${c.league ? `<div class="rtg-status"><dt>Status</dt><dd>${c.starter ? 'Starter' : `On the bench · coach's trust ${c.trust || 0}/${TRUST_START}`}</dd></div>` : ''}`;
   for (const b of $('#hub-diff').querySelectorAll('button')) b.setAttribute('aria-pressed', String(b.dataset.v === c.diff));
-  renderNext(c); renderLeague(c);
+  renderNext(c); renderLeague(c); renderTraining(c);
   if (focusStat) {
     const b = $(`#hub-ups [data-stat="${focusStat}"]`);
     (b && !b.disabled ? b : $('#hub-ups button:not(:disabled)') || $('#hub-diff [aria-pressed="true"]')).focus();
@@ -587,8 +589,18 @@ function renderNext(c) {
     const aw = (L.awards || []).map(a => `<li class="${a.key === 'you' ? 'you' : ''}"><b>${a.name}</b><span>${a.key === 'you' ? escHtml(careerName(c)) : lineName(L, a.key)} · ${CLUBS[a.club].abbr} · ${a.what}</span></li>`).join('');
     info.innerHTML = `<div class="rtg-champ">${crestImg(L.champion, 48)}<p><b>${won ? 'Champions!' : `${champ.name} win the title`}</b><span>Final: ${CLUBS[L.po.final[0]].name} ${setLine(L.po.finalRes)} ${CLUBS[L.po.final[1]].name}</span></p></div>
       ${aw ? `<h4 class="rtg-aw-h">Season awards</h4><ul class="rtg-awards">${aw}</ul>` : ''}`;
-    btn.innerHTML = `<span aria-hidden="true">▶</span> Start season ${c.season + 1}`;
-    btn.onclick = () => { c.season++; newSeason(c); saveCareers(); renderHub(); };
+    const offers = L.offers || [];
+    if (offers.length) {
+      const box = el('div', 'rtg-offers', `<h4 class="rtg-aw-h">Offers from other clubs</h4>`);
+      for (const o of offers) {
+        const b = el('button', 'rtg-build', `<b>${crestImg(o.club, 20)} ${CLUBS[o.club].name}</b><span>Team rating ${clubOvr(c, o.club)} · ${o.start ? 'you would start' : `you would start on the bench behind ${starterAt(c, o.club).mon.name}`}</span><span class="rtg-build-perk">Sign and start season ${c.season + 1}</span>`);
+        b.type = 'button'; b.addEventListener('click', () => acceptOffer(c, o));
+        box.appendChild(b);
+      }
+      info.appendChild(box);
+    }
+    btn.innerHTML = `<span aria-hidden="true">▶</span> ${offers.length ? `Stay with the ${CLUBS[L.myClub].abbr}: ` : ''}Start season ${c.season + 1}`;
+    btn.onclick = () => startNextSeason(c);
     return;
   }
   const label = ph === 'regular' ? `Week ${L.week + 1} of ${WEEKS}` : ROUND_NAMES[ph];
@@ -708,6 +720,7 @@ function endSeason(c) {
   for (const a of L.awards) if (a.key === 'you') c.trophies.push({ season: c.season, title: a.name, club: L.myClub });
   if (L.champion === L.myClub) c.trophies.push({ season: c.season, title: 'Champion', club: L.myClub });
   const t = standings(c)[L.myClub], log = careerLog(c), div = divTable(c, divOf(L.myClub)).findIndex(r => r.id === L.myClub) + 1;
+  makeClubOffers(c);
   log.rec = `${t.w}-${t.l}`;
   log.finish = L.champion === L.myClub ? 'Champion' : L.po.final.includes(L.myClub) ? 'Lost the final'
     : L.po.semis.flat().includes(L.myClub) ? 'Lost a semi-final' : `${['1st', '2nd', '3rd', '4th', '5th'][div - 1]} in the ${DIV_NAMES[divOf(L.myClub)].split(' ')[0]}`;
@@ -796,3 +809,199 @@ function openStats() {
   show('scr-rtg-stats');
 }
 $('#hub-stats').addEventListener('click', openStats);
+
+// ===================== training drills =====================
+// One drill between matches, on the real match engine through the tutorial's drill mode (soft serves, clean passes
+// and sets from the computer, no score). Each drill trains one stat and plays at the position that uses it most.
+// A rally is a rep, scored 0 to 1 from your timing (PERFECT 1, GOOD 0.7, OK 0.4, WEAK 0.1, too long or missed 0).
+// After DRILL_REPS reps the average sets the reward: 70 or more raises the stat by 2, 35 or more by 1.
+const DRILL_REPS = 6;
+const DRILLS = {
+  serve: { stat: 'pwr', name: 'Serving', role: 'OPP', serve: 'you', ev: 'serve',
+    text: 'Serve 6 balls. Hold left click to toss and let go as it drops back to your hand. Better timing scores more, an ace scores full marks and a fault scores nothing.' },
+  pass: { stat: 'def', name: 'Passing', role: 'OH', serve: 'them', mine: true, ev: 'pass',
+    text: 'They serve 6 balls at you. Get to the green carets, hold left click and let go as the ball arrives.' },
+  block: { stat: 'jmp', name: 'Blocking', role: 'MB', serve: 'us', ev: 'block',
+    text: 'Your side serves and they attack. Stand at the net, jump just after their hitter and right click. A stuff block scores most, a touch scores well and a block put up at the net scores a little.' },
+  set: { stat: 'skl', name: 'Setting', role: 'S', serve: 'them', ev: 'set',
+    text: 'They serve and your team passes to you. Point at a hitter and press E as the ball arrives. Every set scores half marks, and a set that becomes a kill scores full marks.' },
+  dive: { stat: 'spd', name: 'Diving', role: 'L', serve: 'them', ev: 'pass',
+    text: 'Chase down every ball as the libero. Right click to dive: a pass after a dive scores most, a plain pass scores a little.' },
+};
+const repScore = q => (q == null ? 0.2 : q >= 1 ? 1 : q >= 0.65 ? 0.7 : q >= 0.3 ? 0.4 : q > -0.4 ? 0.1 : 0);
+const drillKey = c => `${c.season}-${roundKey(c.league)}`;
+function startDrill(kind) {
+  const c = careers[slot], L = c.league, D = DRILLS[kind];
+  Sfx.init();
+  const opp = pickOne(Object.keys(CLUBS).filter(id => id !== L.myClub)); // a sparring partner
+  TUT = { mode: 6, roles: [D.role], ri: 0, saved: JSON.parse(JSON.stringify(settings)),
+    steps: [{ title: D.name, text: D.text, ev: D.ev, serve: D.serve, mine: !!D.mine }], si: 0, marks: [], moved: 0, hitters: new Set(), wait: false, endAt: null,
+    drill: { kind, slot, reps: [], cur: null, oppSpike: false, setBy: false, done: false, result: null } };
+  Object.assign(settings, { mode: 6, diff: 'easy', target: 25, sets: 1 });
+  settings.role[6] = D.role; settings.venue[6] = 'arena';
+  teams = [[youEntry(c), ...clubEntries(L, L.myClub)], clubEntries(L, opp)];
+  clubs = [CLUBS[L.myClub], CLUBS[opp]];
+  startMatch(); renderCoach();
+}
+function drillEvent(ev, d) {
+  const D = TUT.drill, k = D.kind; if (D.done) return;
+  const best = v => { D.cur = Math.max(D.cur ?? 0, v); };
+  if (k === 'serve' && ev === 'serve') best(repScore(d.q));
+  else if (k === 'pass' && ev === 'pass' && d.first) best(repScore(d.q));
+  else if (k === 'block') { if (ev === 'block') best(d.stuff ? 1 : 0.75); else if (ev === 'blockup' && d.net) best(0.35); }
+  else if (k === 'set' && ev === 'set') { D.setBy = true; best(0.5); }
+  else if (k === 'dive') { if (ev === 'pass') best(d.dove ? Math.max(0.5, repScore(d.q)) : repScore(d.q) * 0.4); else if (ev === 'dive') best(0.15); }
+}
+function drillRally(w, key) {
+  const D = TUT.drill; if (D.done) return;
+  let count = true;
+  if (D.kind === 'serve') {
+    if (key === 'aces' && w === 0) D.cur = 1;
+    else if (w === 1 && G.lastAttack && G.lastAttack.type === 'serve') D.cur = 0; // a fault: they won it without attacking
+  } else if (D.kind === 'block') count = D.oppSpike;     // only rallies where they attacked
+  else if (D.kind === 'set') { count = D.setBy; if (D.setBy && w === 0 && key === 'kills' && G.lastAttack && G.lastAttack.setter && G.lastAttack.setter.human) D.cur = 1; }
+  else if (D.kind === 'dive' || D.kind === 'pass') count = D.cur != null || D.kind === 'pass'; // passing: a serve you miss counts as 0
+  if (count) D.reps.push(D.cur ?? 0);
+  D.cur = null; D.oppSpike = false; D.setBy = false;
+  if (D.reps.length >= DRILL_REPS) drillFinish(); else renderCoach();
+}
+function drillFinish() {
+  const D = TUT.drill, c = careers[D.slot], st = DRILLS[D.kind].stat;
+  const score = Math.round(D.reps.reduce((a, b) => a + b, 0) / D.reps.length * 100);
+  const want = score >= 70 ? 2 : score >= 35 ? 1 : 0, room = c.cap[st] - c.r[st], gain = Math.min(want, room);
+  const xp = (want - gain) * 8 + (want ? 0 : 5); // at the cap, the points come as XP instead; a poor drill still gives 5
+  c.r[st] += gain; c.xp += xp; c.xpEarned += xp;
+  c.drill = { key: drillKey(c), kind: D.kind, score, gain, xp };
+  promote(c); saveCareers();
+  D.done = true; D.result = c.drill;
+  TUT.wait = true; G.paused = true;
+  Sfx.point(gain > 0);
+  renderCoach();
+  const b = $('#coach .cta'); if (b) b.focus({ preventScroll: true });
+}
+function drillQuit() { // back to the hub; an unfinished drill gives nothing and can be tried again
+  const keep = { camMode: settings.camMode, zoom: settings.zoom, serve: settings.serve };
+  for (const k of Object.keys(settings)) delete settings[k];
+  Object.assign(settings, TUT.saved, keep);
+  TUT = null; G = null;
+  $('#coach').hidden = true;
+  saveSettings(); renderHub(); show('scr-rtg-hub');
+}
+const drillResultText = r => `${DRILLS[r.kind].name}: ${r.score}/100, ${r.gain ? `+${r.gain} ${DRILLS[r.kind].stat.toUpperCase()}` : 'no stat gain'}${r.xp ? `, +${r.xp} XP` : ''}`;
+function renderDrillCoach(box) {
+  const D = TUT.drill, info = DRILLS[D.kind];
+  const reps = Array.from({ length: DRILL_REPS }, (_, i) => {
+    const v = D.reps[i], now = i === D.reps.length && !D.done;
+    return `<li class="${v != null ? (v >= 0.4 ? 'done' : 'low') : ''}${now ? ' now' : ''}"><i aria-hidden="true">${i + 1}</i><span>Rep ${i + 1}${v != null ? `: ${Math.round(v * 100)}` : now ? ' (now)' : ''}</span></li>`;
+  }).join('');
+  const body = D.done
+    ? `<p class="coach-done">Drill done</p><p>${drillResultText(D.result)}.</p><div class="coach-actions"><button type="button" class="cta small" data-tut="menu">Back to career</button></div>`
+    : `<p class="coach-now">${info.text}</p><div class="coach-actions"><button type="button" class="ghost small" data-tut="quit">End drill</button></div><p class="coach-kicker">Ending early gives nothing, and you can try again.</p>`;
+  box.innerHTML = `<p class="coach-kicker">Training · trains ${info.stat.toUpperCase()} · rep ${Math.min(D.reps.length + 1, DRILL_REPS)} of ${DRILL_REPS}</p>
+    <h2>${info.name}</h2><ol class="coach-steps">${reps}</ol>${body}`;
+}
+function renderTraining(c) {
+  const box = $('#hub-train'), wrap = $('#hub-train-wrap'), L = c.league;
+  wrap.hidden = !L || phaseOf(L) === 'done';
+  if (wrap.hidden) return;
+  box.innerHTML = '';
+  if (c.drill && c.drill.key === drillKey(c)) {
+    box.appendChild(el('p', 'rtg-goal', `<b>Done for now.</b> ${drillResultText(c.drill)}. The next drill opens after your next match.`));
+    return;
+  }
+  for (const [kind, d] of Object.entries(DRILLS)) {
+    const b = el('button', 'rtg-build', `<b>${d.name}</b><span>Trains ${d.stat.toUpperCase()} (${c.r[d.stat]} / ${c.cap[d.stat]}) · plays as ${ROLES[d.role].name.toLowerCase()}</span>`);
+    b.type = 'button'; b.addEventListener('click', () => startDrill(kind));
+    box.appendChild(b);
+  }
+}
+
+// ===================== between seasons: aging, rosters and offers =====================
+// Aging: you grow through season 6 and hold in 7 and 8. From season 9 every stat drops each off-season, by 1 in
+// season 9, 2 in season 10 and so on.
+const AGE_FROM = 9;
+const ageLabel = n => (n === 1 ? 'Rookie' : n <= 6 ? `Year ${n}` : n <= 8 ? `Year ${n}, prime` : `Year ${n}, veteran`);
+function ageStats(c) {
+  if (c.season < AGE_FROM) return 0;
+  const drop = c.season - AGE_FROM + 1;
+  for (const k of STAT_IDS) c.r[k] = Math.max(20, c.r[k] - drop);
+  return drop;
+}
+// Each club replaces its lowest-rated player with a free Pokémon near its own average (give or take 4), so ratings
+// drift from season to season.
+function churnRosters(c) {
+  const L = c.league, used = new Set([c.mon, ...Object.values(L.clubs).flat()]);
+  for (const id of Object.keys(L.clubs)) {
+    const ros = L.clubs[id], avg = clubAvg(L, id), target = avg + (Math.random() - 0.5) * 8;
+    const worst = ros.reduce((a, b) => (BY_ID.get(b).ovr < BY_ID.get(a).ovr ? b : a));
+    const near = DEX.filter(m => !m.leg && !used.has(m.id)).sort((a, b) => Math.abs(a.ovr - target) - Math.abs(b.ovr - target)).slice(0, 5);
+    if (!near.length) continue;
+    const m = pickOne(near);
+    ros[ros.indexOf(worst)] = m.id; used.add(m.id); used.delete(worst);
+  }
+}
+// Offers: once your OVR is OFFER_OVR or more, one or two other clubs (the stronger ones more often) make an offer at
+// the end of the season. Each says whether you would start there.
+const OFFER_OVR = 60;
+function starterAt(c, id) { // the starter you would have to beat at club id
+  const fit = ROLES[c.pos].fit, at = lineup(clubEntries(c.league, id), null, c.pos, 6).filter(x => x.role === c.pos);
+  return at.reduce((a, b) => (fit(b.entry.r) < fit(a.entry.r) ? b : a)).entry;
+}
+function makeClubOffers(c) {
+  const L = c.league; L.offers = [];
+  if (careerOvr(c) < OFFER_OVR) return;
+  const others = Object.keys(CLUBS).filter(id => id !== L.myClub), n = 1 + (Math.random() < 0.5 ? 1 : 0);
+  while (L.offers.length < n && others.length) {
+    const ws = others.map(id => Math.max(1, clubOvr(c, id) - 50)), sum = ws.reduce((a, b) => a + b, 0);
+    let r = Math.random() * sum, i = 0; while ((r -= ws[i]) > 0 && i < ws.length - 1) i++;
+    const id = others.splice(i, 1)[0];
+    L.offers.push({ club: id, start: careerOvr(c) >= starterAt(c, id).ovr });
+  }
+}
+function acceptOffer(c, o) {
+  const L = c.league;
+  L.myClub = o.club; c.starter = o.start; c.trust = o.start ? TRUST_START : 0; L.offers = [];
+  startNextSeason(c, `You signed with the ${CLUBS[o.club].name}. ${o.start ? 'You start from day one.' : 'You start on the bench and earn your spot again.'}`);
+}
+function startNextSeason(c, note = '') {
+  c.season++;
+  churnRosters(c);
+  const drop = ageStats(c);
+  newSeason(c); saveCareers(); renderHub();
+  const msg = [note, drop ? `Age is catching up: -${drop} to every stat this season.` : c.season === AGE_FROM - 1 ? 'Your prime: from next season your stats start to drop with age.' : ''].filter(Boolean).join(' ');
+  if (msg) toast2(msg);
+}
+
+// ===================== retiring and the Hall of Fame =====================
+const HOF_KEY = 'volleydex-rtg-hof';
+function loadHof() { try { const a = JSON.parse(localStorage.getItem(HOF_KEY)); return Array.isArray(a) ? a.filter(h => h && BY_ID.has(h.mon)) : []; } catch (e) { return []; } }
+function retire(i) {
+  const c = careers[i]; if (!c) return;
+  const tot = { gp: 0, kills: 0, aces: 0, blocks: 0, digs: 0, ast: 0 }, clubsPlayed = [];
+  for (const l of Object.values(c.log || {})) { for (const k in tot) tot[k] += l[k] || 0; if (l.club && !clubsPlayed.includes(l.club)) clubsPlayed.push(l.club); }
+  const hof = loadHof();
+  hof.unshift({ name: careerName(c), mon: c.mon, pos: c.pos, build: buildName(c), seasons: c.season, peak: Math.max(c.peak || 0, careerOvr(c)),
+    clubs: clubsPlayed, tot, titles: (c.trophies || []).filter(t => t.title === 'Champion').length,
+    awards: (c.trophies || []).filter(t => t.title !== 'Champion').map(t => `${t.title} (season ${t.season})`), retired: Date.now() });
+  try { localStorage.setItem(HOF_KEY, JSON.stringify(hof.slice(0, 50))); } catch (e) {}
+  careers[i] = null; saveCareers();
+}
+function renderHof() {
+  const hof = loadHof(), box = $('#rtg-hof'), wrap = $('#rtg-hof-wrap');
+  wrap.hidden = !hof.length; box.innerHTML = '';
+  for (const h of hof) {
+    const li = el('li', 'panel rtg-hof-row'), mon = BY_ID.get(h.mon);
+    li.appendChild(portrait(mon, 96, 56));
+    li.appendChild(el('div', 'ri-text', `<b>${escHtml(h.name)}</b><span>${ROLES[h.pos].name} · ${h.build} · ${h.seasons} season${h.seasons === 1 ? '' : 's'} · peak OVR ${h.peak}</span>
+      <span>${h.clubs.map(id => CLUBS[id].abbr).join(', ')} · ${h.tot.gp} matches, ${h.tot.kills} K, ${h.tot.aces} ACE, ${h.tot.blocks} BLK, ${h.tot.digs} DIG, ${h.tot.ast} AST</span>
+      <span class="rtg-hof-tro">${h.titles ? `${h.titles} title${h.titles > 1 ? 's' : ''}` : 'No titles'}${h.awards.length ? ` · ${h.awards.join(', ')}` : ''}</span>`));
+    box.appendChild(li);
+  }
+}
+$('#hub-retire').addEventListener('click', () => {
+  const c = careers[slot]; if (!c) return;
+  $('#rtg-ret-text').textContent = `${careerName(c)} leaves the court for good after ${c.season} season${c.season === 1 ? '' : 's'}. The career goes into the Hall of Fame and slot ${slot + 1} becomes free.`;
+  $('#rtg-ret-dlg').showModal();
+});
+$('#rtg-ret-dlg').addEventListener('click', e => { if (e.target === e.currentTarget || e.target.closest('[data-close]')) e.currentTarget.close(); });
+$('#rtg-ret-yes').addEventListener('click', () => { retire(slot); $('#rtg-ret-dlg').close(); renderSlots(); show('scr-rtg'); });

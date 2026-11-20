@@ -42,13 +42,13 @@ Archetypes:
 
 - **XP from matches.** 10 XP for playing and 10 for a win, plus your box score: 2 per kill, 3 per ace, 3 per block, 1.5 per dig and 0.5 per assist. Middles get 1.4 times the box score share, setters 1.2 times and liberos 3 times, because the box score counts less of what they do. Playoff matches give 1.5 times the total. A bench player who doesn't come in earns a small amount for being there.
 - **Coach goals.** Before each match the coach sets one goal for your position (OH: 5 kills or 5 digs; OPP: 5 kills or 2 aces; MB: 2 blocks or 3 kills; S: 12 assists or 1 ace; L: 4 digs). Off the bench it is half as big, and in the playoffs half as big again. Meeting it gives 15 XP (22 in the playoffs) and, while you are on the bench, 10 coach's trust. The goal is saved, so reloading does not change it.
-- **Training.** One drill between matches. Pick from serve targets, passing, block timing or spike accuracy. Your drill score sets how much XP you get **(proposal: the XP goes into the stat the drill trains)**.
+- **Training.** One drill between matches, on the real match engine with a soft sparring partner. Five drills, one per stat, each played at the position that uses it most: Serving (PWR, as opposite), Passing (DEF, as outside hitter), Blocking (JMP, as middle), Setting (SKL, as setter) and Diving (SPD, as libero). A drill is 6 reps (rallies), each scored from your timing; an average of 70 or more raises the stat by 2, 35 or more by 1. At the cap the points come as XP (8 each), and a poor drill still gives 5 XP. Ending a drill early gives nothing and it can be tried again.
 - **Spending.** You spend XP on the stat of your choice. A point costs 5 XP while the stat is in the 30s, plus 2 more for each band of ten above that (7 in the 40s, 9 in the 50s, up to 17 in the 90s). No stat can pass its cap.
-- **Aging.** You grow through about season 6 and hold steady in seasons 7 and 8. From season 9, every stat drops a little each off-season, and the drop gets larger each year.
+- **Aging.** You grow through about season 6 and hold steady in seasons 7 and 8. From season 9, every stat drops at the start of the season: 1 in season 9, 2 in season 10, and so on.
 
 ## The league
 
-- **Clubs.** The 10 existing clubs named after the Gen 1 towns. Each has a team rating, and they improve or decline from season to season.
+- **Clubs.** The 10 existing clubs named after the Gen 1 towns. Between seasons each club swaps its lowest-rated player for a free Pokémon near its own average (give or take 4), so ratings drift.
 - **Divisions.** Two divisions of 5 clubs: the West (Pallet, Viridian, Pewter, Cinnabar, Fuchsia) and the East (Cerulean, Vermilion, Lavender, Celadon, Saffron).
 - **Rosters.** Each club has 7 Pokémon, no Pokémon is on two clubs, and none share your species. Club ratings are spread from about 56 to 76.
 - **Season.** 13 regular-season matches: the 4 other clubs in your division home and away (8), and the 5 clubs in the other division once (5).
@@ -63,8 +63,7 @@ Archetypes:
 A short draft show before season 1. Ten prospects, one pick per club: you and nine others rated 33 to 46. Clubs pick from the lowest team rating up (there are no standings yet in season 1), and each takes the best prospect left by OVR plus a little scouting noise, so where you go depends on your stats. A new rookie (41 to 43) usually goes in the first five picks, to a weaker club. The picks are revealed one at a time, or all at once with "Show every pick". The other prospects are part of the show only and do not join the rosters.
 ## Transfers
 
-Once your rating is high enough, other clubs make offers between seasons. You can accept or turn them down. Your club never trades you without asking.
-
+Once your OVR is 60 or more, one or two other clubs (stronger clubs more often) make an offer at the end of the season. Each offer says whether you would start there or come off the bench. Signing moves you before the next season starts; staying is the default.
 ## Playing time
 
 - **Starting out.** You start on the bench, including in season 1, behind the weaker of your club's starters at your position.
@@ -85,7 +84,7 @@ Once your rating is high enough, other clubs make offers between seasons. You ca
 - **Rookie of the Year** goes to you if you finish your first season as a starter (you are the league's only first-year player).
 - **Trophy case:** your awards and titles.
 - **Career stats page:** draft pick, trophy case, and a line per season (matches played, kills, aces, blocks, digs, assists, your club's record and finish) with career totals. It counts playoffs; the awards do not.
-- **Retire.** You can retire at any time. Retiring ends the career and adds it to a Hall of Fame list of past careers.
+- **Retire.** You can retire at any time from the hub (with a confirmation). Retiring frees the slot and adds the career to the Hall of Fame on the Road to Glory screen: name, position and build, seasons, peak OVR, clubs, career totals, titles and awards (the 50 most recent).
 ## Saves
 
 Three save slots in localStorage. Each slot holds one career.

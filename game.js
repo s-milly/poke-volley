@@ -1196,6 +1196,7 @@ function spike(p, q = null) {
     if (!inCourt(lx, lz, 1 - s) || Math.abs(lz) < 0.5) continue;
     b.vx = vx; b.vy = vy; b.vz = vz; b.gs = g / GB;
     G.lastAttack = { p, type: 'spike' };
+    if (TUT && TUT.drill && s === 1) TUT.drill.oppSpike = true; // the block drill only counts rallies where they attack
     if (special || (human && q != null && q >= 0.65)) G.shake = Math.max(G.shake, 0.18);
     if (special) {
       const ty = p.mon.types[0];
@@ -1225,6 +1226,7 @@ function spikeError(p, tx) {
     if (!clearsNet(b.x, b.y, b.z, b.vx, b.vy, b.vz, g)) return false;
   }
   G.lastAttack = { p, type: 'spike' };
+  if (TUT && TUT.drill && p.side === 1) TUT.drill.oppSpike = true;
   Sfx.spike(); hitstop(0.05, '#ffffff');
   return true;
 }
@@ -1363,7 +1365,11 @@ function awardPoint(w, label, sub, credit, key) {
   G.cheer = 1; // the crowd jumps up
   if (key === 'kills' && G.lastAttack && G.lastAttack.type === 'spike') G.killCam = { x: G.ball.x, z: G.ball.z, t: 1.4 }; // the camera pushes in on the kill
   G.longestRally = Math.max(G.longestRally, G.rally);
-  if (TUT) { G.texts.push({ big: true, text: label, sub, color: TEAM_COLORS[w], t: 0, life: 1.6 }); Sfx.whistle(); G.phase = 'point'; G.timer = 1.6; return; }
+  if (TUT) {
+    G.texts.push({ big: true, text: label, sub, color: TEAM_COLORS[w], t: 0, life: 1.6 }); Sfx.whistle(); G.phase = 'point'; G.timer = 1.6;
+    if (TUT.drill) drillRally(w, key); // Road to Glory training: one rally is one rep
+    return;
+  }
   if (w !== G.serving) { // side out: the team that won the serve back rotates one zone clockwise
     G.serving = w; G.rot[w].push(G.rot[w].shift());
     planSubs(w); planSubs(1 - w); G.players = [...G.sides[0], ...G.sides[1]];
@@ -3077,7 +3083,7 @@ function drawScoreboard() {
   }
   pxRect(x0 + logoW, y0 + rowH + 1, W - logoW, 1, '#c5ccd9');
   // set and target, in a dark tab under the board
-  const info = TUT ? 'TUTORIAL' : multi ? `SET ${G.setNo} · TO ${setTarget()}` : `TO ${setTarget()} · WIN BY 2`;
+  const info = TUT ? (TUT.drill ? 'TRAINING' : 'TUTORIAL') : multi ? `SET ${G.setNo} · TO ${setTarget()}` : `TO ${setTarget()} · WIN BY 2`;
   const tw = info.length * 8 + 8;
   pxRect(x0, y0 + H, tw, 12, '#141c33');
   pxText(info, x0 + 4, y0 + H + 2, '#c9d4ee', 8, 'left', null);
@@ -4032,6 +4038,7 @@ function tutServer() {
   return G.sides[0].find(p => p !== me) || null; // a teammate serves, so you are free to set up at the net
 }
 function tutEvent(ev, d = {}) {
+  if (TUT && TUT.drill) { drillEvent(ev, d); return; } // Road to Glory training (career.js)
   const st = tutStep();
   if (!st || st.ev !== ev || (st.test && !st.test(d, TUT))) return;
   tutNext(true);
@@ -4077,6 +4084,7 @@ function tutRoleDone() {
 }
 function endTutorial() {
   if (!TUT) return;
+  if (TUT.drill) { drillQuit(); return; }
   const cam = { camMode: settings.camMode, zoom: settings.zoom };
   Object.assign(settings, TUT.saved, cam);
   TUT = null; G = null;
@@ -4087,6 +4095,7 @@ function renderCoach() {
   const box = $('#coach');
   box.hidden = !TUT;
   if (!TUT) return;
+  if (TUT.drill) { renderDrillCoach(box); return; }
   const role = TUT.roles[TUT.ri], n = TUT.roles.length, mode = `${TUT.mode} v ${TUT.mode}`;
   const steps = TUT.steps.map((st, i) => {
     const m = TUT.marks[i], cur = i === TUT.si && !TUT.wait;

@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>VolleyDex: Gen 1 Draft Volleyball</title>
 <meta name="description" content="Pick a Gen 1 Pokémon, draft teammates by their stats, and play arcade volleyball in the browser.">
-<link rel="stylesheet" href="style.css?v=56">
+<link rel="stylesheet" href="style.css?v=57">
 </head>
 <body class="on-title">
 <main id="menu">
@@ -268,6 +268,10 @@
       </div>
     </header>
     <div class="rtg-slots" id="rtg-slots"></div>
+    <section class="rtg-hof-wrap" id="rtg-hof-wrap" aria-labelledby="rtg-hof-h" hidden>
+      <h3 id="rtg-hof-h">Hall of Fame</h3>
+      <ol class="rtg-hof" id="rtg-hof"></ol>
+    </section>
     <dialog class="dlg rtg-confirm" id="rtg-del-dlg" aria-labelledby="rtg-del-h">
       <div class="dlg-head"><h2 id="rtg-del-h">Delete this career?</h2><button type="button" class="dlg-x" data-close aria-label="Close"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3l10 10M13 3L3 13"/></svg></button></div>
       <div class="dlg-body">
@@ -339,6 +343,11 @@
           <div id="hub-next-info"></div>
           <button type="button" class="cta big" id="hub-next"></button>
         </section>
+        <section class="panel rtg-step" id="hub-train-wrap" aria-labelledby="hub-train-h" hidden>
+          <h3 id="hub-train-h">Training</h3>
+          <p class="settings-note">One drill between matches. Each trains one stat: score 70 or more for +2, 35 or more for +1.</p>
+          <div class="rtg-builds" id="hub-train"></div>
+        </section>
         <section class="panel rtg-step" aria-labelledby="hub-up-h">
           <div class="rtg-up-head"><h3 id="hub-up-h">Upgrade stats</h3><p class="rtg-xp" id="hub-xp" aria-live="polite"></p></div>
           <p class="settings-note">Earn XP in matches and training, then spend it on the stats you choose. A point costs more the higher the stat already is, and no stat can pass its cap.</p>
@@ -347,7 +356,10 @@
         <section class="panel rtg-step" aria-labelledby="hub-car-h">
           <h3 id="hub-car-h">Career</h3>
           <dl class="rtg-facts" id="hub-facts"></dl>
-          <button type="button" class="ghost small" id="hub-stats">Career stats and trophies</button>
+          <div class="rtg-actions">
+            <button type="button" class="ghost small" id="hub-stats">Career stats and trophies</button>
+            <button type="button" class="ghost small" id="hub-retire">Retire</button>
+          </div>
           <fieldset><legend>Difficulty</legend><div class="seg" id="hub-diff"><button type="button" data-v="easy" aria-pressed="false">Easy</button><button type="button" data-v="normal" aria-pressed="false">Normal</button><button type="button" data-v="hard" aria-pressed="false">Hard</button></div></fieldset>
         </section>
       </div>
@@ -363,6 +375,17 @@
     </div>
   </section>
 
+
+  <dialog class="dlg rtg-confirm" id="rtg-ret-dlg" aria-labelledby="rtg-ret-h">
+    <div class="dlg-head"><h2 id="rtg-ret-h">Retire?</h2><button type="button" class="dlg-x" data-close aria-label="Close"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3l10 10M13 3L3 13"/></svg></button></div>
+    <div class="dlg-body">
+      <p id="rtg-ret-text"></p>
+      <div class="rtg-actions">
+        <button type="button" class="ghost" data-close>Keep playing</button>
+        <button type="button" class="cta danger" id="rtg-ret-yes">Retire</button>
+      </div>
+    </div>
+  </dialog>
 
   <section id="scr-rtg-draft" class="screen" hidden>
     <header class="bar-head">
@@ -443,9 +466,9 @@
   </div>
 </div>
 
-<script src="data.js?v=56"></script>
-<script src="sprites.js?v=56"></script>
-<script src="game.js?v=56"></script>
-<script src="career.js?v=56"></script>
+<script src="data.js?v=57"></script>
+<script src="sprites.js?v=57"></script>
+<script src="game.js?v=57"></script>
+<script src="career.js?v=57"></script>
 </body>
 </html>
