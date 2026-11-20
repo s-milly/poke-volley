@@ -83,8 +83,16 @@ Once your OVR is 60 or more, one or two other clubs (stronger clubs more often) 
 - **Season awards** from regular-season stats, for players with at least 6 matches: Most valuable player (most per match of 3 x (kills + aces + blocks) + digs + half the assists), Top scorer, Top server, Top blocker, Top digger and Top setter. Simulated matches get stat lines too, so the whole league counts: each point is a kill (55%), an ace (7%), a block (10%) or an error by the other side, credited by role and rating.
 - **Rookie of the Year** goes to you if you finish your first season as a starter (you are the league's only first-year player).
 - **Trophy case:** your awards and titles.
-- **Career stats page:** draft pick, trophy case, and a line per season (matches played, kills, aces, blocks, digs, assists, your club's record and finish) with career totals. It counts playoffs; the awards do not.
+- **Stats tab:** your numbers this season, the league's top 3 in kills, aces, blocks, digs and assists (regular season, every club; if you are outside the top 3 your own place shows), the trophy case, and a line per season (matches played, kills, aces, blocks, digs, assists, your club's record and finish) with career totals. The season lines count playoffs; the awards and leaders do not.
 - **Retire.** You can retire at any time from the hub (with a confirmation). Retiring frees the slot and adds the career to the Hall of Fame on the Road to Glory screen: name, position and build, seasons, peak OVR, clubs, career totals, titles and awards (the 50 most recent).
+## The career hub
+
+The hub keeps your player card beside four tabs, under a strip with the season at a glance (week, record, division place, status, XP to spend):
+- **Home:** this week's tasks. 1. Train: one optional drill before the match. 2. Play the match (or join the draft, follow the playoffs, or start the next season). The list starts again each week.
+- **Upgrades:** spend XP on your stats. The tab shows your XP when you can afford a point.
+- **Standings:** both division tables and your schedule.
+- **Stats:** see Rewards and records. Career facts, difficulty and Retire are at the bottom.
+
 ## Saves
 
 Three save slots in localStorage. Each slot holds one career.

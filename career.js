@@ -270,7 +270,64 @@ $('#rtg-create').addEventListener('click', () => {
 });
 
 // ---------- the career hub ----------
-function openHub(i) { slot = i; renderHub(); show('scr-rtg-hub'); }
+function openHub(i) { slot = i; hubTab = 'home'; renderHub(); show('scr-rtg-hub'); }
+// The hub is split into tabs: home (this week's tasks), upgrades, standings and stats. Only one pane shows at a time.
+let hubTab = 'home';
+const HUB_TABS = ['home', 'up', 'stand', 'stats'];
+function setHubTab(t, focus) {
+  if ($(`#tab-${t}`).hidden) t = 'home';
+  hubTab = t;
+  $('#rtg-hub').dataset.tab = t;
+  for (const k of HUB_TABS) {
+    const b = $(`#tab-${k}`), on = k === t;
+    b.setAttribute('aria-selected', String(on)); b.tabIndex = on ? 0 : -1;
+    $(`#pane-${k}`).hidden = !on;
+  }
+  $(`#tab-${t}`).scrollIntoView({ block: 'nearest', inline: 'nearest' }); // on phones the tab row scrolls sideways
+  if (focus) $(`#tab-${t}`).focus();
+}
+$('#hub-tabs').addEventListener('click', e => { const b = e.target.closest('[role="tab"]'); if (b) setHubTab(b.dataset.tab); });
+$('#hub-tabs').addEventListener('keydown', e => { // arrow keys, Home and End move between the tabs
+  const shown = HUB_TABS.filter(k => !$(`#tab-${k}`).hidden), i = shown.indexOf(hubTab);
+  const j = { ArrowRight: i + 1, ArrowLeft: i - 1, Home: 0, End: shown.length - 1 }[e.key];
+  if (j == null) return;
+  e.preventDefault(); setHubTab(shown[(j + shown.length) % shown.length], true);
+});
+const ORD = ['1st', '2nd', '3rd', '4th', '5th'];
+function renderStrip(c) { // the season at a glance, over the tabs
+  const L = c.league, chips = [];
+  if (L) {
+    const t = standings(c)[L.myClub], place = divTable(c, divOf(L.myClub)).findIndex(r => r.id === L.myClub);
+    const ph = phaseOf(L);
+    chips.push(['Season ' + c.season, ph === 'regular' ? `Week ${Math.min(L.week + 1, WEEKS)} of ${WEEKS}` : ph === 'done' ? 'Season over' : ROUND_NAMES[ph]]);
+    chips.push(['Record', `${t.w}-${t.l}`]);
+    chips.push(['Division', t.w + t.l ? `${ORD[place]} in the ${DIV_NAMES[divOf(L.myClub)].split(' ')[0]}` : DIV_NAMES[divOf(L.myClub)]]); // no place until a match is played
+    chips.push(['Status', c.starter ? 'Starter' : `Bench · trust ${c.trust || 0}/${TRUST_START}`]);
+  } else chips.push(['Season ' + c.season, 'Not drafted yet']);
+  chips.push(['XP to spend', String(c.xp)]);
+  $('#hub-strip').innerHTML = chips.map(([k, v]) => `<li><small>${k}</small><b>${v}</b></li>`).join('');
+}
+// Home: this week's tasks. Train (one drill, optional) and play the match; the list starts again each week.
+function renderTasks(c) {
+  const L = c.league, ph = L ? phaseOf(L) : null, g = L ? myGame(L) : null;
+  $('#week-label').textContent = !L ? 'Before the draft' : ph === 'regular' ? `Week ${L.week + 1} of ${WEEKS}` : ph === 'done' ? 'Off-season' : ROUND_NAMES[ph];
+  const trained = !!(L && c.drill && c.drill.key === drillKey(c));
+  $('#task-train').hidden = $('#hub-train-wrap').hidden;
+  $('#task-train').classList.toggle('done', trained);
+  $('#task-train-state').textContent = trained ? 'Done' : 'To do · before the match';
+  $('#task-play-t').textContent = !L ? 'Join the draft' : ph === 'done' ? `Start season ${c.season + 1}`
+    : !g ? 'Follow the playoffs' : ph === 'regular' ? `Play your week ${L.week + 1} match` : `Play the ${ROUND_NAMES[ph].toLowerCase()}`;
+  $('#task-play-state').textContent = 'To do';
+}
+function renderTabs(c) {
+  const L = c.league;
+  $('#tab-stand').hidden = !L;
+  const canDrill = !$('#hub-train-wrap').hidden && !(c.drill && c.drill.key === drillKey(c));
+  $('#tab-home-badge').hidden = !canDrill; $('#tab-home-badge').textContent = 'Train';
+  const canUp = STAT_KEYS.some(([k]) => c.r[k] < c.cap[k] && c.xp >= upCost(c.r[k]));
+  $('#tab-up-badge').hidden = !canUp; $('#tab-up-badge').textContent = `${c.xp} XP`;
+  setHubTab(hubTab);
+}
 function renderHub(focusStat) {
   const c = careers[slot]; if (!c) return;
   $('#hub-title').textContent = careerName(c);
@@ -296,7 +353,7 @@ function renderHub(focusStat) {
     <div><dt>Build</dt><dd>${buildName(c)}</dd></div><div><dt>XP earned</dt><dd>${c.xpEarned}</dd></div>
     ${c.league ? `<div class="rtg-status"><dt>Status</dt><dd>${c.starter ? 'Starter' : `On the bench · coach's trust ${c.trust || 0}/${TRUST_START}`}</dd></div>` : ''}`;
   for (const b of $('#hub-diff').querySelectorAll('button')) b.setAttribute('aria-pressed', String(b.dataset.v === c.diff));
-  renderNext(c); renderLeague(c); renderTraining(c);
+  renderNext(c); renderLeague(c); renderTraining(c); renderStats(c); renderTasks(c); renderStrip(c); renderTabs(c);
   if (focusStat) {
     const b = $(`#hub-ups [data-stat="${focusStat}"]`);
     (b && !b.disabled ? b : $('#hub-ups button:not(:disabled)') || $('#hub-diff [aria-pressed="true"]')).focus();
@@ -546,7 +603,7 @@ function careerBack() {
   }
   MU_BACK.innerHTML = MU_BACK_TEXT; MU_BACK.dataset.back = 'scr-pick';
   $('#res-xp').hidden = true;
-  renderHub(); show('scr-rtg-hub');
+  hubTab = 'home'; renderHub(); show('scr-rtg-hub');
 }
 MU_BACK.addEventListener('click', () => { if (careerMatch) careerBack(); });
 // Called by showResult in game.js when your career match ends.
@@ -619,9 +676,9 @@ function renderNext(c) {
     btn.onclick = () => { finishRound(c, null); saveCareers(); renderHub(); };
   }
 }
-function toast2(text) { // a short line under the Next up panel
+function toast2(text) { // a short line at the top of the tab you are on
   const p = el('p', 'rtg-toast', text); p.setAttribute('role', 'status');
-  $('#hub-next-info').prepend(p);
+  $(`#pane-${hubTab}`).prepend(p);
 }
 function renderLeague(c) {
   const L = c.league;
@@ -785,12 +842,24 @@ function draftDone() {
   $('#draft-go').focus();
 }
 $('#draft-skip').addEventListener('click', draftDone);
-$('#draft-go').addEventListener('click', () => { clearTimeout(draftTimer); renderHub(); show('scr-rtg-hub'); });
+$('#draft-go').addEventListener('click', () => { clearTimeout(draftTimer); hubTab = 'home'; renderHub(); show('scr-rtg-hub'); });
 
 // ---------- the career stats page ----------
-function openStats() {
-  const c = careers[slot]; if (!c) return;
-  $('#stats-title').textContent = `${careerName(c)}: career`;
+const LEADS = [['kills', 'Kills'], ['aces', 'Aces'], ['blocks', 'Blocks'], ['digs', 'Digs'], ['ast', 'Assists']];
+function renderStats(c) { // the Stats tab: your season, the league leaders, trophy case and a line per season
+  const L = c.league, mine = (c.log || {})[c.season] || blankLine(null);
+  $('#my-line').innerHTML = [['Matches', 'gp'], ...LEADS.map(([k, n]) => [n, k])].map(([n, k]) => `<li><small>${n}</small><b>${mine[k]}</b></li>`).join('');
+  $('#leaders-wrap').hidden = !L;
+  if (L) {
+    const lines = Object.entries(L.ps || {});
+    $('#leaders').innerHTML = LEADS.map(([k, name]) => {
+      const ranked = lines.filter(([, l]) => l[k] > 0).sort((a, b) => b[1][k] - a[1][k]);
+      const you = ranked.findIndex(([key]) => key === 'you');
+      const rows = ranked.slice(0, 3).map(([key, l], i) => `<li class="${key === 'you' ? 'you' : ''}"><i>${i + 1}</i>${crestImg(l.club, 20)}<span>${key === 'you' ? escHtml(careerName(c)) : lineName(L, key)}</span><b>${l[k]}</b></li>`).join('');
+      const yours = you >= 3 ? `<p class="leader-you">You: ${ranked[you][1][k]}, ${you + 1}${['th', 'st', 'nd', 'rd'][(you + 1) % 10 < 4 && Math.floor((you + 1) / 10) % 10 !== 1 ? (you + 1) % 10 : 0]} in the league</p>` : '';
+      return `<div class="leader"><h4>${name}</h4>${rows ? `<ol>${rows}</ol>${yours}` : '<p class="settings-note">No matches played yet.</p>'}</div>`;
+    }).join('');
+  }
   const dp = c.draftPick;
   $('#stats-sub').textContent = dp ? `Drafted with pick ${dp.n} by the ${CLUBS[dp.club].name} in season ${dp.season}.`
     : c.league ? `Plays for the ${CLUBS[c.league.myClub].name}.` : 'Not drafted yet.';
@@ -808,9 +877,7 @@ function openStats() {
     <thead><tr><th scope="col">Season</th><th scope="col">Club</th><th scope="col" title="Matches you played in">GP</th><th scope="col">K</th><th scope="col">ACE</th><th scope="col">BLK</th><th scope="col">DIG</th><th scope="col">AST</th><th scope="col" title="Club's regular-season record">Record</th><th scope="col">Finish</th></tr></thead>
     <tbody>${rows}</tbody>
     <tfoot><tr><th scope="row">Total</th><td></td><td>${tot.gp}</td><td>${tot.kills}</td><td>${tot.aces}</td><td>${tot.blocks}</td><td>${tot.digs}</td><td>${tot.ast}</td><td></td><td>${titles ? `${titles} title${titles > 1 ? 's' : ''}` : ''}</td></tr></tfoot>`;
-  show('scr-rtg-stats');
 }
-$('#hub-stats').addEventListener('click', openStats);
 
 // ===================== training drills =====================
 // One drill between matches, on the real match engine through the tutorial's drill mode (soft serves, clean passes

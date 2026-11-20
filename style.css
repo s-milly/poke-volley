@@ -557,7 +557,7 @@ body.on-title .foot { display: none; }
 .rtg-confirm p { margin: 0 0 20px; color: var(--text); }
 
 .rtg-new { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 300px; gap: 20px; align-items: start; }
-.rtg-new h3, .rtg-hub h3, #scr-rtg-stats h3 { font-size: 13px; color: var(--accent); text-shadow: 2px 2px 0 var(--ink); }
+.rtg-new h3, .rtg-hub h3 { font-size: 13px; color: var(--accent); text-shadow: 2px 2px 0 var(--ink); }
 .rtg-dex { display: grid; gap: 12px; padding: 18px; }
 .rtg-dex-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .rtg-search input, .rtg-name input {
@@ -620,7 +620,6 @@ body.on-title .foot { display: none; }
 .rtg-facts dd { margin: 0; color: var(--text); }
 
 /* the league: next match, standings and your schedule */
-.rtg-wide { grid-column: 1 / -1; }
 .rtg-next .cta.big { white-space: nowrap; }
 .rtg-round { margin: 0 0 10px; font: 10px/1.4 var(--px); color: var(--muted); }
 .rtg-vs { display: flex; align-items: center; justify-content: center; gap: 12px; padding: 6px 0 10px; }
@@ -712,14 +711,12 @@ table.rtg-table tr.cut th, table.rtg-table tr.cut td { border-bottom: 3px dashed
 .rtg-awards li.you b, .rtg-trophies li.champ b { color: var(--accent); }
 .rtg-trophies { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
 .rtg-trophies li.none { grid-column: 1 / -1; border-left-color: var(--line); color: var(--muted); }
-#scr-rtg-stats .rtg-step { max-width: 920px; margin: 0 auto 20px; }
 .rtg-scroll { overflow-x: auto; overscroll-behavior-x: contain; }
 table.rtg-stats { box-shadow: none; border: 0; background: none; min-width: 640px; }
 table.rtg-stats td { font-variant-numeric: tabular-nums; }
 table.rtg-stats td.rtg-club { display: table-cell; }
 table.rtg-stats td.rtg-club .crest { display: inline-block; vertical-align: middle; margin-right: 6px; }
 table.rtg-stats tfoot th, table.rtg-stats tfoot td { color: var(--accent); border-bottom: 0; }
-#hub-stats { justify-self: start; }
 @media (max-width: 560px) { .rtg-pick-who b { font-size: 8px; } .rtg-pick { gap: 8px; } }
 .rtg-offers { display: grid; gap: 8px; margin-top: 4px; }
 .rtg-offers .rtg-build b { display: flex; align-items: center; gap: 8px; }
@@ -773,10 +770,10 @@ body.on-menu .bar-head > div { min-width: 0; }
 .flow li.now i { color: var(--accent); background: #231b00; }
 
 /* panel headings: a gold block, then the name */
-.panel-h, .rtg-new h3, .rtg-hub h3, #scr-rtg-stats h3, .rtg-hof-wrap h3 {
+.panel-h, .rtg-new h3, .rtg-hub h3, .rtg-hof-wrap h3 {
   display: flex; align-items: center; gap: 10px; font-size: 11px; line-height: 1.3; color: var(--text); text-shadow: 2px 2px 0 var(--ink);
 }
-.panel-h::before, .rtg-new h3::before, .rtg-hub h3::before, #scr-rtg-stats h3::before, .rtg-hof-wrap h3::before {
+.panel-h::before, .rtg-new h3::before, .rtg-hub h3::before, .rtg-hof-wrap h3::before {
   content: ""; flex: none; width: 10px; height: 10px; background: var(--accent); box-shadow: 2px 2px 0 var(--ink);
 }
 legend.panel-h { float: left; width: 100%; margin: 0 0 14px; padding: 0; }
@@ -1038,4 +1035,81 @@ table.box tr.you { background: rgba(255, 207, 51, 0.08); }
   .venue-card { grid-template-columns: 110px minmax(0, 1fr); }
   .venue-panel, .rules-panel { padding: 14px; }
   .rtg-slot { min-height: 0; }
+}
+
+/* ---------- Road to Glory hub: a season strip and tabs beside the player card ---------- */
+.hub-main { display: grid; gap: 16px; align-content: start; min-width: 0; }
+.hub-strip { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.hub-strip li { display: grid; gap: 6px; padding: 9px 12px 8px; background: rgba(14, 20, 36, 0.8); border: 2px solid var(--ink); box-shadow: inset 0 0 0 2px var(--line); }
+.hub-strip small { font: 7px/1 var(--px); color: var(--muted); }
+.hub-strip b { font-weight: 400; font-size: 21px; line-height: 1; color: var(--text); white-space: nowrap; }
+.hub-strip li:last-child b { color: var(--accent); }
+.hub-tabs { display: flex; gap: 4px; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; border-bottom: 3px solid var(--ink); box-shadow: 0 2px 0 var(--line); }
+.hub-tabs::-webkit-scrollbar { display: none; }
+.hub-tabs [role="tab"] {
+  flex: none; display: flex; align-items: center; min-height: 48px; padding: 12px 16px 10px; font-size: 10px; white-space: nowrap;
+  color: var(--muted); background: rgba(23, 32, 54, 0.85); border: 3px solid var(--ink); border-bottom: 0; box-shadow: inset 0 0 0 2px var(--line);
+  transition-property: background-color, color; transition-duration: 120ms; transition-timing-function: ease-out;
+}
+.hub-tabs [role="tab"][aria-selected="true"] { color: #231b00; background: var(--accent); box-shadow: inset 0 -4px 0 #c99a0c; }
+@media (hover: hover) { .hub-tabs [role="tab"][aria-selected="false"]:hover { color: var(--text); background: #26314d; } }
+.hub-tabs [role="tab"]:focus-visible { outline-offset: -5px; }
+.tab-badge { margin-left: 8px; padding: 4px 5px 3px; font: 7px/1 var(--px); font-style: normal; color: #231b00; background: var(--accent); box-shadow: 2px 2px 0 var(--ink); }
+[aria-selected="true"] > .tab-badge { color: var(--accent); background: #231b00; box-shadow: none; }
+.hub-pane { display: grid; gap: 20px; align-content: start; }
+.hub-pane > .rtg-toast { margin: 0; }
+.rtg-retire-btn { justify-self: start; }
+.rtg-hub .rtg-preview { top: 120px; }
+@media (max-width: 760px) {
+  .rtg-hub { display: flex; flex-direction: column; }
+  .rtg-hub #hub-card { order: 2; }
+  .rtg-hub:not([data-tab="home"]):not([data-tab="up"]) #hub-card { display: none; }
+  .hub-strip li { padding: 7px 9px 6px; }
+  .hub-strip b { font-size: 19px; }
+  .hub-tabs [role="tab"] { padding-inline: 12px; font-size: 9px; }
+}
+
+/* Home: this week's tasks, numbered, with a check once done */
+.rtg-week { box-shadow: var(--shadow), inset 0 0 0 3px var(--accent); background: radial-gradient(80% 50% at 50% 0%, rgba(255, 207, 51, 0.12), transparent 70%), linear-gradient(180deg, #222d4b, #19223a); }
+.rtg-week-n { margin: 0; font: 9px/1.3 var(--px); color: var(--accent); }
+.tasks { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; counter-reset: task; }
+.task { counter-increment: task; display: grid; gap: 12px; padding: 14px; background: rgba(14, 20, 36, 0.7); border: 2px solid var(--ink); box-shadow: inset 0 0 0 2px var(--line); }
+.task-head { display: flex; align-items: center; gap: 12px; }
+.task-head p { display: grid; gap: 6px; margin: 0; }
+.task-head b { font: 11px/1.3 var(--px); font-weight: 400; color: var(--text); }
+.task-head span { color: var(--muted); font-size: 19px; line-height: 1; }
+.task-box { flex: none; display: grid; place-items: center; width: 28px; height: 28px; font: 10px/1 var(--px); font-style: normal; color: var(--accent); background: var(--ink); box-shadow: inset 0 0 0 2px var(--accent); }
+.task-box::before { content: counter(task); }
+.task.done .task-box { color: #fff; background: #2f9e63; box-shadow: none; }
+.task.done .task-box::before { content: "✓"; }
+.task.done .task-head span { color: #6bd88a; }
+.task-body { display: grid; gap: 12px; }
+.task-body .rtg-goal, .task-body .settings-note { margin: 0; }
+#task-play .task-body .cta.big { white-space: nowrap; }
+
+/* Stats: your season line and the league leaders */
+.my-line { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; }
+.my-line li { display: grid; gap: 8px; justify-items: center; padding: 12px 6px 10px; background: rgba(14, 20, 36, 0.7); border: 2px solid var(--ink); box-shadow: inset 0 0 0 2px var(--line); }
+.my-line small { font: 7px/1 var(--px); color: var(--muted); }
+.my-line b { font: 18px/1 var(--px); font-weight: 400; color: var(--accent); text-shadow: 2px 2px 0 var(--ink); font-variant-numeric: tabular-nums; }
+.leaders { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
+.leader { display: grid; gap: 10px; align-content: start; padding: 12px; background: rgba(14, 20, 36, 0.7); border: 2px solid var(--ink); box-shadow: inset 0 0 0 2px var(--line); }
+.leader h4 { margin: 0; font: 10px/1.3 var(--px); font-weight: 400; color: var(--accent); }
+.leader ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.leader li { display: grid; grid-template-columns: 22px 20px minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 5px 6px; color: var(--text); border-bottom: 2px solid var(--line); }
+.leader li:last-child { border-bottom: 0; }
+.leader li i { font: 9px/1 var(--px); font-style: normal; color: var(--muted); }
+.leader li:first-child i { color: var(--accent); }
+.leader li span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.leader li b { font: 11px/1 var(--px); font-weight: 400; font-variant-numeric: tabular-nums; }
+.leader li.you { background: rgba(255, 207, 51, 0.1); box-shadow: inset 3px 0 0 var(--accent); }
+.leader li.you span, .leader li.you b { color: var(--accent); }
+.leader .crest { width: 20px; height: auto; }
+.leader-you { margin: 0; font-size: 18px; line-height: 1.1; color: var(--accent); }
+@media (max-width: 560px) { .my-line { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.task-body .rtg-round { display: none; } /* the week is already in the panel heading */
+@media (max-width: 560px) {
+  #hub-train { grid-template-columns: 1fr 1fr; gap: 6px; }
+  #hub-train .rtg-build { padding: 10px; }
+  #hub-train .rtg-build span { font-size: 17px; }
 }

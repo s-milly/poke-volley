@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>VolleyDex: Gen 1 Draft Volleyball</title>
 <meta name="description" content="Pick a Gen 1 Pokémon, draft teammates by their stats, and play arcade volleyball in the browser.">
-<link rel="stylesheet" href="style.css?v=58">
+<link rel="stylesheet" href="style.css?v=59">
 </head>
 <body class="on-title">
 <div id="menu-bg" class="menu-bg" aria-hidden="true"></div>
@@ -371,43 +371,88 @@
         <p class="sub" id="hub-sub"></p>
       </div>
     </header>
-    <div class="rtg-hub">
+    <div class="rtg-hub" id="rtg-hub" data-tab="home">
       <aside class="panel rtg-preview" id="hub-card"></aside>
-      <div class="rtg-side">
-        <section class="panel rtg-step rtg-next" aria-labelledby="hub-next-h">
-          <h3 id="hub-next-h">Next up</h3>
-          <div id="hub-next-info"></div>
-          <button type="button" class="cta big" id="hub-next"></button>
+      <div class="hub-main">
+        <ul class="hub-strip" id="hub-strip" aria-label="Season at a glance"></ul>
+        <div class="hub-tabs" role="tablist" aria-label="Career hub" id="hub-tabs">
+          <button type="button" role="tab" id="tab-home" data-tab="home" aria-controls="pane-home" aria-selected="true">Home<i class="tab-badge" id="tab-home-badge" hidden></i></button>
+          <button type="button" role="tab" id="tab-up" data-tab="up" aria-controls="pane-up" aria-selected="false" tabindex="-1">Upgrades<i class="tab-badge" id="tab-up-badge" hidden></i></button>
+          <button type="button" role="tab" id="tab-stand" data-tab="stand" aria-controls="pane-stand" aria-selected="false" tabindex="-1">Standings</button>
+          <button type="button" role="tab" id="tab-stats" data-tab="stats" aria-controls="pane-stats" aria-selected="false" tabindex="-1">Stats</button>
+        </div>
+
+        <section class="hub-pane" role="tabpanel" id="pane-home" aria-labelledby="tab-home">
+          <section class="panel rtg-step rtg-week" aria-labelledby="week-h">
+            <div class="rtg-up-head"><h3 id="week-h">This week</h3><p class="rtg-week-n" id="week-label"></p></div>
+            <ol class="tasks">
+              <li class="task" id="task-train">
+                <div class="task-head"><i class="task-box" aria-hidden="true"></i><p><b>Train</b><span id="task-train-state"></span></p></div>
+                <div class="task-body" id="hub-train-wrap">
+                  <p class="settings-note">One drill between matches. Each trains one stat: score 70 or more for +2, 35 or more for +1.</p>
+                  <div class="rtg-builds" id="hub-train"></div>
+                </div>
+              </li>
+              <li class="task" id="task-play">
+                <div class="task-head"><i class="task-box" aria-hidden="true"></i><p><b id="task-play-t">Play the match</b><span id="task-play-state"></span></p></div>
+                <div class="task-body">
+                  <div id="hub-next-info"></div>
+                  <button type="button" class="cta big" id="hub-next"></button>
+                </div>
+              </li>
+            </ol>
+          </section>
         </section>
-        <section class="panel rtg-step" id="hub-train-wrap" aria-labelledby="hub-train-h" hidden>
-          <h3 id="hub-train-h">Training</h3>
-          <p class="settings-note">One drill between matches. Each trains one stat: score 70 or more for +2, 35 or more for +1.</p>
-          <div class="rtg-builds" id="hub-train"></div>
+
+        <section class="hub-pane" role="tabpanel" id="pane-up" aria-labelledby="tab-up" hidden>
+          <section class="panel rtg-step" aria-labelledby="hub-up-h">
+            <div class="rtg-up-head"><h3 id="hub-up-h">Upgrade your player</h3><p class="rtg-xp" id="hub-xp" aria-live="polite"></p></div>
+            <p class="settings-note">Earn XP in matches and training, then spend it on the stats you choose. A point costs more the higher the stat already is, and no stat can pass its cap.</p>
+            <div class="rtg-ups" id="hub-ups"></div>
+          </section>
         </section>
-        <section class="panel rtg-step" aria-labelledby="hub-up-h">
-          <div class="rtg-up-head"><h3 id="hub-up-h">Upgrade stats</h3><p class="rtg-xp" id="hub-xp" aria-live="polite"></p></div>
-          <p class="settings-note">Earn XP in matches and training, then spend it on the stats you choose. A point costs more the higher the stat already is, and no stat can pass its cap.</p>
-          <div class="rtg-ups" id="hub-ups"></div>
+
+        <section class="hub-pane" role="tabpanel" id="pane-stand" aria-labelledby="tab-stand" hidden>
+          <section class="panel rtg-step" id="hub-league" aria-labelledby="hub-stand-h">
+            <h3 id="hub-stand-h">League standings</h3>
+            <p class="settings-note">The top 2 in each division make the playoffs. Ties are broken by set difference, then point difference.</p>
+            <div class="rtg-tables" id="hub-tables"></div>
+          </section>
+          <section class="panel rtg-step" id="hub-sched-wrap" aria-labelledby="hub-sched-h">
+            <h3 id="hub-sched-h">Your schedule</h3>
+            <ol class="rtg-sched" id="hub-sched"></ol>
+          </section>
         </section>
-        <section class="panel rtg-step" aria-labelledby="hub-car-h">
-          <h3 id="hub-car-h">Career</h3>
-          <dl class="rtg-facts" id="hub-facts"></dl>
-          <div class="rtg-actions">
-            <button type="button" class="ghost small" id="hub-stats">Career stats and trophies</button>
-            <button type="button" class="ghost small" id="hub-retire">Retire</button>
-          </div>
-          <fieldset><legend>Difficulty</legend><div class="seg" id="hub-diff"><button type="button" data-v="easy" aria-pressed="false">Easy</button><button type="button" data-v="normal" aria-pressed="false">Normal</button><button type="button" data-v="hard" aria-pressed="false">Hard</button></div></fieldset>
+
+        <section class="hub-pane" role="tabpanel" id="pane-stats" aria-labelledby="tab-stats" hidden>
+          <section class="panel rtg-step" aria-labelledby="my-season-h">
+            <h3 id="my-season-h">Your season</h3>
+            <p class="settings-note" id="stats-sub"></p>
+            <ul class="my-line" id="my-line"></ul>
+          </section>
+          <section class="panel rtg-step" id="leaders-wrap" aria-labelledby="leaders-h">
+            <h3 id="leaders-h">League leaders</h3>
+            <p class="settings-note">The top 3 in the league for each stat this regular season, every club counted.</p>
+            <div class="leaders" id="leaders"></div>
+          </section>
+          <section class="panel rtg-step" aria-labelledby="stats-tro-h">
+            <h3 id="stats-tro-h">Trophy case</h3>
+            <ul class="rtg-trophies" id="stats-trophies"></ul>
+          </section>
+          <section class="panel rtg-step rtg-stats-wrap" aria-labelledby="stats-tbl-h">
+            <h3 id="stats-tbl-h">Season by season</h3>
+            <p class="settings-note">Your own numbers in every match you played, playoffs included. The season awards and leaders count the regular season only.</p>
+            <div class="rtg-scroll"><table class="box rtg-stats" id="stats-table"></table></div>
+          </section>
+          <section class="panel rtg-step" aria-labelledby="hub-car-h">
+            <h3 id="hub-car-h">Career</h3>
+            <dl class="rtg-facts" id="hub-facts"></dl>
+            <fieldset><legend>Difficulty</legend><div class="seg" id="hub-diff"><button type="button" data-v="easy" aria-pressed="false">Easy</button><button type="button" data-v="normal" aria-pressed="false">Normal</button><button type="button" data-v="hard" aria-pressed="false">Hard</button></div></fieldset>
+            <p class="settings-note">Retire whenever you like. The career goes into the Hall of Fame and the save slot becomes free.</p>
+            <button type="button" class="ghost small rtg-retire-btn" id="hub-retire">Retire</button>
+          </section>
         </section>
       </div>
-      <section class="panel rtg-step rtg-wide" id="hub-league" aria-labelledby="hub-stand-h" hidden>
-        <h3 id="hub-stand-h">Standings</h3>
-        <p class="settings-note">The top 2 in each division make the playoffs. Ties are broken by set difference, then point difference.</p>
-        <div class="rtg-tables" id="hub-tables"></div>
-      </section>
-      <section class="panel rtg-step rtg-wide" id="hub-sched-wrap" aria-labelledby="hub-sched-h" hidden>
-        <h3 id="hub-sched-h">Your schedule</h3>
-        <ol class="rtg-sched" id="hub-sched"></ol>
-      </section>
     </div>
   </section>
 
@@ -439,26 +484,6 @@
         <button type="button" class="cta" id="draft-go" hidden></button>
       </div>
     </div>
-  </section>
-
-  <section id="scr-rtg-stats" class="screen" hidden>
-    <header class="bar-head">
-      <button type="button" class="ghost back" data-back="scr-rtg-hub"><span aria-hidden="true">◀</span> Career</button>
-      <div>
-        <p class="eyebrow">Road to Glory</p>
-        <h2 id="stats-title">Career</h2>
-        <p class="sub" id="stats-sub"></p>
-      </div>
-    </header>
-    <section class="panel rtg-step" aria-labelledby="stats-tro-h">
-      <h3 id="stats-tro-h">Trophy case</h3>
-      <ul class="rtg-trophies" id="stats-trophies"></ul>
-    </section>
-    <section class="panel rtg-step rtg-stats-wrap" aria-labelledby="stats-tbl-h">
-      <h3 id="stats-tbl-h">Season by season</h3>
-      <p class="settings-note">Your own numbers in every match you played, playoffs included. The season awards count the regular season only.</p>
-      <div class="rtg-scroll"><table class="box rtg-stats" id="stats-table"></table></div>
-    </section>
   </section>
 
   <footer class="foot">Fan project, not affiliated with Nintendo, Game Freak or The Pokémon Company. Sprites and stats from PokeAPI.</footer>
@@ -505,9 +530,9 @@
   </div>
 </div>
 
-<script src="data.js?v=58"></script>
-<script src="sprites.js?v=58"></script>
-<script src="game.js?v=58"></script>
-<script src="career.js?v=58"></script>
+<script src="data.js?v=59"></script>
+<script src="sprites.js?v=59"></script>
+<script src="game.js?v=59"></script>
+<script src="career.js?v=59"></script>
 </body>
 </html>
