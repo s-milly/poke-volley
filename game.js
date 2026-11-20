@@ -221,6 +221,7 @@ let draft = null;   // { starter, picks: [mon], offers: [mon], rerolls }
 let capPick = null; // { role, offers: [mon], rerolls }: your own Pokémon, offered for your position
 let teams = null;   // [[entry], [entry]], entry 0 of team 0 is you
 let G = null;       // live match
+let careerMatch = null; // Road to Glory: the career match being set up or played (career.js), or null
 let TUT = null;     // the tutorial, while it runs: { mode, roles, ri, steps, si, saved, ... }
 
 class Player {
@@ -3155,7 +3156,8 @@ seg('#opt-diff', 'diff'); seg('#opt-target', 'target'); seg('#opt-sets', 'sets')
 // Settings are kept between visits (not in test mode). Anything stale or unknown falls back to the default.
 const SAVE_KEY = 'volleydex-settings';
 function saveSettings() { // during the tutorial, save the player's own settings (plus any camera change), not the tutorial's
-  const s = demoSaved ? demoSaved.settings : TUT ? { ...TUT.saved, camMode: settings.camMode, zoom: settings.zoom } : settings;
+  const s = demoSaved ? demoSaved.settings : TUT ? { ...TUT.saved, camMode: settings.camMode, zoom: settings.zoom }
+    : careerMatch ? { ...careerMatch.saved, camMode: settings.camMode, zoom: settings.zoom, serve: settings.serve } : settings;
   if (!AUTO) try { localStorage.setItem(SAVE_KEY, JSON.stringify(s)); } catch (e) {}
 }
 function loadSettings() {
@@ -4086,7 +4088,7 @@ function togglePause() {
 }
 $('#btn-resume').addEventListener('click', togglePause);
 $('#btn-pause').addEventListener('click', togglePause);
-$('#btn-quit').addEventListener('click', () => { showTabStats(false); G.paused = false; $('#pause').hidden = true; G = null; if (TUT) endTutorial(); else show('scr-title'); });
+$('#btn-quit').addEventListener('click', () => { showTabStats(false); G.paused = false; $('#pause').hidden = true; G = null; if (TUT) endTutorial(); else if (careerMatch) careerBack(); else show('scr-title'); });
 
 // The box score, one table per team. Used by the Tab scoreboard during a match and the result screen after it.
 const BOX_COLS = [['kills', 'K', 'Kills'], ['att', 'ATT', 'Attack attempts'], ['ast', 'AST', 'Assists: sets that became kills'],
@@ -4127,12 +4129,15 @@ function showResult() {
   $('#res-mvp').innerHTML = '';
   $('#res-mvp').appendChild(portrait(mvp.mon, 192, 128));
   $('#res-mvp').appendChild(el('div', '', `<span>MVP</span><b>${mvp.mon.name}</b><small>${teamName(mvp.side)}</small>`));
+  $('#btn-rematch').hidden = $('#btn-redraft').hidden = !!careerMatch;
+  $('#btn-menu').textContent = careerMatch ? 'Continue' : 'Main menu';
+  if (careerMatch) careerMatchOver(); // records the result and the XP before the screen shows
   show('scr-result');
 }
 const val = p => (p.stats.kills + p.stats.aces + p.stats.blocks) * 3 + p.stats.digs + p.stats.sets * 0.5;
 $('#btn-rematch').addEventListener('click', startMatch);
 $('#btn-redraft').addEventListener('click', () => { buildPick(); show('scr-pick'); });
-$('#btn-menu').addEventListener('click', () => show('scr-title'));
+$('#btn-menu').addEventListener('click', () => { if (careerMatch) careerBack(); else show('scr-title'); });
 for (const b of document.querySelectorAll('[data-back]')) b.addEventListener('click', () => { if (b.dataset.back === 'scr-title') renderSummary(); show(b.dataset.back); });
 
 // ---------- touch controls ----------

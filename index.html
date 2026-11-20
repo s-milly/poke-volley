@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>VolleyDex: Gen 1 Draft Volleyball</title>
 <meta name="description" content="Pick a Gen 1 Pokémon, draft teammates by their stats, and play arcade volleyball in the browser.">
-<link rel="stylesheet" href="style.css?v=53">
+<link rel="stylesheet" href="style.css?v=54">
 </head>
 <body class="on-title">
 <main id="menu">
@@ -247,6 +247,7 @@
       <h2 id="res-title">You win!</h2>
       <p class="score" id="res-score">15 : 10</p>
       <p class="sub" id="res-meta"></p>
+      <p class="rtg-res" id="res-xp" hidden></p>
     </div>
     <div class="mvp" id="res-mvp"></div>
     <div class="box-wrap" id="res-box"></div>
@@ -333,6 +334,11 @@
     <div class="rtg-hub">
       <aside class="panel rtg-preview" id="hub-card"></aside>
       <div class="rtg-side">
+        <section class="panel rtg-step rtg-next" aria-labelledby="hub-next-h">
+          <h3 id="hub-next-h">Next up</h3>
+          <div id="hub-next-info"></div>
+          <button type="button" class="cta big" id="hub-next"></button>
+        </section>
         <section class="panel rtg-step" aria-labelledby="hub-up-h">
           <div class="rtg-up-head"><h3 id="hub-up-h">Upgrade stats</h3><p class="rtg-xp" id="hub-xp" aria-live="polite"></p></div>
           <p class="settings-note">Earn XP in matches and training, then spend it on the stats you choose. A point costs more the higher the stat already is, and no stat can pass its cap.</p>
@@ -342,10 +348,17 @@
           <h3 id="hub-car-h">Career</h3>
           <dl class="rtg-facts" id="hub-facts"></dl>
           <fieldset><legend>Difficulty</legend><div class="seg" id="hub-diff"><button type="button" data-v="easy" aria-pressed="false">Easy</button><button type="button" data-v="normal" aria-pressed="false">Normal</button><button type="button" data-v="hard" aria-pressed="false">Hard</button></div></fieldset>
-          <button type="button" class="cta big" id="hub-next" disabled aria-describedby="hub-next-note"><span aria-hidden="true">▶</span> Go to the draft</button>
-          <p class="settings-note" id="hub-next-note">The draft, the league and matches are not built yet.</p>
         </section>
       </div>
+      <section class="panel rtg-step rtg-wide" id="hub-league" aria-labelledby="hub-stand-h" hidden>
+        <h3 id="hub-stand-h">Standings</h3>
+        <p class="settings-note">The top 2 in each division make the playoffs. Ties are broken by set difference, then point difference.</p>
+        <div class="rtg-tables" id="hub-tables"></div>
+      </section>
+      <section class="panel rtg-step rtg-wide" id="hub-sched-wrap" aria-labelledby="hub-sched-h" hidden>
+        <h3 id="hub-sched-h">Your schedule</h3>
+        <ol class="rtg-sched" id="hub-sched"></ol>
+      </section>
     </div>
   </section>
 
@@ -388,9 +401,9 @@
   </div>
 </div>
 
-<script src="data.js?v=53"></script>
-<script src="sprites.js?v=53"></script>
-<script src="game.js?v=53"></script>
-<script src="career.js?v=53"></script>
+<script src="data.js?v=54"></script>
+<script src="sprites.js?v=54"></script>
+<script src="game.js?v=54"></script>
+<script src="career.js?v=54"></script>
 </body>
 </html>

@@ -40,7 +40,7 @@ Archetypes:
 
 ## Growth
 
-- **XP from matches.** Your own box score earns XP: kills, aces, blocks, digs and assists, plus a bonus for winning. A bench player who doesn't come in earns a small amount for being there.
+- **XP from matches.** 10 XP for playing and 10 for a win, plus your box score: 2 per kill, 3 per ace, 3 per block, 1.5 per dig and 0.5 per assist. Middles get 1.4 times the box score share, setters 1.2 times and liberos 3 times, because the box score counts less of what they do. Playoff matches give 1.5 times the total. A bench player who doesn't come in earns a small amount for being there.
 - **Coach goals.** Before each match the coach sets one goal, such as 3 aces or 10 digs. Meeting it gives bonus XP.
 - **Training.** One drill between matches. Pick from serve targets, passing, block timing or spike accuracy. Your drill score sets how much XP you get **(proposal: the XP goes into the stat the drill trains)**.
 - **Spending.** You spend XP on the stat of your choice. A point costs 5 XP while the stat is in the 30s, plus 2 more for each band of ten above that (7 in the 40s, 9 in the 50s, up to 17 in the 90s). No stat can pass its cap.
@@ -49,11 +49,13 @@ Archetypes:
 ## The league
 
 - **Clubs.** The 10 existing clubs named after the Gen 1 towns. Each has a team rating, and they improve or decline from season to season.
-- **Divisions.** Two divisions of 5 clubs **(proposal: split by map, so Pallet, Viridian, Pewter, Cinnabar and Fuchsia in one, and Cerulean, Vermilion, Lavender, Celadon and Saffron in the other)**.
+- **Divisions.** Two divisions of 5 clubs: the West (Pallet, Viridian, Pewter, Cinnabar, Fuchsia) and the East (Cerulean, Vermilion, Lavender, Celadon, Saffron).
+- **Rosters.** Each club has 7 Pokémon, no Pokémon is on two clubs, and none share your species. Club ratings are spread from about 56 to 76.
 - **Season.** 13 regular-season matches: the 4 other clubs in your division home and away (8), and the 5 clubs in the other division once (5).
 - **Playoffs.** The top 2 in each division go through **(proposal)**. The semi-finals are each division winner against the other division's runner-up, then the final.
 - **Match length.** Regular season: best of 3 sets to 15. Playoffs: best of 3 sets to 25.
-- **Other results.** Matches between other clubs are simulated from team ratings, so the standings table is real.
+- **Other results.** Matches between other clubs are simulated rally by rally from the two team ratings, so the standings table is real.
+- **Venues.** Regular season in the Classic arena, semi-finals in the Mega bowl, the final at Championship night.
 - **Venue.** The final is played in the championship arena.
 
 ## Draft
