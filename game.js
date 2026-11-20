@@ -306,12 +306,12 @@ function oppHitter(s) {
 }
 const setterSpot = () => (settings.mode === 6 ? [HW * 0.18, -0.9] : [HW * 0.1, -1.2]); // own coordinates
 
-// The position guide marks your spot whenever the play does not need you on the ball: before the serve
-// (your legal spot), and in the rally while a teammate or the other team has it (where to go on defense,
-// coverage or your approach). It hides when the ball is coming to you or you are in the air.
+// The position guide marks your spot at the start of each point only: before the serve (your legal spot),
+// then while the serve is in the air (where to go once it is served: your base spot, or your receive spot).
+// After the first touch it goes away and you play on your own. It also hides when the serve is coming to you.
 function guideOn(you) {
   if (G.phase === 'serve') return you !== G.server;
-  if (G.phase !== 'rally' || !you.onGround || you.dive > 0) return false;
+  if (G.phase !== 'rally' || !G.serveLive || !you.onGround || you.dive > 0) return false;
   if (G.intended[0] === you) return false; // your teammate is putting the ball to you
   const b = G.ball, tl = timeToY(b, BR);
   if (tl == null || ownServe(you)) return true;
