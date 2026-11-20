@@ -733,7 +733,7 @@ table.rtg-stats tfoot th, table.rtg-stats tfoot td { color: var(--accent); borde
 
 /* =====================================================================================================
    Menu screens (everything after the main menu): a blurred still of the arena behind, a sticky broadcast
-   header with the setup steps, panels with a gold marker on their headings, and a sticky dock for the next step.
+   header with the setup steps, panels with a gold marker on their headings, and a row of buttons for the next step.
    ===================================================================================================== */
 .menu-bg { display: none; position: fixed; inset: -48px; z-index: 0; pointer-events: none; background: #0b1020 center / cover no-repeat; filter: blur(16px) saturate(1.25) brightness(0.5); }
 body.on-menu { background: #080b14; overflow-x: clip; }
@@ -779,12 +779,10 @@ body.on-menu .bar-head > div { min-width: 0; }
 legend.panel-h { float: left; width: 100%; margin: 0 0 14px; padding: 0; }
 legend.panel-h + * { clear: both; }
 
-/* the dock: the next step, stuck to the bottom of the window */
+/* the dock: the next step, a plain row of buttons under the panels */
 .dock {
-  position: sticky; bottom: 0; z-index: 5; display: flex; align-items: center; justify-content: flex-end; gap: 14px 20px;
-  margin: 28px calc(50% - 50vw) 0; padding: 14px max(20px, calc(50vw - 540px)) calc(14px + env(safe-area-inset-bottom));
-  background: linear-gradient(0deg, rgba(10, 14, 26, 0.96), rgba(10, 14, 26, 0.84)); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
-  border-top: 3px solid var(--ink); box-shadow: 0 -3px 0 rgba(255, 207, 51, 0.22);
+  display: flex; align-items: center; justify-content: flex-end; gap: 14px 20px;
+  margin: 28px 0 0; padding: 0 0 env(safe-area-inset-bottom);
 }
 .dock .cta.big { width: auto; min-width: 320px; }
 .dock .cta.big span { margin: 0 0 0 10px; }
@@ -1025,7 +1023,7 @@ table.box tr.you { background: rgba(255, 207, 51, 0.08); }
   .eyebrow { font-size: 8px; margin-bottom: 6px; }
   .flow li:not(.now) span { display: none; }
   .flow li:not(.now) { padding-right: 5px; }
-  .dock { flex-wrap: wrap; gap: 10px; padding: 10px 14px calc(10px + env(safe-area-inset-bottom)); }
+  .dock { flex-wrap: wrap; gap: 10px; margin-top: 20px; }
   .dock .cta.big { flex: 1 1 100%; min-width: 0; }
   .dock .quick-row { order: 2; margin: 0; }
   .club-panel { padding: 12px; }
@@ -1112,4 +1110,232 @@ table.box tr.you { background: rgba(255, 207, 51, 0.08); }
   #hub-train { grid-template-columns: 1fr 1fr; gap: 6px; }
   #hub-train .rtg-build { padding: 10px; }
   #hub-train .rtg-build span { font-size: 17px; }
+}
+
+/* ---------- Road to Glory hub, fitted: the hub fills the window and every tab fits without scrolling ---------- */
+body:has(#scr-rtg-hub:not([hidden])) .foot { display: none; }
+body:has(#scr-rtg-hub:not([hidden])) #menu { padding-bottom: 0; }
+#scr-rtg-hub:not([hidden]) { display: flex; flex-direction: column; height: 100vh; height: 100dvh; }
+#scr-rtg-hub .bar-head { flex: none; margin-bottom: 14px; padding-block: 10px; }
+#scr-rtg-hub .bar-head .eyebrow { margin-bottom: 5px; }
+#scr-rtg-hub .bar-head h2 { font-size: 18px; }
+#scr-rtg-hub .bar-head .sub { margin-top: 4px; font-size: 19px; }
+.rtg-hub { flex: 1; min-height: 0; position: relative; align-items: stretch; padding-bottom: 14px; }
+.rtg-hub #hub-card { position: static; align-self: start; }
+.rtg-hub .rtg-card .card-top { height: 128px; }
+.rtg-hub .rtg-card .card-body { padding: 10px 14px 14px; }
+.rtg-hub .rtg-card .bars { gap: 5px; }
+.hub-main { grid-template-rows: auto auto minmax(0, 1fr); gap: 10px; min-height: 0; }
+.hub-strip li { padding: 7px 10px 6px; gap: 5px; }
+.hub-strip b { font-size: 19px; }
+.hub-tabs { gap: 3px; overflow: visible; flex-wrap: wrap; }
+.hub-tabs [role="tab"] { flex: 1 1 auto; justify-content: center; min-height: 44px; padding: 10px 10px 8px; font-size: 9px; }
+.tab-badge { margin-left: 6px; }
+/* the pane takes the height that is left; it only scrolls as a last resort on a very small window */
+.hub-pane { min-height: 0; overflow-y: auto; overscroll-behavior: contain; gap: 10px; }
+.rtg-hub .rtg-step { gap: 10px; padding: 14px 16px; }
+.rtg-hub .rtg-step .settings-note { font-size: 19px; line-height: 1.05; }
+
+/* Home: the two tasks side by side on wide windows; drills as compact rows */
+.tasks { gap: 10px; grid-template-columns: minmax(0, 1fr); }
+.task, .task-body, #hub-next-info { min-width: 0; grid-template-columns: minmax(0, 1fr); }
+.task { gap: 10px; padding: 12px; align-content: start; }
+.task-head p { display: flex; align-items: baseline; gap: 4px 10px; flex-wrap: wrap; }
+.task-head span { font-size: 18px; }
+.ml-abbr { display: none; }
+.task-body { gap: 10px; }
+#hub-train { grid-template-columns: 1fr; gap: 6px; }
+#hub-train .rtg-drill { grid-template-columns: 44px auto minmax(0, 1fr); align-items: center; gap: 10px; padding: 8px 10px; }
+#hub-train .rtg-drill .drill-stat { margin: 0; justify-self: stretch; text-align: center; }
+#hub-train .rtg-drill span { font-size: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: right; }
+.rtg-vs { padding: 0; }
+.rtg-vs .crest { width: 44px; }
+.rtg-vs b { font-size: 18px; }
+#hub-next-info { display: grid; gap: 8px; }
+#hub-next-info .rtg-goal { padding: 6px 10px; line-height: 1.05; }
+#task-play .cta.big { min-height: 52px; }
+@media (min-width: 1000px) { .tasks:not(:has(#task-train[hidden])) { grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); align-items: start; } }
+/* the off-season: the champion, the awards in a grid and the offers side by side */
+#hub-next-info .rtg-aw-h { margin: 4px 0 0; }
+.rtg-week:has(#task-train[hidden]) > .rtg-up-head { display: none; } /* off-season: the task names the next season */
+#hub-awards { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 8px; }
+#hub-awards li { padding: 8px 10px; gap: 4px; }
+#hub-next-info .rtg-offers { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 6px 8px; margin: 0; }
+#hub-next-info .rtg-offers .rtg-aw-h { grid-column: 1 / -1; }
+#hub-next-info .rtg-offers .rtg-build { padding: 8px 10px; }
+#hub-next-info .rtg-offers .rtg-build span { font-size: 18px; }
+.rtg-champ .crest { width: 40px; }
+
+/* Upgrades: each stat with its bar and cap notch */
+.rtg-up { grid-template-columns: 48px minmax(80px, 1fr) 3ch 4ch auto; justify-content: stretch; gap: 12px; }
+.rtg-up .track { position: relative; height: 14px; }
+.rtg-up .cap { position: absolute; top: -5px; bottom: -5px; width: 2px; margin-left: -1px; background: var(--text); }
+.rtg-up .ghost.small { min-width: 124px; }
+.hub-perk { margin: 0; font-size: 19px; }
+
+/* Standings and schedule */
+.rtg-hub table.rtg-table th, .rtg-hub table.rtg-table td { padding: 6px 8px; }
+.rtg-hub table.rtg-table .rtg-club { white-space: nowrap; }
+.rtg-sched { gap: 0 20px; }
+.rtg-sched li { grid-template-columns: 4ch minmax(0, 1fr) auto; gap: 8px; padding: 5px 2px; }
+.rtg-wk { font: 9px/1 var(--px); }
+.rtg-sched .rtg-club { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rtg-sched .rtg-r { white-space: nowrap; }
+.sc-abbr { display: none; }
+/* played weeks show the club's short name so the set scores fit beside it */
+.rtg-sched li.w .sc-full, .rtg-sched li.l .sc-full { display: none; }
+.rtg-sched li.w .sc-abbr, .rtg-sched li.l .sc-abbr { display: inline; }
+.rtg-sched li.now .rtg-wk::before { content: "▶"; margin-right: 2px; }
+
+/* Stats: one row of five leader boards on wide windows */
+.my-line li { padding: 9px 6px 8px; gap: 6px; }
+.leaders { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
+.leader { gap: 6px; padding: 10px 8px; }
+.leader h4 { font-size: 9px; }
+.leader li { grid-template-columns: 10px 16px minmax(0, 1fr) auto; gap: 6px; padding: 4px 2px; font-size: 19px; }
+.leader .crest { width: 16px; }
+.leader-you { font-size: 17px; }
+@media (max-width: 1180px) { .leaders { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (min-width: 1181px) and (max-width: 1500px) { .leader li { grid-template-columns: 10px minmax(0, 1fr) auto; } .leader li .crest { display: none; } }
+
+/* Career: difficulty and retire on one row, trophies grouped by kind, a page of seasons */
+.car-top { grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
+.car-top h3, .car-top > .settings-note:not(.vh) { grid-column: 1; }
+.car-top .car-row { grid-column: 2; grid-row: 1 / span 2; }
+.car-row { display: flex; align-items: end; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.car-row .seg button { min-height: 40px; }
+.rtg-trophies { display: flex; flex-wrap: wrap; gap: 6px; }
+.rtg-trophies li { display: flex; align-items: baseline; gap: 8px; }
+.rtg-trophies li.none { flex: 1; }
+.car-row legend { margin: 0 0 8px; font-size: 10px; color: var(--muted); }
+.rtg-trophies li { padding: 5px 9px; }
+.rtg-trophies span { font-size: 18px; }
+.rtg-hub table.rtg-stats { min-width: 0; }
+.rtg-hub table.rtg-stats th, .rtg-hub table.rtg-stats td { padding: 5px 6px; }
+.rtg-hub table.rtg-stats abbr { text-decoration: none; }
+.hist-pager { display: flex; align-items: center; gap: 8px; }
+.hist-pager span { color: var(--muted); font-size: 18px; white-space: nowrap; }
+.hist-pager .ghost.small { min-height: 36px; padding: 7px 10px; font-size: 8px; }
+.hist-note { font-size: 17px !important; }
+.hub-toast { position: absolute; left: 50%; bottom: 24px; z-index: 4; translate: -50% 0; width: max-content; max-width: min(560px, calc(100% - 24px)); margin: 0; background: #2a2510; box-shadow: 3px 3px 0 var(--ink); }
+
+/* phones: the card and strip shrink away, the tabs wrap into rows of three */
+@media (max-width: 760px) {
+  #scr-rtg-hub .bar-head { margin-bottom: 8px; padding-block: 8px; }
+  #scr-rtg-hub .bar-head .eyebrow { display: none; }
+  #scr-rtg-hub .bar-head h2 { font-size: 13px; }
+  #scr-rtg-hub .bar-head .sub { font-size: 17px; }
+  .rtg-hub { display: flex; flex-direction: column; gap: 8px; padding-bottom: 8px; }
+  .rtg-hub #hub-card, .rtg-hub:not([data-tab="home"]):not([data-tab="up"]) #hub-card { display: none; }
+  .hub-main { flex: 1; gap: 8px; }
+  .hub-strip { display: block; font-size: 17px; line-height: 1.1; color: var(--muted); }
+  .hub-strip li { display: inline; padding: 0; background: none; border: 0; box-shadow: none; }
+  .hub-strip li + li::before { content: " · "; }
+  .hub-strip small { display: none; }
+  .hub-strip b { display: inline; font-size: 17px; color: var(--text); white-space: normal; }
+  .hub-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 3px; border-bottom: 0; box-shadow: none; }
+  .hub-tabs [role="tab"] { min-height: 40px; padding: 8px 4px 6px; font-size: 8px; border-bottom: 3px solid var(--ink); }
+  .tab-badge { margin-left: 4px; padding: 3px 3px 2px; font-size: 6px; }
+  /* seven tabs in the off-season: four across, badges under the names */
+  .hub-tabs:has(#tab-awards:not([hidden])) { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .hub-tabs:has(#tab-awards:not([hidden])) [role="tab"] { flex-direction: column; gap: 3px; padding-inline: 2px; font-size: 7px; }
+  .hub-tabs:has(#tab-awards:not([hidden])) .tab-badge { margin: 0; }
+  .rtg-hub .rtg-step { gap: 8px; padding: 10px; }
+  .rtg-hub .rtg-step .settings-note { font-size: 17px; }
+  .rtg-hub h3 { font-size: 10px; }
+  .rtg-week > .rtg-up-head { display: none; }
+  .tasks { gap: 8px; }
+  .task { gap: 8px; padding: 9px; }
+  .task-head { gap: 8px; }
+  .task-head p { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+  .task-head b { font-size: 9px; }
+  .task-head span { font-size: 16px; }
+  .task-box { width: 22px; height: 22px; font-size: 8px; }
+  #hub-train-wrap > .settings-note { display: none; }
+  #hub-train { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; }
+  #hub-train .rtg-drill { grid-template-columns: 1fr; justify-items: center; gap: 4px; padding: 6px 2px; text-align: center; }
+  #hub-train .rtg-drill .drill-stat { justify-self: center; padding: 3px 4px 2px; font-size: 7px; }
+  #hub-train .rtg-drill b { font-size: 7px; }
+  #hub-train .rtg-drill span { font-size: 15px; text-align: center; }
+  .dr-role { display: none; }
+  #scr-rtg-hub .bar-head .sub { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #hub-next-info { gap: 6px; }
+  #hub-next-info .settings-note, #hub-next-info .rtg-goal { font-size: 16px; }
+  .rtg-vs .crest { width: 32px; }
+  .rtg-vs b { font-size: 14px; }
+  #task-play .task-body .cta.big { min-height: 46px; font-size: 10px; white-space: normal; }
+  .rtg-champ span { line-height: 1; }
+  .rtg-up { grid-template-columns: 38px minmax(40px, 1fr) 3ch 3.5ch auto; gap: 8px; }
+  .rtg-up .ghost.small { min-width: 0; padding-inline: 8px; font-size: 8px; }
+  .hub-perk { font-size: 17px; }
+  .rtg-tables { grid-template-columns: 1fr; gap: 8px; }
+  .rtg-hub table.rtg-table caption { padding-bottom: 4px; font-size: 9px; }
+  .rtg-hub table.rtg-table th, .rtg-hub table.rtg-table td { padding: 3px 5px; font-size: 17px; }
+  .rtg-hub table.rtg-table thead th { font-size: 7px; }
+  .rtg-hub table.rtg-table .crest { width: 16px; }
+  .rtg-sched { grid-template-columns: 1fr 1fr; gap: 0 10px; }
+  /* two columns; each match is two lines: week, opponent and W or L, then the set scores */
+  .rtg-sched li { grid-template-columns: 3.4ch minmax(0, 1fr) auto; grid-template-areas: none; gap: 0 5px; padding: 3px 0; font-size: 16px; line-height: 1; }
+  .rtg-sched li .rtg-wk, .rtg-sched li .rtg-club { grid-area: auto; }
+  .rtg-sched .rtg-r { display: contents; }
+  .rtg-sched .sc-pts { grid-column: 1 / -1; font-size: 15px; color: var(--muted); }
+  .rtg-sched li:not(.w):not(.l)::after { content: ""; grid-column: 1 / -1; height: 15px; }
+  .sc-full { display: none; } .sc-abbr { display: inline; }
+  .rtg-sched .crest { width: 16px; }
+  .my-line { grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 4px; }
+  .my-line li { padding: 6px 2px 5px; gap: 5px; }
+  .ml-full { display: none; } .ml-abbr { display: inline; }
+  .my-line b { font-size: 13px; }
+  .leaders { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; }
+  .leader { padding: 6px 5px; gap: 3px; }
+  .rtg-hub .rtg-up-head { flex-wrap: nowrap; }
+  .rtg-hub .rtg-up-head .rtg-week-n { font-size: 7px; white-space: nowrap; }
+  .leader h4 { font-size: 8px; }
+  .leader li { grid-template-columns: 7px minmax(0, 1fr) auto; gap: 4px; padding: 2px 0; font-size: 15px; }
+  .leader li .crest { display: none; }
+  .leader li b { font-size: 9px; }
+  .leader-you { font-size: 15px; }
+  .rtg-trophies { gap: 4px; }
+  .rtg-trophies li { padding: 3px 6px; gap: 6px; }
+  .rtg-trophies b { font-size: 7px; }
+  .rtg-trophies span { font-size: 15px; }
+  .car-top { grid-template-columns: 1fr; }
+  .car-top h3, .car-top > .settings-note:not(.vh), .car-top .car-row { grid-column: 1; grid-row: auto; }
+  .car-row legend { display: none; }
+  .car-row { flex-wrap: nowrap; gap: 8px; }
+  .car-row .seg { gap: 4px; }
+  .car-row .seg button { min-height: 38px; padding: 6px 7px; font-size: 9px; }
+  .car-row .rtg-retire-btn { min-height: 38px; padding-inline: 9px; font-size: 9px; }
+  .hist-note { display: none; }
+  .rtg-hub table.rtg-stats th, .rtg-hub table.rtg-stats td { padding: 3px 3px; font-size: 16px; }
+  .rtg-hub table.rtg-stats thead th { font-size: 6px; }
+  .rtg-hub table.rtg-stats td.rtg-club .crest { display: none; }
+  .rtg-hub .hist-rec { display: none; }
+  .hist-pager span { font-size: 15px; }
+  .rtg-stats-wrap > .rtg-up-head { flex-wrap: wrap; }
+  .hist-pager { width: 100%; justify-content: space-between; }
+  .hist-pager .ghost.small { min-height: 34px; padding: 5px 8px; }
+  .rtg-hub .rtg-xp { white-space: nowrap; font-size: 16px; }
+  .rtg-hub .rtg-xp b { font-size: 11px; }
+  .hub-toast { bottom: 12px; }
+  #hub-awards { grid-template-columns: 1fr; gap: 5px; }
+  #hub-awards li { padding: 5px 8px; }
+  #hub-next-info .rtg-offers .rtg-build { padding: 6px 8px; }
+  #hub-next-info .rtg-offers .rtg-build b { font-size: 9px; }
+  #hub-next-info .rtg-offers .rtg-build span { font-size: 15px; }
+  .rtg-champ { gap: 8px; }
+  .rtg-champ .crest { width: 32px; }
+  .rtg-champ b { font-size: 10px; }
+  .rtg-champ span { font-size: 16px; }
+}
+/* short phones: the season strip goes (its facts are on the tabs: the week on Home, the record on Schedule, the place on
+   Standings, trust on Home and XP on Upgrades) and the tabs get shorter */
+@media (max-width: 760px) and (max-height: 760px) {
+  .hub-strip { display: none; }
+  .hub-tabs [role="tab"] { min-height: 34px; padding-block: 6px 4px; }
+  .rtg-hub table.rtg-table th, .rtg-hub table.rtg-table td { padding-block: 2px; }
+  .rtg-hub .rtg-step { padding-block: 7px; }
+  .rtg-tables { gap: 4px; }
+  #scr-rtg-hub .bar-head { padding-block: 6px; }
+  #scr-rtg-hub .bar-head .back { min-height: 40px; padding-block: 6px; }
 }

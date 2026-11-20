@@ -3255,7 +3255,7 @@ function loadSettings() {
     if (o.role && YOUR_ROLES[n].includes(o.role[n])) settings.role[n] = o.role[n];
     if (o.venue && VENUES[o.venue[n]] && VENUES[o.venue[n]].mode === n) settings.venue[n] = o.venue[n];
   }
-  if (Array.isArray(o.club) && CLUBS[o.club[0]]) settings.club[0] = o.club[0];
+  if (Array.isArray(o.club) && (CLUBS[o.club[0]] || o.club[0] === 'random')) settings.club[0] = o.club[0];
   if (Array.isArray(o.club) && (CLUBS[o.club[1]] || o.club[1] === 'random')) settings.club[1] = o.club[1];
   for (const [box, key] of [['#opt-diff', 'diff'], ['#opt-target', 'target'], ['#opt-sets', 'sets']])
     for (const b of document.querySelectorAll(`${box} button`)) b.setAttribute('aria-pressed', String(b.dataset.v === String(settings[key])));
@@ -3283,26 +3283,26 @@ function renderVenuePick() {
 }
 renderVenuePick();
 function renderClubPick() {
-  if (settings.club[1] === settings.club[0]) settings.club[1] = 'random';
+  if (settings.club[1] === settings.club[0] && settings.club[0] !== 'random') settings.club[1] = 'random';
   for (const k of [0, 1]) {
     const box = $(k ? '#opt-rival' : '#opt-club'); box.innerHTML = '';
-    for (const id of k ? ['random', ...Object.keys(CLUBS)] : Object.keys(CLUBS)) {
-      const c = id === 'random' ? null : CLUBS[id], mine = k === 1 && id === settings.club[0];
+    for (const id of ['random', ...Object.keys(CLUBS)]) {
+      const c = id === 'random' ? null : CLUBS[id], mine = k === 1 && c && id === settings.club[0];
       const [city, nick] = c ? c.name.split(' ') : ['Random', 'Any club'];
-      const b = el('button', 'club-tile' + (c ? '' : ' random'), c ? `${crestImg(id, 72)}<b>${city}</b><span>${mine ? 'Your team' : nick}</span><i>${c.abbr}</i>` : `${crestImg(id, 36)}<b>Random rival</b><span>Any club but yours</span>`);
+      const b = el('button', 'club-tile' + (c ? '' : ' random'), c ? `${crestImg(id, 72)}<b>${city}</b><span>${mine ? 'Your team' : nick}</span><i>${c.abbr}</i>` : `${crestImg(id, 36)}<b>${k ? 'Random rival' : 'Random club'}</b><span>${k ? 'Any club but yours' : 'Drawn at kickoff'}</span>`);
       b.type = 'button'; b.setAttribute('aria-pressed', String(settings.club[k] === id));
-      b.setAttribute('aria-label', c ? `${c.name} (${c.abbr})` : 'Random rival');
+      b.setAttribute('aria-label', c ? `${c.name} (${c.abbr})` : k ? 'Random rival' : 'Random club');
       if (c) b.style.setProperty('--cc', c.color);
       b.disabled = mine;
       b.addEventListener('click', () => { settings.club[k] = id; renderClubPick(); $(`${k ? '#opt-rival' : '#opt-club'} [aria-pressed="true"]`).focus(); });
       box.appendChild(b);
     }
     const id = settings.club[k];
-    $(k ? '#opt-rival-name' : '#opt-club-name').textContent = id === 'random' ? 'Random rival' : CLUBS[id].name;
+    $(k ? '#opt-rival-name' : '#opt-club-name').textContent = id === 'random' ? (k ? 'Random rival' : 'Random club') : CLUBS[id].name;
   }
   const side = k => {
     const id = settings.club[k], c = id === 'random' ? null : CLUBS[id];
-    return `<div class="fo-side ${k ? 'rival' : 'you'}" style="--cc:${c ? c.color : '#5b6a92'}">${crestImg(id, 96)}<p><small>${k ? 'Rival' : 'Your team'}</small><b>${c ? c.name : 'Random rival'}</b></p></div>`;
+    return `<div class="fo-side ${k ? 'rival' : 'you'}" style="--cc:${c ? c.color : '#5b6a92'}">${crestImg(id, 96)}<p><small>${k ? 'Rival' : 'Your team'}</small><b>${c ? c.name : k ? 'Random rival' : 'Random club'}</b></p></div>`;
   };
   $('#team-faceoff').innerHTML = `${side(0)}<span class="fo-vs">VS</span>${side(1)}`;
 }
@@ -3969,9 +3969,11 @@ function buildTeams() {
     sum += m.ovr; theirs.push(makeEntry(m, false));
   }
   teams = [mine, theirs];
-  const pickRival = settings.club[1] === 'random' || settings.club[1] === settings.club[0];
-  const rival = pickRival ? pickOne(Object.keys(CLUBS).filter(c => c !== settings.club[0])) : settings.club[1];
-  clubs = [CLUBS[settings.club[0]], CLUBS[rival]];
+  // a random club is drawn here, once per match; your random club never lands on the rival you picked
+  const ids = Object.keys(CLUBS), mineId = settings.club[0] === 'random' ? pickOne(ids.filter(c => c !== settings.club[1])) : settings.club[0];
+  const pickRival = settings.club[1] === 'random' || settings.club[1] === mineId;
+  const rival = pickRival ? pickOne(ids.filter(c => c !== mineId)) : settings.club[1];
+  clubs = [CLUBS[mineId], CLUBS[rival]];
 }
 
 function renderMatchup() {

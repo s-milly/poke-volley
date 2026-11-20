@@ -83,15 +83,18 @@ Once your OVR is 60 or more, one or two other clubs (stronger clubs more often) 
 - **Season awards** from regular-season stats, for players with at least 6 matches: Most valuable player (most per match of 3 x (kills + aces + blocks) + digs + half the assists), Top scorer, Top server, Top blocker, Top digger and Top setter. Simulated matches get stat lines too, so the whole league counts: each point is a kill (55%), an ace (7%), a block (10%) or an error by the other side, credited by role and rating.
 - **Rookie of the Year** goes to you if you finish your first season as a starter (you are the league's only first-year player).
 - **Trophy case:** your awards and titles.
-- **Stats tab:** your numbers this season, the league's top 3 in kills, aces, blocks, digs and assists (regular season, every club; if you are outside the top 3 your own place shows), the trophy case, and a line per season (matches played, kills, aces, blocks, digs, assists, your club's record and finish) with career totals. The season lines count playoffs; the awards and leaders do not.
+- **Stats and Career tabs:** Stats shows your numbers this season and the league's top 3 in kills, aces, blocks, digs and assists (regular season, every club; if you are outside the top 3 your own place shows). Career shows the trophy case (one entry per kind of trophy, with the seasons won) and a line per season (matches played, kills, aces, blocks, digs, assists, your club's record and finish) with career totals. The season lines count playoffs; the awards and leaders do not.
 - **Retire.** You can retire at any time from the hub (with a confirmation). Retiring frees the slot and adds the career to the Hall of Fame on the Road to Glory screen: name, position and build, seasons, peak OVR, clubs, career totals, titles and awards (the 50 most recent).
 ## The career hub
 
-The hub keeps your player card beside four tabs, under a strip with the season at a glance (week, record, division place, status, XP to spend):
-- **Home:** this week's tasks. 1. Train: one optional drill before the match. 2. Play the match (or join the draft, follow the playoffs, or start the next season). The list starts again each week.
-- **Upgrades:** spend XP on your stats. The tab shows your XP when you can afford a point.
-- **Standings:** both division tables and your schedule.
-- **Stats:** see Rewards and records. Career facts, difficulty and Retire are at the bottom.
+The hub fills the window and no tab scrolls: whatever does not fit goes to its own tab. Your player card sits beside the tabs, under a strip with the season at a glance (week, record, division place, status, XP to spend). On phones the card is hidden, the strip becomes one line (and goes on short screens, since every fact in it is also on a tab), and the tabs wrap into rows.
+- **Home:** this week's tasks. 1. Train: one optional drill before the match. 2. Play the match (or join the draft, follow the playoffs, or start the next season). The list starts again each week. In the off-season it shows the champion and any offers from other clubs.
+- **Upgrades:** spend XP on your stats, each shown with a bar and its cap. The tab shows your XP when you can afford a point.
+- **Standings:** both division tables.
+- **Schedule:** your matches and results.
+- **Stats:** your season line and the league leaders.
+- **Awards:** the season awards. Only in the off-season.
+- **Career:** draft details, XP earned, difficulty, Retire, the trophy case and the season table. The table shows as many seasons as fit, with Older and Newer buttons when there are more; the totals count every season.
 
 ## Saves
 
