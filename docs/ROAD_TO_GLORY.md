@@ -68,9 +68,17 @@ Once your rating is high enough, other clubs make offers between seasons. You ca
 
 ## Playing time
 
-- **Starting out.** You start on the bench, including in season 1. With good play you can win a starting spot within a few matches.
-- **Coming in.** The coach puts you in during a match, for example when a starter has a bad set or the team is behind.
-- **Bench matches.** By default you watch the match until you are put in, then you play. A "Sim to when I play" button runs the match at high speed until you come in.
+- **Starting out.** You start on the bench, including in season 1, behind the weaker of your club's starters at your position.
+- **Earning the spot.** You become a starter when either:
+  - the coach's trust reaches 100. Each match you come on for gives 10, plus 2.5 per point of your box score share (up to 45), plus 10 for a win. That is about 20 to 30 a match, so four or five matches;
+  - or your OVR reaches the starter's. A new rookie is 11 to 18 OVR behind.
+  Once you start, you keep the spot.
+- **Coming in.** You wait on the sideline. At a dead ball the coach sends you on in place of that starter, with the usual walk to the sub zone, when:
+  - your team lost the set before (you come in at the start of the next one),
+  - your team is 5 points behind after at least 6 points,
+  - or either team reaches 10 points (17 in a set to 25) in set 2 or later.
+  Once you are on, you stay on.
+- **Bench matches.** By default you watch the match until you come on. "Sim to when I play" runs it 12 times faster, without sound, until the coach calls you. A match where you never come on gives 5 XP.
 
 ## Rewards and records
 

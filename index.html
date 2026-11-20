@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>VolleyDex: Gen 1 Draft Volleyball</title>
 <meta name="description" content="Pick a Gen 1 Pokémon, draft teammates by their stats, and play arcade volleyball in the browser.">
-<link rel="stylesheet" href="style.css?v=54">
+<link rel="stylesheet" href="style.css?v=55">
 </head>
 <body class="on-title">
 <main id="menu">
@@ -369,6 +369,10 @@
   <div class="canvas-wrap">
     <canvas id="court" width="1280" height="720" aria-label="Volleyball match"></canvas>
     <button type="button" class="icon-btn" id="btn-pause" aria-label="Pause">II</button>
+    <div id="bench-bar" class="bench-bar" hidden>
+      <p><b>On the bench</b><span>The coach will call you in during the match.</span></p>
+      <button type="button" class="ghost small" id="btn-simto" aria-pressed="false">Sim to when I play ▶▶</button>
+    </div>
     <aside id="coach" class="coach" aria-live="polite" aria-label="Tutorial coach" hidden></aside>
     <div id="tabstats" class="overlay tabstats" hidden>
       <div class="dialog">
@@ -401,9 +405,9 @@
   </div>
 </div>
 
-<script src="data.js?v=54"></script>
-<script src="sprites.js?v=54"></script>
-<script src="game.js?v=54"></script>
-<script src="career.js?v=54"></script>
+<script src="data.js?v=55"></script>
+<script src="sprites.js?v=55"></script>
+<script src="game.js?v=55"></script>
+<script src="career.js?v=55"></script>
 </body>
 </html>

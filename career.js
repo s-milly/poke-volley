@@ -286,7 +286,8 @@ function renderHub(focusStat) {
   }
   const club = c.league ? CLUBS[c.league.myClub] : null;
   $('#hub-facts').innerHTML = `<div><dt>Club</dt><dd>${club ? `<span class="rtg-club">${crestImg(c.league.myClub, 20)}${club.name}</span>` : 'Not drafted yet'}</dd></div><div><dt>Position</dt><dd>${ROLES[c.pos].name}</dd></div>
-    <div><dt>Build</dt><dd>${buildName(c)}</dd></div><div><dt>XP earned</dt><dd>${c.xpEarned}</dd></div>`;
+    <div><dt>Build</dt><dd>${buildName(c)}</dd></div><div><dt>XP earned</dt><dd>${c.xpEarned}</dd></div>
+    ${c.league ? `<div class="rtg-status"><dt>Status</dt><dd>${c.starter ? 'Starter' : `On the bench · coach's trust ${c.trust || 0}/${TRUST_START}`}</dd></div>` : ''}`;
   for (const b of $('#hub-diff').querySelectorAll('button')) b.setAttribute('aria-pressed', String(b.dataset.v === c.diff));
   renderNext(c); renderLeague(c);
   if (focusStat) {
@@ -298,9 +299,11 @@ function upgrade(k) {
   const c = careers[slot]; if (!c) return;
   const cost = upCost(c.r[k]);
   if (c.r[k] >= c.cap[k] || c.xp < cost) return;
-  c.xp -= cost; c.r[k]++; saveCareers();
+  c.xp -= cost; c.r[k]++;
+  const up = promote(c); saveCareers();
   Sfx.tone(660, 0.05, 'square', 0.03);
   renderHub(k);
+  if (up) toast2(`Your rating caught up with ${rivalStarter(c).mon.name}'s (${rivalStarter(c).ovr}). You start from now on!`);
 }
 $('#hub-diff').addEventListener('click', e => {
   const b = e.target.closest('button'), c = careers[slot]; if (!b || !c) return;
@@ -361,9 +364,10 @@ function makeRosters(yourMon) {
 const youEntry = c => ({ mon: BY_ID.get(c.mon), captain: false, r: { ...c.r }, ovr: careerOvr(c), career: true });
 const clubEntries = (L, id) => L.clubs[id].map(m => makeEntry(BY_ID.get(m), false));
 function matchEntries(c, id) { return id === c.league.myClub ? [youEntry(c), ...clubEntries(c.league, id)] : clubEntries(c.league, id); }
-function clubOvr(c, id) {
-  const es = matchEntries(c, id), you = id === c.league.myClub ? es[0] : null;
-  return teamOvr(lineup(es, you, c.pos, 6).map(x => x.entry));
+function clubOvr(c, id) { // the seven who start: on your club that includes you only once you are a starter
+  if (id !== c.league.myClub || !c.starter) return teamOvr(lineup(clubEntries(c.league, id), null, c.pos, 6).map(x => x.entry));
+  const es = matchEntries(c, id);
+  return teamOvr(lineup(es, es[0], c.pos, 6).map(x => x.entry));
 }
 
 // A simulated match from the two ratings: each rally goes to the home side with a chance that leans 0.6% per OVR point
@@ -454,6 +458,39 @@ function matchXp(c, st, won, ph) {
   return Math.round((10 + (won ? 10 : 0) + perf) * (ph === 'regular' ? 1 : 1.5));
 }
 
+// ---------- the bench ----------
+// A rookie starts on the bench and earns a starting spot one of two ways: the coach's trust reaches TRUST_START from
+// good play off the bench, or your OVR catches up with the starter ahead of you. (OVR, not position fit: a build made
+// for a position already fits it about as well as a weak club's starter does.)
+const TRUST_START = 100, BENCH_XP = 5;
+const callLate = target => Math.round(target * 2 / 3); // 10 in a set to 15, 17 in a set to 25
+// 10 for coming on, 2.5 per point of your box score share (as in matchXp, up to 45) and 10 for a win:
+// about 20 to 30 for a usual outing off the bench, so a starting spot in four or five matches.
+function trustGain(c, st, won) {
+  const perf = POS_XP[c.pos] * (2 * st.kills + 3 * st.aces + 3 * st.blocks + 1.5 * st.digs + 0.5 * st.ast);
+  return 10 + Math.min(45, Math.round(perf * 2.5)) + (won ? 10 : 0);
+}
+// The starter ahead of you: the weaker (by position fit) of those your club puts at your position without you.
+function rivalStarter(c) {
+  const fit = ROLES[c.pos].fit, mine = lineup(clubEntries(c.league, c.league.myClub), null, c.pos, 6).filter(x => x.role === c.pos);
+  return mine.reduce((a, b) => (fit(b.entry.r) < fit(a.entry.r) ? b : a)).entry;
+}
+function promote(c) { // true if you have just become a starter
+  if (c.starter || !c.league) return false;
+  if ((c.trust || 0) >= TRUST_START || careerOvr(c) >= rivalStarter(c).ovr) { c.starter = true; c.trust = TRUST_START; return true; }
+  return false;
+}
+// Called by game.js at each dead ball while you sit: should the coach send you on now?
+function careerCallIn() {
+  if (!careerMatch || !G) return false;
+  const [us, them] = G.score, last = G.setLog[G.setLog.length - 1];
+  if (us + them === 0 && last && last[0] < last[1]) return coachSays('THE LAST SET GOT AWAY. YOU ARE IN!');
+  if (us + them >= 6 && them - us >= 5) return coachSays('WE NEED A SPARK. YOU ARE IN!');
+  if (G.setNo >= 2 && Math.max(us, them) >= callLate(settings.target)) return coachSays('TIME FOR YOUR MINUTES. YOU ARE IN!');
+  return false;
+}
+function coachSays(text) { toast(`COACH: ${text}`, 2.5); return true; }
+
 // ---------- playing your match ----------
 const MU_BACK = $('#scr-matchup [data-back]'), MU_BACK_TEXT = MU_BACK.textContent;
 function setupCareerMatch() {
@@ -464,7 +501,9 @@ function setupCareerMatch() {
   settings.role[6] = c.pos; settings.venue[6] = VENUE_FOR[ph];
   teams = [matchEntries(c, L.myClub), matchEntries(c, opp)];
   clubs = [CLUBS[L.myClub], CLUBS[opp]];
+  careerMatch.bench = c.starter ? null : teams[0][0]; // the lineup leaves you out and you wait on the sideline
   renderMatchup();
+  if (careerMatch.bench) $('#mu-you').appendChild(el('p', 'rot-note rtg-bench-note', `<b>${escHtml(careerName(c))} starts on the bench.</b> The coach sends you on for ${rivalStarter(c).mon.name} during the match: after a lost set, when the team falls 5 behind, or once a team reaches ${callLate(FMT[ph].target)} points in set 2 or later.`));
   $('#mu-meta').textContent = `${ROUND_NAMES[ph]}${ph === 'regular' ? `, week ${L.week + 1}` : ''} · ${careerMatch.home ? 'Home' : 'Away'} · ${VENUES[VENUE_FOR[ph]].name} · You play ${ROLES[c.pos].name} · ${cap(c.diff)} · ${matchFormat()}`;
   MU_BACK.textContent = '← Career'; MU_BACK.dataset.back = 'scr-rtg-hub';
   show('scr-matchup');
@@ -486,14 +525,20 @@ MU_BACK.addEventListener('click', () => { if (careerMatch) careerBack(); });
 function careerMatchOver() {
   const m = careerMatch, c = careers[m.slot]; if (!c || m.done) return;
   m.done = true;
-  const me = G.all[0].find(p => p.human), won = G.winner === 0;
+  const me = G.rookie || G.all[0].find(p => p.human), won = G.winner === 0, played = !G.rookie || G.rookie.on;
   const sets = G.setLog.map(([x, y]) => (m.home ? [x, y] : [y, x])); // home side first
-  const xp = matchXp(c, me.stats, won, m.ph);
+  const xp = played ? matchXp(c, me.stats, won, m.ph) : BENCH_XP;
   c.xp += xp; c.xpEarned += xp;
+  let trust = '';
+  if (!c.starter) {
+    const gain = played ? trustGain(c, me.stats, won) : 0;
+    c.trust = Math.min(TRUST_START, (c.trust || 0) + gain);
+    trust = promote(c) ? ` · <b class="rtg-up-msg">You earned a starting spot!</b>` : ` · Coach's trust +${gain} (${c.trust}/${TRUST_START})`;
+  }
   finishRound(c, sets);
   saveCareers();
   $('#res-xp').hidden = false;
-  $('#res-xp').innerHTML = `<b>+${xp} XP</b> for ${careerName(c)}${m.ph === 'regular' ? '' : ' (playoff bonus included)'}`;
+  $('#res-xp').innerHTML = `<b>+${xp} XP</b> for ${escHtml(careerName(c))}${played ? '' : ' for being there (you did not come on)'}${m.ph === 'regular' ? '' : ' (playoff bonus included)'}${trust}`;
 }
 
 // ---------- the hub's league panels ----------
@@ -517,7 +562,8 @@ function renderNext(c) {
   if (g) {
     const home = g.h === L.myClub, opp = home ? g.a : g.h;
     info.innerHTML = `<p class="rtg-round">${label}</p><div class="rtg-vs">${crestImg(L.myClub, 40)}<b>${CLUBS[L.myClub].abbr}</b><span>${home ? 'vs' : 'at'}</span><b>${CLUBS[opp].abbr}</b>${crestImg(opp, 40)}</div>
-      <p class="settings-note">${home ? 'Home' : 'Away'} against ${CLUBS[opp].name} (team rating ${clubOvr(c, opp)}). ${ph === 'regular' ? 'Best of 3 sets to 15.' : 'Best of 3 sets to 25.'}</p>`;
+      <p class="settings-note">${home ? 'Home' : 'Away'} against ${CLUBS[opp].name} (team rating ${clubOvr(c, opp)}). ${ph === 'regular' ? 'Best of 3 sets to 15.' : 'Best of 3 sets to 25.'}</p>
+      ${c.starter ? '' : `<p class="settings-note">You start on the bench behind ${rivalStarter(c).mon.name} (OVR ${rivalStarter(c).ovr}), and the coach will call you in during the match. To start, earn ${TRUST_START} trust or raise your OVR to ${rivalStarter(c).ovr}.</p>`}`;
     btn.innerHTML = '<span aria-hidden="true">▶</span> Play match'; btn.onclick = setupCareerMatch;
   } else { // your club is out: the rest of the playoffs are simulated
     info.innerHTML = `<p class="rtg-round">${label}</p><p class="settings-note">${CLUBS[L.myClub].name} did not make it this far. Watch the other results come in.</p>`;

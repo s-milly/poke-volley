@@ -107,6 +107,7 @@ const tutBlockDrill = () => { const st = tutStep(); return !!st && (st.ev === 'b
 const QS = new URLSearchParams(location.search);
 const AUTO = QS.has('auto');                 // test mode: the computer also plays your Pokémon
 const SPEEDUP = Number(QS.get('fast')) || 1; // test mode: run the clock faster
+const SIM_FAST = 12;                         // Road to Glory: "Sim to when I play" runs the match this many times faster
 
 // ===================== helpers =====================
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
@@ -156,7 +157,7 @@ const Sfx = {
   ctx: null, muted: false,
   init() { if (!this.ctx) { try { this.ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { this.muted = true; } } },
   tone(freq, dur, type = 'triangle', vol = 0.06, slide = 0, delay = 0) {
-    if (this.muted || !this.ctx || (G && G.demo)) return; // the title screen's background match is silent
+    if (this.muted || !this.ctx || (G && (G.demo || G.simFast))) return; // the title screen's background match is silent, and so is a fast-forward
     const c = this.ctx, t0 = c.currentTime + delay, o = c.createOscillator(), g = c.createGain();
     o.type = type; o.frequency.setValueAtTime(freq, t0);
     if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(40, freq + slide), t0 + dur);
@@ -286,6 +287,15 @@ function lineup(entries, you, yourRole, mode) {
   }
   if (mode === 2 && you) out.sort((a, b) => (b.entry === you) - (a.entry === you)); // you serve first
   return out;
+}
+
+// The lineup a side takes the court with. In Road to Glory you can start on the bench (careerMatch.bench): then your
+// club's own seven take the court and you wait on the sideline until the coach calls you in.
+const benchEntry = () => (careerMatch && careerMatch.bench) || null;
+function sideLineup(s, demo = false) {
+  const n = settings.mode, bench = s === 0 && !demo ? benchEntry() : null;
+  const you = s === 0 && !demo && !bench ? teams[0][0] : null;
+  return lineup(bench ? teams[0].filter(e => e !== bench) : teams[s], you, settings.role[n], n);
 }
 
 const zoneOf = p => (p.role === 'L' ? G.rot[p.side].indexOf(G.libSub[p.side]) + 1 : G.rot[p.side].indexOf(p) + 1);
@@ -502,7 +512,7 @@ function runSubs(dt) {
     } else if (job.stage === 'pause') {
       if (job.t > 0.7) { // swap
         job.stage = 'leave'; job.t = 0;
-        finishSub(job);
+        if (job.rookie) rookieSwap(job); else finishSub(job);
       }
     } else if (job.stage === 'leave') { // off to the bench, on to the court
       const [bx, bz] = benchSpot(s);
@@ -514,6 +524,39 @@ function runSubs(dt) {
   }
   G.subs = G.subs.filter(j => j.stage !== 'done');
 }
+
+// Road to Glory: the coach sends you on for a starter at your position, at a dead ball, with the usual walk to the
+// sub zone. Only a starter who is on court can come off, so a middle who is sitting for the libero waits a rally.
+function rookieCall() {
+  const r = G.rookie;
+  if (!r || r.on || G.subs.length || G.phase !== 'point') return false;
+  const fit = ROLES[r.role].fit, cands = G.sides[0].filter(p => p.role === r.role);
+  if (!cands.length || !careerCallIn()) return false;
+  const out = cands.reduce((a, b) => (fit(b.r) < fit(a.r) ? b : a)); // the weaker of two outsides or middles
+  r.on = true; G.simFast = false; updateBenchBar();
+  G.subs.push({ s: 0, out, inn: r, rookie: true, stage: 'walk', t: 0 });
+  out.subbing = r.subbing = true;
+  return true;
+}
+function rookieSwap(job) {
+  const { out, inn } = job;
+  inn.role = out.role; inn.homeX = out.homeX; inn.homeZ = out.homeZ;
+  if (out.role === 'L') G.libero[0] = inn;
+  else { G.rot[0][G.rot[0].indexOf(out)] = inn; if (G.libOff[0] === out) G.libOff[0] = inn; }
+  sideFromRot(0); benchFor(0);
+  G.players = [...G.sides[0], ...G.sides[1]];
+  G.sideline[0] = G.sideline[0].filter(p => p !== inn).concat(out);
+  G.me = inn; inn.human = true; inn.cameOn = { set: G.setNo, score: G.score.slice() };
+  handControl();
+}
+// The bar over the match while you sit: who you are waiting for, and a button to fast-forward until you come on.
+function updateBenchBar() {
+  const bar = $('#bench-bar'), wait = !!(G && G.rookie && !G.rookie.on);
+  bar.hidden = !wait;
+  if (wait) $('#btn-simto').textContent = G.simFast ? 'Back to normal speed' : 'Sim to when I play ▶▶';
+  $('#btn-simto').setAttribute('aria-pressed', String(!!(G && G.simFast)));
+}
+$('#btn-simto').addEventListener('click', e => { if (!G || !G.rookie || G.rookie.on) return; G.simFast = !G.simFast; updateBenchBar(); e.currentTarget.blur(); });
 
 function spots2(s, ph) {
   const m = toward(s), spots = new Map(), blockers = [];
@@ -544,8 +587,8 @@ function newMatch(demo = false) { // demo: the title screen's background match, 
   const size = n === 6 ? 0.9 : 1;
   const sides = [[], []], rot = [[], []], all = [[], []], libero = [null, null];
   for (let s = 0; s < 2; s++) {
-    const you = s === 0 && !demo ? teams[0][0] : null;
-    for (const { entry, role } of lineup(teams[s], you, settings.role[n], n)) {
+    const you = s === 0 && !demo && !benchEntry() ? teams[0][0] : null;
+    for (const { entry, role } of sideLineup(s, demo)) {
       const p = new Player(entry, s, entry === you, size);
       p.role = role;
       all[s].push(p);
@@ -561,8 +604,16 @@ function newMatch(demo = false) { // demo: the title screen's background match, 
     react: [0, 0], aiErr: [[0, 0], [0, 0]], leave: [false, false],
     particles: [], rings: [], texts: [], shake: 0, netWobble: 0, paused: false, shown: false, rally: 0, longestRally: 0,
     cam: { x: 0, y: CAM.y, z: -HL - CAM.back, yaw: 0, pitch: CAM.pitch }, demo,
+    sideline: [[], []], rookie: null, simFast: false, // players standing by the bench: you before you come on, a starter after
   };
+  const bench = demo ? null : benchEntry();
+  if (bench) {
+    const r = new Player(bench, 0, false, size); r.role = settings.role[n]; r.on = false;
+    const [bx, bz] = benchSpot(0); r.x = bx; r.z = bz - 1.2; r.face = 1;
+    G.rookie = r; G.sideline[0].push(r); all[0].push(r);
+  }
   startServe();
+  updateBenchBar();
 }
 
 function nextSet() { // fresh score; the team that received first last set serves first this time
@@ -577,7 +628,7 @@ function startServe() {
   const s = G.serving;
   if (!G.started) { for (let k = 0; k < 2; k++) applyLibero(k); G.started = true; }
   else for (const job of G.subs) { // never start a serve mid-swap
-    if (job.stage !== 'leave') finishSub(job);
+    if (job.stage !== 'leave') { if (job.rookie) rookieSwap(job); else finishSub(job); }
     job.out.subbing = job.inn.subbing = false;
     const [bx, bz] = benchSpot(job.s); job.out.x = bx; job.out.z = bz;
   }
@@ -596,7 +647,7 @@ function startServe() {
   const sv = G.server;
   sv.x = clamp(0.5 * HW, -HW + 0.6, HW - 0.6) * toward(s); sv.z = -toward(s) * (HL + 0.8 + SERVE_RUN); // serve from the right, back from the end line to leave room for the run-up
   input.hitQ = input.setQ = input.diveQ = false; G.toss = false; G.hold = null; G.setPick = null; G.meterShow = null; G.tid = (G.tid || 0) + 1;
-  const you = G.sides[0].find(p => p.human) || G.sides[0][0];
+  const you = G.sides[0].find(p => p.human) || (G.rookie ? { x: 0, z: -HL * 0.45 } : G.sides[0][0]);
   Object.assign(G.cam, camWant(you, false));
 }
 
@@ -1544,7 +1595,7 @@ function update(dt) {
       stepPlayer(p, dt);
     }
     if (G.timer <= 0) {
-      if (G.phase === 'point') { if (!G.subs.length) { if (G.setDone) nextSet(); startServe(); } }
+      if (G.phase === 'point') { if (!G.subs.length) { if (G.setDone) nextSet(); if (!rookieCall()) startServe(); } }
       else if (G.demo) demoMatch(); // the background match ends: a new one starts with new teams
       else if (!G.shown) { G.shown = true; showResult(); }
     }
@@ -1560,7 +1611,7 @@ function update(dt) {
   if (TUT) tutTick(dt, you);
 
   // the camera drifts to keep you in view (or holds still in fixed mode), and dollies in or out with the zoom
-  const cw = G.demo ? demoCam() : camWant(you || G.sides[0][0], true);
+  const cw = G.demo ? demoCam() : camWant(you || (G.rookie ? { x: 0, z: -HL * 0.45 } : G.sides[0][0]), true); // on the bench: watch your half
   G.cam.x += (cw.x - G.cam.x) * Math.min(1, dt * 2.5);
   G.cam.z += (cw.z - G.cam.z) * Math.min(1, dt * 3);
   G.cam.y += (cw.y - G.cam.y) * Math.min(1, dt * 4);
@@ -1613,7 +1664,7 @@ function wheelZoom(dy) {
   settings.zoom = Math.round(clamp(settings.zoom * Math.exp(dy * 0.0012), 0.84, 1.14) * 100) / 100; saveSettings();
   toast(`ZOOM ${Math.round(100 / settings.zoom)}%`); tutEvent('cam');
 }
-function toast(text) { if (G) G.toast = { text, t: G.time }; }
+function toast(text, dur = 1.2) { if (G) G.toast = { text, t: G.time, dur }; }
 
 // 1 to 4: quick chat over your Pokémon. "Set me!" tells your setter to look for you; "Mine!" sends your teammates off the ball.
 const CHATS = ['MINE!', 'SET ME!', 'NICE!', 'MY BAD'];
@@ -2897,7 +2948,7 @@ function render() {
     }
   }
   // far side, the net, then the near side
-  const items = [...G.players, ...G.bench[0], ...G.bench[1]].map(p => ({ z: p.z, d: () => drawPlayer(p) }));
+  const items = [...G.players, ...G.bench[0], ...G.bench[1], ...G.sideline[0]].map(p => ({ z: p.z, d: () => drawPlayer(p) }));
   items.push({ z: b.z, d: () => drawBall(b) });
   for (const q of G.particles) items.push({ z: q.z, d: () => drawParticle(q) });
   items.sort((a, c) => c.z - a.z);
@@ -2960,7 +3011,7 @@ function drawHud() {
   ctx.setTransform(U, 0, 0, U, 0, 0);
   const cx = UW / 2;
   drawScoreboard();
-  if (G.toast && G.time - G.toast.t < 1.2) pxText(G.toast.text, cx, UH - 84, '#ffffff', 8);
+  if (G.toast && G.time - G.toast.t < G.toast.dur) pxText(G.toast.text, cx, UH - 84, '#ffffff', 8);
   const me = G.sides[0].find(p => p.human);
   if (me && !AUTO) {
     const where = settings.mode === 6 ? `  ZONE ${zoneOf(me)} ${isFront(me) ? 'FRONT' : 'BACK'} ROW` : '';
@@ -3040,11 +3091,11 @@ function sizeCanvas() {
 let last = performance.now();
 const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
 function frame(now) {
-  const dt = Math.min(0.05, (now - last) / 1000) * SPEEDUP;
+  const fast = SPEEDUP * (G && G.simFast ? SIM_FAST : 1), dt = Math.min(0.05, (now - last) / 1000) * fast;
   last = now;
   if (G && G.demo && reduceMotion.matches) { if (!G.drawnStill) { render(); G.drawnStill = true; } } // a still frame
   else if (G && !$('#stage').hidden) {
-    if (SPEEDUP > 1) { const n = Math.ceil(SPEEDUP); for (let i = 0; i < n; i++) update(dt / n); }
+    if (fast > 1) { const n = Math.ceil(fast); for (let i = 0; i < n && G; i++) update(dt / n); }
     else update(dt);
     render();
   }
@@ -3891,8 +3942,8 @@ function renderMatchup() {
   for (let s = 0; s < 2; s++) {
     const box = $(s === 0 ? '#mu-you' : '#mu-rival');
     box.innerHTML = '';
-    box.appendChild(el('h3', '', `<span class="mu-name">${clubs ? crestImg(clubId(clubs[s]), 28) : ''}${teamName(s)}</span> <span class="mu-ovr">${teamOvr(teams[s])}</span>`));
-    const lu = lineup(teams[s], s === 0 ? teams[0][0] : null, settings.role[n], n);
+    box.appendChild(el('h3', '', `<span class="mu-name">${clubs ? crestImg(clubId(clubs[s]), 28) : ''}${teamName(s)}</span> <span class="mu-ovr">${teamOvr(sideLineup(s).map(x => x.entry))}</span>`));
+    const lu = sideLineup(s);
     const ul = el('ul', 'mu-list');
     for (const { entry: e, role } of lu) {
       const li = el('li', '');
@@ -3928,7 +3979,7 @@ $('#btn-play').addEventListener('click', startMatch);
 function startMatch() {
   Sfx.init();
   newMatch(); skyCache = null; skyTop = null; crowdCache = null; palmCache = null; show('stage'); sizeCanvas();
-  for (const p of [...G.players, ...G.libero]) if (p) spriteImg(p.mon.id, p.side === 0, p.role === 'L');
+  for (const p of [...G.players, ...G.libero, G.rookie]) if (p) spriteImg(p.mon.id, p.side === 0, p.role === 'L');
   if (document.fonts) document.fonts.load(`8px ${PX_FONT}`);
   for (const k in keys) keys[k] = false;
   updateTouchUI();
