@@ -97,6 +97,12 @@ const DIFF = {
   hard:   { err: 0.3, react: 0.09, spd: 1.03, jump: 0.05, serveFault: 0.03, leaveOut: 0.95, teamOffset: 4,  block: 0.38, perfect: 0.2 },
 };
 const MATE = { err: 0.4, react: 0.11, spd: 1, jump: 0.07, leaveOut: 0.85, block: 0.32, perfect: 0.12 };
+// In the tutorial the other team is a sparring partner, not a rival: it serves in, passes and sets cleanly and
+// attacks at a pace you can read, so every drill gets the ball it needs.
+const TUTOR = { err: 0.15, react: 0.12, spd: 1.05, jump: 0.03, serveFault: 0, leaveOut: 1, teamOffset: 0, block: 0.08, perfect: 0 };
+const parsOf = s => (s === 0 ? MATE : TUT ? TUTOR : DIFF[settings.diff]);
+const tutYou = () => (TUT && G ? G.sides[0].find(q => q.human) || null : null);
+const tutBlockDrill = () => { const st = tutStep(); return !!st && (st.ev === 'block' || st.ev === 'blockup'); };
 
 const QS = new URLSearchParams(location.search);
 const AUTO = QS.has('auto');                 // test mode: the computer also plays your Pokémon
@@ -209,7 +215,7 @@ addEventListener('keyup', e => { if (e.code === 'Tab') showTabStats(false); cons
 addEventListener('blur', () => { for (const k in keys) keys[k] = false; input.jumpT0 = null; showTabStats(false); });
 
 // ===================== match state =====================
-const settings = { mode: 2, diff: 'normal', target: 15, sets: 1, role: { 2: 'B', 6: 'OH' }, venue: { 2: 'beach', 6: 'arena' }, time: 'day', club: ['cerulean', 'random'], camMode: 'follow', zoom: 1 };
+const settings = { mode: 2, diff: 'normal', target: 15, sets: 1, role: { 2: 'B', 6: 'OH' }, venue: { 2: 'beach', 6: 'arena' }, time: 'day', club: ['cerulean', 'random'], camMode: 'follow', zoom: 1, guide: 'on' };
 let clubs = null;   // [club, club] for this match, the rival resolved from 'random'
 let draft = null;   // { starter, picks: [mon], offers: [mon], rerolls }
 let capPick = null; // { role, offers: [mon], rerolls }: your own Pokémon, offered for your position
@@ -300,6 +306,19 @@ function oppHitter(s) {
 }
 const setterSpot = () => (settings.mode === 6 ? [HW * 0.18, -0.9] : [HW * 0.1, -1.2]); // own coordinates
 
+// The position guide marks your spot whenever the play does not need you on the ball: before the serve
+// (your legal spot), and in the rally while a teammate or the other team has it (where to go on defense,
+// coverage or your approach). It hides when the ball is coming to you or you are in the air.
+function guideOn(you) {
+  if (G.phase === 'serve') return you !== G.server;
+  if (G.phase !== 'rally' || !you.onGround || you.dive > 0) return false;
+  if (G.intended[0] === you) return false; // your teammate is putting the ball to you
+  const b = G.ball, tl = timeToY(b, BR);
+  if (tl == null || ownServe(you)) return true;
+  const lx = b.x + b.vx * tl, lz = b.z + b.vz * tl;
+  if (lz < 0 && G.lastSide !== 0 && Math.hypot(you.x - lx, you.z - lz) < 3) return false; // their ball is coming down near you: play it
+  return true;
+}
 // Each frame: where every player should stand, by role, rotation and phase.
 // Spots are worked out in "own" coordinates (your right is +x, the net is z = 0, your court is z < 0)
 // and turned into world coordinates by multiplying by toward(s).
@@ -321,7 +340,11 @@ function spots6(s, ph) {
   const wing = p => (p.role === 'OH' ? -1 : p.role === 'MB' ? 0 : 1); // OH left, MB middle, S and OPP right
   const backSpot = p => (p.role === 'OH' ? [0, -0.86 * HL] : p.role === 'MB' || p.role === 'L' ? [-0.68 * HW, -0.72 * HL] : [0.68 * HW, -0.72 * HL]);
   if (ph === 'serve') {
-    rot.forEach((p, i) => spots.set(p, [ZONE_X[i] * HW, i >= 1 && i <= 3 ? fz : bz]));
+    // Line up as close as the overlap rule allows to the spot you switch to once the ball is served:
+    // in front, outsides to 4, middles to 3, setter and opposite to 2; in back, setter and opposite to 1,
+    // the libero (or a middle) to 5, outsides to 6. The server is free behind the end line.
+    rot.forEach((p, i) => spots.set(p, i === 0 ? [ZONE_X[0] * HW, bz] : isFront(p) ? [wing(p) * 0.6 * HW, fz] : backSpot(p).slice()));
+    legalize(spots, rot, true);
   } else if (ph === 'receive') {
     // three passers in a W; the setter hides near the net, ready to run to the target
     const passers = rot.filter(isPasser).sort((a, b) => ZONE_X[zoneOf(a) - 1] - ZONE_X[zoneOf(b) - 1] || zoneOf(b) - zoneOf(a));
@@ -330,7 +353,7 @@ function spots6(s, ph) {
     for (const p of rot) {
       if (spots.has(p)) continue;
       if (p.role === 'S') spots.set(p, isFront(p) ? [0.35 * HW, -1.3] : [0.5 * HW, -0.28 * HL]);
-      else if (isFront(p)) spots.set(p, [ZONE_X[zoneOf(p) - 1] * HW, -1.6]);
+      else if (isFront(p)) spots.set(p, [wing(p) * 0.6 * HW, -1.6]); // stacked toward the spot they switch to
       else spots.set(p, [ZONE_X[zoneOf(p) - 1] * HW, -0.86 * HL]);
     }
     legalize(spots, rot, false);
@@ -375,18 +398,20 @@ function spots6(s, ph) {
 const OVERLAP_PAIRS = [[3, 4], [2, 5], [1, 0]];             // [front, back] as zone indexes (zone - 1)
 const OVERLAP_ROWS = [[3, 2, 1], [4, 5, 0]];                 // left to right
 // Nudge a formation (own coordinates) so it obeys the rule with some room to spare.
+// Players stack tight, as real teams do (about a body apart), so they can switch fast once the ball is served.
 function legalize(spots, court, serving) {
   const at = i => spots.get(court[i]);
-  for (let pass = 0; pass < 3; pass++) {
+  const gap = (i, j) => Math.max(0.85, court[i].rr + court[j].rr + 0.1); // bodies just clear of each other
+  for (let pass = 0; pass < 10; pass++) {
     for (const [f, k] of OVERLAP_PAIRS) {
       if (serving && k === 0) continue;
-      const F = at(f), B = at(k);
-      if (F[1] < B[1] + 0.8) { const mid = (F[1] + B[1]) / 2; F[1] = mid + 0.45; B[1] = mid - 0.45; }
+      const F = at(f), B = at(k), g = gap(f, k);
+      if (F[1] < B[1] + g - 0.05) { const mid = (F[1] + B[1]) / 2; F[1] = mid + g / 2; B[1] = mid - g / 2; }
     }
     for (const row of OVERLAP_ROWS) for (let i = 0; i < 2; i++) {
       if (serving && (row[i] === 0 || row[i + 1] === 0)) continue;
-      const L = at(row[i]), R = at(row[i + 1]);
-      if (L[0] > R[0] - 0.8) { const mid = (L[0] + R[0]) / 2; L[0] = mid - 0.45; R[0] = mid + 0.45; }
+      const L = at(row[i]), R = at(row[i + 1]), g = gap(row[i], row[i + 1]);
+      if (L[0] > R[0] - (g - 0.05)) { const mid = (L[0] + R[0]) / 2; L[0] = mid - g / 2; R[0] = mid + g / 2; }
     }
   }
 }
@@ -752,9 +777,13 @@ function doServe(p, q = null) {
     }
     const e = q == null ? 1 : q >= 0 ? 1 - q * 0.8 : 1 - q * 2.5; // your timing tightens or sprays the aim
     tx += rand(-0.6, 0.6) * (e - 1); depth += rand(-0.5, 0.5) * e;
+  } else if (TUT) { // the tutorial's serves are soft and in: at you when the drill is your pass, else deep and central
+    const you = tutYou(), st = tutStep();
+    if (s === 1 && you && st && st.mine) { tx = clamp(you.x + rand(-0.4, 0.4), -HW * 0.8, HW * 0.8); depth = clamp(you.z * t, 2.5, HL - 1); }
+    else { tx = rand(-HW * 0.35, HW * 0.35); depth = rand(HL * 0.45, HL * 0.7); }
   } else { tx = rand(-HW * 0.8, HW * 0.8); depth = rand(2.2, HL - 0.8); }
-  if (!human && s === 1 && Math.random() < DIFF[settings.diff].serveFault) depth = HL + rand(0.6, 2);
-  const apex = NET_H + 2.6 - p.r.pwr / 99 * 1.3 + rand(0, 0.6) - (q == null ? 0 : q * 0.9); // a perfect hit is flatter and faster
+  if (!human && s === 1 && Math.random() < parsOf(s).serveFault) depth = HL + rand(0.6, 2);
+  const apex = NET_H + 2.6 - p.r.pwr / 99 * 1.3 + rand(0, 0.6) - (q == null ? 0 : q * 0.9) + (TUT && !human ? 0.7 : 0); // a perfect hit is flatter and faster
   lob(tx, t * depth, apex);
   G.lastToucher = p; G.lastSide = s; G.touches = [0, 0]; G.tid++; G.toss = false;
   G.lastAttack = { p, type: 'serve' }; G.serveLive = true;
@@ -776,7 +805,7 @@ function canContact(p, b) {
 
 function rerollAI() {
   for (let s = 0; s < 2; s++) {
-    const pars = s === 0 ? MATE : DIFF[settings.diff];
+    const pars = parsOf(s);
     G.react[s] = pars.react;
     G.aiErr[s] = [rand(-1, 1) * pars.err, rand(-1, 1) * pars.err];
     G.leave[s] = Math.random() < pars.leaveOut;
@@ -843,19 +872,23 @@ function contact(p) {
   }
 
   // a libero may not attack a ball that is above the net
-  if ((action === 'spike' || action === 'tip') && p.role === 'L' && b.y > NET_H) {
+  // and back-row players may only attack a ball above the net from behind the attack line.
+  // Either one is a fault: the rally stops and the other team wins the point. (The computer never commits them; it plays the ball over instead.)
+  const libFault = (action === 'spike' || action === 'tip') && p.role === 'L' && b.y > NET_H;
+  const rowFault = action === 'spike' && settings.mode === 6 && !isFront(p) && -p.z * t < attackLine();
+  if (libFault || rowFault) {
+    if (!aiControlled(p)) {
+      awardPoint(1 - s, libFault ? 'LIBERO ATTACK' : 'BACK ROW ATTACK',
+        libFault ? 'A libero may not attack a ball above the net' : `${p.mon.name} is in the back row: jump from behind the attack line`, null, null);
+      b.vx *= 0.3; b.vz *= 0.3; b.vy = Math.min(b.vy, 0); // the whistle goes as the ball is played
+      return;
+    }
     action = 'over';
-    if (!aiControlled(p)) floatText('LIBERO: NO ATTACKS ABOVE THE NET', p.x, p.cy + p.rr + 0.6, p.z, '#ffd6d6', 1.4);
-  }
-  // back-row players may only spike from behind the attack line
-  if (action === 'spike' && settings.mode === 6 && !isFront(p) && -p.z * t < attackLine()) {
-    action = 'over';
-    if (!aiControlled(p)) floatText('BACK ROW: HIT FROM BEHIND THE LINE', p.x, p.cy + p.rr + 0.6, p.z, '#ffd6d6', 1.4);
   }
   if (action === 'spike') {
     // a perfectly timed spike lets loose the hitter's type move. The computer times one perfectly now and then.
     let sq = q;
-    if (!human && Math.random() < (s === 0 ? MATE : DIFF[settings.diff]).perfect) sq = 1;
+    if (!human && Math.random() < parsOf(s).perfect) sq = 1;
     if (!spike(p, sq)) action = 'over';
   }
   if (action === 'pass' || action === 'set') pass(p, incoming, fromOpp, q, dove, action === 'set' ? tm : null);
@@ -915,6 +948,8 @@ function choosePlay(s, setter, tm = null) {
     const wt = o => o.w * (o.q.r.pwr + o.q.r.jmp) * (o.q.human && !AUTO ? (callMe ? 12 : 3) : 1);
     let x = Math.random() * opts.reduce((a, o) => a + wt(o), 0);
     pick = opts.find(o => (x -= wt(o)) <= 0) || opts[0];
+    const you = s === 1 && tutBlockDrill() && tutYou();
+    if (you && opts.length) pick = opts.reduce((a, o) => (Math.abs(o.ox * m - you.x) < Math.abs(a.ox * m - you.x) ? o : a)); // tutorial: their setter sets the hitter you are facing
   }
   pick = { ...pick };
   if (tm && tm.quick && pick.type !== 'quick') { pick.apex = NET_H + 1.25; pick.call = 'QUICK'; if (pick.type !== 'pipe') pick.oz = Math.max(pick.oz, -0.9); } // the pipe stays behind the attack line // a charged E: low and fast
@@ -939,7 +974,7 @@ function pass(p, incoming, fromOpp, q = null, dove = false, setTm = null) {
   const heat = clamp(incoming / 16, 0, 1.6);
   // your timing: no click is the old auto pass (x1), a perfect click nearly takes the error away
   const tq = q == null ? 1 : clamp(1 - q * 0.85, 0.15, 1.4);
-  const err = (100 - skill) * 0.022 * (0.4 + (G.touches[s] === 1 ? heat : 0.2)) * (tq + (dove ? 0.3 : 0));
+  const err = (100 - skill) * 0.022 * (0.4 + (G.touches[s] === 1 ? heat : 0.2)) * (tq + (dove ? 0.3 : 0)) * (TUT && aiControlled(p) ? 0.35 : 1); // tutorial: the computer passes and sets cleanly
   tx += rand(-1, 1) * err; tz += rand(-1, 1) * err * 0.7; apexY += rand(-0.3, 0.3) * err;
   tz = -t * Math.max(0.5, -tz * t);
 
@@ -1000,7 +1035,7 @@ function spike(p, q = null) {
     tx += rand(-1, 1) * spray; tz += t * rand(-1, 1) * spray * 0.8;
     if (q != null && q < 0 && Math.random() < (q <= -0.5 ? 0.55 : 0.45) && spikeError(p, tx)) return true; // a mistimed swing can miss
   } else {
-    const e = (s === 0 ? MATE : DIFF[settings.diff]).err;
+    const e = parsOf(s).err;
     tx += rand(-1, 1) * e; tz += rand(-1, 1) * e;
   }
   // Each spike is timed rather than given a raw speed: harder hitters land it sooner,
@@ -1012,7 +1047,7 @@ function spike(p, q = null) {
   const flight = special ? 0.32 * hitter
     : human ? (settings.mode === 6 ? (q == null || q < 0.65 ? (q != null && q < 0 ? 1.0 : 0.75) : 0.56) // 6 v 6 has more defenders, but they cover less each
                                    : (q == null || q < 0.65 ? (q != null && q < 0 ? 1.35 : 0.8) : 0.5)) * hitter
-    : clamp(1.3 - p.r.pwr * 0.005, 0.8, 1.15) * (settings.mode === 6 ? 0.75 : 1) * power; // 6 v 6 has more defenders to beat
+    : clamp(1.3 - p.r.pwr * 0.005, 0.8, 1.15) * (settings.mode === 6 ? 0.75 : 1) * power * (TUT ? 1.35 : 1); // 6 v 6 has more defenders to beat; the tutorial's are slower to read
   const aims = [[tx, tz]];
   for (let i = 0; i < 5; i++) aims.push([rand(-HW * 0.8, HW * 0.8), t * rand(1.5, HL - 1)]);
   const tries = [];
@@ -1064,7 +1099,7 @@ function doBlock(p) {
   const s = p.side, t = toward(s), b = G.ball;
   const atk = G.lastAttack && G.lastAttack.p;
   const human = !aiControlled(p);
-  const chance = (human ? 0.55 : s === 0 ? MATE.block : DIFF[settings.diff].block)
+  const chance = (human ? 0.55 : parsOf(s).block)
              + (p.r.jmp - (atk ? atk.r.pwr : 50)) / 250;
   const roll = Math.random(), stuff = roll < clamp(chance, human ? 0.15 : 0.08, human ? 0.8 : 0.75);
   // a computer blocker can be beaten clean; when you get there in time you always get a hand on it
@@ -1229,7 +1264,7 @@ function aiThink(dt) {
   const b = G.ball;
   for (let s = 0; s < 2; s++) {
     if (G.react[s] > 0) { G.react[s] -= dt; continue; }
-    const pars = s === 0 ? MATE : DIFF[settings.diff];
+    const pars = parsOf(s);
     let tc = timeToY(b, 1.0); if (tc == null) tc = timeToY(b, BR) || 0;
     const f = clamp(tc / 0.9, 0, 1);
     const lx = b.x + b.vx * tc + G.aiErr[s][0] * f, lz = b.z + b.vz * tc + G.aiErr[s][1] * f;
@@ -2736,11 +2771,14 @@ function render() {
 
   const you = G.sides[0].find(p => p.human);
   const labels = [];
-  if (G.phase === 'serve' && you && !AUTO && settings.mode === 6 && you !== G.server) { // your legal spot for this serve
-    const bad = overlaps(0).includes(you);
-    ctx.strokeStyle = bad ? '#ff4d4d' : '#50e68c'; ctx.lineWidth = 4;
+  if (you && !AUTO && !G.demo && settings.guide === 'on' && guideOn(you)) { // where you should be standing right now (Settings: Position guide)
+    const serve = G.phase === 'serve', bad = serve && overlaps(0).includes(you);
+    const far = Math.hypot(you.x - you.homeX, you.z - you.homeZ) > 0.7;
+    ctx.globalAlpha = serve || far ? 1 : 0.45;
+    ctx.strokeStyle = bad ? '#ff4d4d' : '#50e68c'; ctx.lineWidth = serve ? 4 : 3;
     groundEllipse(you.homeX, you.homeZ, 0.55, 0.55); ctx.stroke();
-    const lab = proj(you.homeX, 0, you.homeZ); labels.push(['YOUR SPOT', lab.x * US, lab.y * US + 6, bad ? '#ff8a8a' : '#7dffb0']);
+    ctx.globalAlpha = 1;
+    if (serve || far) { const lab = proj(you.homeX, 0, you.homeZ); labels.push(['YOUR SPOT', lab.x * US, lab.y * US + 6, bad ? '#ff8a8a' : '#7dffb0']); }
   }
   { // the carets (see updateCarets): where you meet the ball when it is coming to you, else where it lands
     let target = null;
@@ -3035,6 +3073,7 @@ function loadSettings() {
   if ([1, 3, 5].includes(o.sets)) settings.sets = o.sets;
   if (TIMES[o.time]) settings.time = o.time;
   if (['follow', 'fixed'].includes(o.camMode)) settings.camMode = o.camMode;
+  if (['on', 'off'].includes(o.guide)) settings.guide = o.guide;
   if (typeof o.zoom === 'number' && o.zoom >= 0.84 && o.zoom <= 1.14) settings.zoom = o.zoom;
   for (const n of [2, 6]) {
     if (o.role && YOUR_ROLES[n].includes(o.role[n])) settings.role[n] = o.role[n];
@@ -3589,7 +3628,7 @@ for (const d of document.querySelectorAll('#scr-title dialog')) {
 }
 $('#mm-howto').addEventListener('click', () => $('#howto-dlg').showModal());
 $('#mm-settings').addEventListener('click', () => { markSettings(); $('#settings-dlg').showModal(); });
-const SET_ROWS = [['#set-diff', 'diff', String], ['#set-target', 'target', Number], ['#set-sets', 'sets', Number], ['#set-cam', 'camMode', String]];
+const SET_ROWS = [['#set-diff', 'diff', String], ['#set-target', 'target', Number], ['#set-sets', 'sets', Number], ['#set-cam', 'camMode', String], ['#set-guide', 'guide', String]];
 function markSettings() {
   const r = realSettings();
   for (const [box, key] of SET_ROWS) for (const b of document.querySelectorAll(`${box} button`)) b.setAttribute('aria-pressed', String(b.dataset.v === String(r[key])));
@@ -3730,7 +3769,7 @@ function buildTeams() {
   const mine = [makeEntry(draft.starter, true), ...draft.picks.map(m => makeEntry(m, false))];
   const n = teamSize();
   const myDrafted = draft.picks.length ? draft.picks.reduce((a, m) => a + m.ovr, 0) / draft.picks.length : 55;
-  const target = myDrafted + DIFF[settings.diff].teamOffset;
+  const target = myDrafted + (TUT ? TUTOR : DIFF[settings.diff]).teamOffset; // the tutorial's sparring partner is an even match
   const capPool = DEX.filter(m => !m.leg && m.id !== draft.starter.id && !draft.picks.includes(m));
   const rivalCap = pickOne(capPool);
   const taken = new Set([draft.starter.id, rivalCap.id, ...draft.picks.map(m => m.id)]);
