@@ -550,28 +550,37 @@ function matchXp(c, st, won, ph) {
 //   TRUST_OVR. (OVR, not position fit: a build made for a position already fits it about as well as a weak club's
 //   starter does.)
 // - How often the setter picks you (trustSetWeight, used by choosePlay in game.js). It keeps growing once you start.
-const TRUST_START = 60, TRUST_OVR = 35, BENCH_XP = 5;
+const TRUST_START = 75, TRUST_OVR = 50, BENCH_XP = 5;
 const callLate = target => Math.round(target * 2 / 3); // 10 in a set to 15, 17 in a set to 25
 const trustOf = c => clamp(Math.round(c.trust || 0), 0, 100);
-// A match: 2 for coming on, up to 6 from your box score (as in matchXp), 1 for a win and GOAL_TRUST for a met
-// coach's goal. A short outing off the bench is about 2 to 5, a full match as a starter 5 to 10, and a starter's
-// quiet loss costs 2. Sitting the whole match gives 1. With training (drillTrust), a rookie usually starts some
-// time in the second half of the first season.
-function trustGain(c, st, won, played, met) {
-  if (!played) return 1;
+// A match you play: 2 for coming on, up to 5 from your box score (as in matchXp), 1 for a win and GOAL_TRUST for a
+// met coach's goal. A bad game costs trust, and each of these counts on its own:
+// - hitting errors: 2 or more attacks hit out, into the net or stuffed, and more of them than kills: -3
+// - the coach's goal: under half of it: -2
+// - serving and passing: 2 or more serves missed or first passes the team could not play: -2 (-4 for 4 or more)
+// Sitting the whole match gives 1. A short outing off the bench is about 2 to 5 before losses, a full match as a
+// starter 4 to 10. With training (drillTrust), a rookie usually starts around the end of the first season.
+function trustChange(c, st, won, played, goal) {
+  if (!played) return { d: 1, why: ['sat the whole match'] };
   const perf = POS_XP[c.pos] * (2 * st.kills + 3 * st.aces + 3 * st.blocks + 1.5 * st.digs + 0.5 * st.ast);
-  if (c.starter && perf < 3 && !won && !met) return -2;
-  return 2 + Math.min(6, Math.round(perf / 4)) + (won ? 1 : 0) + (met ? GOAL_TRUST : 0);
+  const met = goal && (st[goal.stat] || 0) >= goal.n;
+  let d = 2 + Math.min(5, Math.round(perf / 5)) + (won ? 1 : 0) + (met ? GOAL_TRUST : 0);
+  const why = [];
+  if (st.herr >= 2 && st.herr > st.kills) { d -= 3; why.push(`${st.herr} hitting errors to ${st.kills} kill${st.kills === 1 ? "" : "s"}`); }
+  if (goal && !met && (st[goal.stat] || 0) < goal.n / 2) { d -= 2; why.push('well short of the coach\'s goal'); }
+  const sp = st.serr + st.rerr;
+  if (sp >= 2) { d -= sp >= 4 ? 4 : 2; why.push(`${st.serr} missed serve${st.serr === 1 ? '' : 's'} and ${st.rerr} bad pass${st.rerr === 1 ? '' : 'es'}`); }
+  return { d, why };
 }
-const drillTrust = score => (score >= 70 ? 3 : score >= 35 ? 2 : 1); // showing up to train counts too
-// The setter's weight for you against a teammate's 1 (game.js). 0.22 at 0% trust, 0.85 at 55% and 1.6 at 100%: as
-// an outside in the front row, about 1 set in 10 at 0%, 3 in 10 at 55% and 4 in 10 at 100%. Calling for the ball
+const drillTrust = score => (score >= 70 ? 2 : score >= 35 ? 1 : 0);
+// The setter's weight for you against a teammate's 1 (game.js). 0.22 at 0% trust, 1.17 at 75% and 1.6 at 100%: as
+// an outside in the front row, about 1 set in 10 at 0%, 1 in 3 at 75% and 4 in 10 at 100%. Calling for the ball
 // multiplies it by 1 at 0% (they do not listen yet) up to 3.5 at 100%. (Quick play has no trust: 3, and 12 called.)
 function trustSetWeight(callMe) {
   const u = trustOf(careers[careerMatch.slot]) / 100;
   return (0.22 + 1.38 * u ** 1.3) * (callMe ? 1 + 2.5 * u ** 1.5 : 1);
 }
-const trustLabel = t => (t >= 85 ? 'Go-to hitter' : t >= 60 ? 'Trusted' : t >= 35 ? 'Earning it' : t >= 15 ? 'Unproven' : 'New face');
+const trustLabel = t => (t >= 90 ? 'Go-to hitter' : t >= 75 ? 'Trusted' : t >= 40 ? 'Earning it' : t >= 15 ? 'Unproven' : 'New face');
 // The starter ahead of you: the weaker (by position fit) of those your club puts at your position without you.
 function rivalStarter(c) {
   const fit = ROLES[c.pos].fit, mine = lineup(clubEntries(c.league, c.league.myClub), null, c.pos, 6).filter(x => x.role === c.pos);
@@ -585,7 +594,7 @@ function promote(c) { // true if you have just become a starter
 }
 // Called by game.js at each dead ball while you sit: should the coach send you on now? The more trust, the more
 // moments count. At any trust: once the set is decided (a team 3 from the target and 6 ahead), or in the last points
-// of set 2 or later. From 20%: when the team falls 5 behind. From 40%: after a lost set, and from callLate points in
+// of set 2 or later. From 25%: when the team falls 5 behind. From 50%: after a lost set, and from callLate points in
 // set 2 or later.
 function careerCallIn() {
   if (!careerMatch || !G) return false;
@@ -593,16 +602,16 @@ function careerCallIn() {
   const [us, them] = G.score, last = G.setLog[G.setLog.length - 1], hi = Math.max(us, them);
   if (hi >= T - 3 && Math.abs(us - them) >= 6) return coachSays('THIS SET IS DECIDED. GET SOME REPS IN!');
   if (G.setNo >= 2 && hi >= T - 2) return coachSays('A FEW POINTS FOR YOU. YOU ARE IN!');
-  if (t >= 20 && us + them >= 6 && them - us >= 5) return coachSays('WE NEED A SPARK. YOU ARE IN!');
-  if (t >= 40 && us + them === 0 && last && last[0] < last[1]) return coachSays('THE LAST SET GOT AWAY. YOU ARE IN!');
-  if (t >= 40 && G.setNo >= 2 && hi >= callLate(T)) return coachSays('TIME FOR YOUR MINUTES. YOU ARE IN!');
+  if (t >= 25 && us + them >= 6 && them - us >= 5) return coachSays('WE NEED A SPARK. YOU ARE IN!');
+  if (t >= 50 && us + them === 0 && last && last[0] < last[1]) return coachSays('THE LAST SET GOT AWAY. YOU ARE IN!');
+  if (t >= 50 && G.setNo >= 2 && hi >= callLate(T)) return coachSays('TIME FOR YOUR MINUTES. YOU ARE IN!');
   return false;
 }
 function callInText(c, target) { // when the coach may send you on, at your trust
   const t = trustOf(c), now = [`a set is out of reach (a team on ${target - 3} and 6 ahead)`, 'a set from set 2 on reaches its last points'];
-  if (t >= 20) now.push('the team falls 5 behind');
-  if (t >= 40) now.push('the team has lost the last set', `a team reaches ${callLate(target)} points in set 2 or later`);
-  const next = t < 20 ? ' At 20% the coach also turns to you when the team falls 5 behind.' : t < 40 ? ' At 40% you also come on after a lost set and earlier in late sets.' : '';
+  if (t >= 25) now.push('the team falls 5 behind');
+  if (t >= 50) now.push('the team has lost the last set', `a team reaches ${callLate(target)} points in set 2 or later`);
+  const next = t < 25 ? ' At 25% the coach also turns to you when the team falls 5 behind.' : t < 50 ? ' At 50% you also come on after a lost set and earlier in late sets.' : '';
   return `${now.slice(0, -1).join(', ')} or ${now[now.length - 1]}.${next}`;
 }
 function coachSays(text) { toast(`COACH: ${text}`, 2.5); return true; }
@@ -651,10 +660,10 @@ function careerMatchOver() {
   const log = careerLog(c);
   if (played) { log.gp++; for (const k of [...STAT_LINE, 'att']) log[k] += me.stats[k] || 0; }
   c.goal = null;
-  const gain = trustGain(c, me.stats, won, played, met), was = trustOf(c);
-  c.trust = clamp(was + gain, 0, 100);
-  const d = trustOf(c) - was;
-  let trust = ` · Team trust ${d >= 0 ? '+' : ''}${d}% (${trustOf(c)}%)`;
+  const tc = trustChange(c, me.stats, won, played, goal), was = trustOf(c);
+  c.trust = clamp(was + tc.d, 0, 100);
+  const d = trustOf(c) - was, bad = played ? tc.why : [];
+  let trust = ` · Team trust ${d >= 0 ? '+' : ''}${d}% (${trustOf(c)}%)${bad.length ? `<br><span class="rtg-trust-loss">Lost trust: ${bad.join('; ')}.</span>` : ''}`;
   if (promote(c)) trust += ` · <b class="rtg-up-msg">You earned a starting spot!</b>`;
   finishRound(c, sets);
   saveCareers();

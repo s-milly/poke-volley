@@ -236,7 +236,7 @@ class Player {
     this.face = 0; this.cool = 0; this.squash = 1; this.homeX = 0; this.homeZ = 0;
     this.dive = 0; this.rec = 0; this.diveDir = [0, 1];
     this.ai = { jumpErr: 0, blockWait: -1 };
-    this.stats = { kills: 0, att: 0, ast: 0, aces: 0, blocks: 0, digs: 0, sets: 0 }; // att: attacks swung, ast: sets that became kills
+    this.stats = { kills: 0, att: 0, ast: 0, aces: 0, blocks: 0, digs: 0, sets: 0, herr: 0, serr: 0, rerr: 0 }; // att: attacks swung, ast: sets that became kills; herr, serr, rerr: hitting, serving and passing errors
   }
   get cy() { return this.y + this.rr; }
 }
@@ -977,7 +977,7 @@ function contact(p) {
     doBlock(p);
     return;
   }
-  b.offBlock = false; if (!p.onGround) p.hitAir = true; // a player who plays the ball in the air cannot block on that same jump
+  G.shank = null; b.offBlock = false; if (!p.onGround) p.hitAir = true; // a player who plays the ball in the air cannot block on that same jump
 
   if (fromOpp) { G.touches[s] = 0; G.intended[1 - s] = null; }
   G.touches[s]++;
@@ -1136,7 +1136,7 @@ function pass(p, incoming, fromOpp, q = null, dove = false, setTm = null) {
     if (Math.random() < shank) {
       const sx = Math.random() < 0.5 ? -1 : 1;
       tx = b.x + sx * rand(2.5, 7); tz = b.z - t * rand(1, 8); apexY = b.y + rand(0.2, 1.4); target = null;
-      floatText('SHANKED', p.x, p.cy + p.rr + 0.6, p.z, '#ffd6d6', 0.8);
+      floatText('SHANKED', p.x, p.cy + p.rr + 0.6, p.z, '#ffd6d6', 0.8); G.shank = p;
     }
   }
   launchTo(tx, tz, ty, apexY);
@@ -1277,7 +1277,7 @@ function doBlock(p) {
   if (stuff) {
     b.z = t * (BR + 0.12);
     b.vz = t * rand(2.5, 6); b.vy = -rand(1, 3.5); b.vx = glance(0.5, 3.2);
-    G.lastAttack = { p, type: 'block' };
+    G.lastAttack = { p, type: 'block', hitter: atk };
     floatText('BLOCK!', p.x, p.cy + p.rr + 0.6, p.z, '#fff', 1);
     G.shake = 0.2; hitstop(0.16, '#ffffff');
   } else {
@@ -1398,8 +1398,20 @@ function setTarget() {
   return settings.sets === 5 && G.setNo === 5 ? decider() : settings.target;
 }
 
+// Who on the losing side gave the point away: a serve that missed, an attack hit out, into the net or stuffed, or a
+// first pass (of a serve, or a shanked dig) that the team could not play again.
+function chargeError(w) {
+  const l = 1 - w, la = G.lastAttack, lt = G.lastToucher;
+  if (!la) return;
+  if (la.type === 'block' && la.p.side === w && G.lastSide === w && la.hitter) la.hitter.stats.herr++;
+  else if (G.lastSide !== l || !lt || lt.side !== l) return;
+  else if (la.p === lt && la.type === 'serve') lt.stats.serr++;
+  else if (la.p === lt && la.type === 'spike') lt.stats.herr++;
+  else if (la.p.side === w && G.touches[l] === 1 && (la.type === 'serve' || G.shank === lt)) lt.stats.rerr++;
+}
 function awardPoint(w, label, sub, credit, key) {
   if (G.phase !== 'rally') return;
+  if (!TUT) chargeError(w);
   G.score[w]++;
   if (credit && key) credit.stats[key]++;
   if (key === 'kills' && G.lastAttack && G.lastAttack.setter) G.lastAttack.setter.stats.ast++;

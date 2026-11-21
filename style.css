@@ -683,6 +683,7 @@ table.rtg-table tr.cut th, table.rtg-table tr.cut td { border-bottom: 3px dashed
 @media (max-width: 760px) { .bench-bar { top: auto; bottom: 8px; gap: 10px; } .bench-bar span { display: none; } } /* the scoreboard fills the top on small screens */
 .rtg-facts .rtg-status { grid-column: 1 / -1; }
 .rtg-res .rtg-up-msg { font: inherit; color: #6bd88a; text-shadow: none; margin: 0; }
+.rtg-res .rtg-trust-loss { color: #ff8a8a; }
 .rtg-bench-note b { color: var(--accent); font-weight: 400; }
 
 /* Road to Glory: draft show, awards, coach goals and the career page */
