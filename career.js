@@ -45,8 +45,8 @@ const customStart = () => { // an even spread, the leftover points from the left
 };
 const sumStats = r => STAT_IDS.reduce((a, k) => a + r[k], 0);
 
-// XP for one more point in a stat now at v: 5 in the 30s, then 2 more for each band of ten.
-const upCost = v => 5 + 2 * Math.max(0, Math.floor((v - 30) / 10));
+// XP for one more point in a stat now at v: 10 in the 30s, then 4 more for each band of ten.
+const upCost = v => 10 + 4 * Math.max(0, Math.floor((v - 30) / 10));
 
 // ---------- saves ----------
 // A career: { v, name, mon, pos, arch ('custom' or an ARCHETYPES key), r, cap, xp, xpEarned, season, diff, created }.
