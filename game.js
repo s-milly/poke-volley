@@ -1286,7 +1286,6 @@ function doBlock(p) {
     else if (k < 0.62) { b.vz = t * rand(0.8, 2.4); b.vy = -rand(3.5, 6.5); b.vx = side * rand(1.8, 3.6); } // down on a diagonal
     else { b.vz = t * rand(2.5, 5); b.vy = -rand(1, 3); b.vx = glance(0.5, 3); } // deeper into their court
     G.lastAttack = { p, type: 'block', hitter: atk };
-    floatText('BLOCK!', p.x, p.cy + p.rr + 0.6, p.z, '#fff', 1);
     G.shake = 0.2; hitstop(0.16, '#ffffff');
   } else {
     // a touch that does not stuff it: the spike can go on through the hands, pop up, drop on either side of the net or glance off wide
