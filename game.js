@@ -648,7 +648,7 @@ function startServe() {
   sv.x = clamp(0.5 * HW, -HW + 0.6, HW - 0.6) * toward(s); sv.z = -toward(s) * (HL + 0.8 + SERVE_RUN); // serve from the right, back from the end line to leave room for the run-up
   input.hitQ = input.setQ = input.diveQ = false; G.toss = false; G.hold = null; G.setPick = null; G.meterShow = null; G.tid = (G.tid || 0) + 1;
   const you = G.sides[0].find(p => p.human) || (G.rookie ? { x: 0, z: -HL * 0.45 } : G.sides[0][0]);
-  Object.assign(G.cam, camWant(you, false));
+  Object.assign(G.cam, G.simFast ? simCam() : camWant(you, false));
 }
 
 // ===================== physics and prediction =====================
@@ -1695,7 +1695,9 @@ function update(dt) {
   if (TUT) tutTick(dt, you);
 
   // the camera drifts to keep you in view (or holds still in fixed mode), and dollies in or out with the zoom
-  const cw = G.demo ? demoCam() : camWant(you || (G.rookie ? { x: 0, z: -HL * 0.45 } : G.sides[0][0]), true); // on the bench: watch your half
+  // while Road to Glory fast-forwards, the camera settles on one still view of the whole court (eased in real time, not sim time)
+  const cw = G.demo ? demoCam() : G.simFast ? simCam() : camWant(you || (G.rookie ? { x: 0, z: -HL * 0.45 } : G.sides[0][0]), true); // on the bench: watch your half
+  if (G.simFast) dt /= SIM_FAST;
   G.cam.x += (cw.x - G.cam.x) * Math.min(1, dt * 2.5);
   G.cam.z += (cw.z - G.cam.z) * Math.min(1, dt * 3);
   G.cam.y += (cw.y - G.cam.y) * Math.min(1, dt * 4);
@@ -1728,6 +1730,11 @@ function camWant(focus, ball) {
   // never tilt so far that your own feet drop toward the bottom edge of the screen
   for (let i = 0; i < 6 && cam.pitch < CAM.pitch && screenYAt(cam, focus.x, 0, focus.z) > H * 0.86; i++) cam.pitch = Math.min(CAM.pitch, cam.pitch + 0.015);
   return cam;
+}
+// A fixed, centred view of the whole court for the fast-forward: no following, turning or tilting.
+function simCam() {
+  const d = settings.zoom, z0 = -HL - CAM.back - 1.5, piv = CAM.y / Math.tan(CAM.pitch);
+  return { x: 0, z: z0 + piv * (1 - d), y: CAM.y * d, yaw: 0, pitch: CAM.pitch };
 }
 function screenYAt(cam, x, y, z) { // proj()'s vertical, for a camera that is not G.cam
   const ex = x - cam.x, ez = z - cam.z, dz = ex * Math.sin(cam.yaw) + ez * Math.cos(cam.yaw), dy = y - cam.y;
@@ -2970,7 +2977,7 @@ function render() {
   ctx.setTransform(S, 0, 0, S, 0, 0);
   ctx.imageSmoothingEnabled = false;
   ctx.save();
-  if (G.shake > 0) ctx.translate(Math.round(rand(-1, 1) * 3 * G.shake) / S, Math.round(rand(-1, 1) * 3 * G.shake) / S);
+  if (G.shake > 0 && !G.simFast) ctx.translate(Math.round(rand(-1, 1) * 3 * G.shake) / S, Math.round(rand(-1, 1) * 3 * G.shake) / S);
   drawBackdrop();
   drawSkyFx();
   drawArenaWall();
