@@ -1467,6 +1467,7 @@ function aiThink(dt) {
   }
 }
 
+const APPROACH = 2.4; // metres of run-up a hitter takes before the jump
 function aiReceive(p, lx, lz, pars) {
   const b = G.ball, s = p.side, t = toward(s);
   const attack = G.lastSide === s && G.touches[s] >= 2;
@@ -1476,9 +1477,18 @@ function aiReceive(p, lx, lz, pars) {
     if (tc != null) {
       let tx = b.x + b.vx * tc, tz = b.z + b.vz * tc - t * p.rr * 0.5;
       if (settings.mode === 6 && !isFront(p)) tz = -t * Math.max(-tz * t, attackLine() + 0.15); // take off behind the line
+      // A run-up, not a standing jump: wait at the start of the approach, then run in (from outside on a wing)
+      // and take off short of the ball, so the jump carries the hitter forward into the hit.
+      const vRun = p.speed * pars.spd, vAir = vRun * 0.7 * 0.8;
+      const out = Math.abs(tx) > 0.3 * HW ? Math.sign(tx) : 0, ul = Math.hypot(out * 0.45, 1);
+      const ux = -out * 0.45 / ul, uz = t / ul; // the direction of the run
+      const air = Math.min(vAir * p.tUp * 0.85, 1.6); // how far the jump carries
+      const kx = tx - ux * air, kz = tz - uz * air, lead = tc - p.tUp; // the takeoff spot, and the time left to reach it
       if (p.onGround) {
-        moveToward(p, tx, tz, pars.spd);
-        if (tc <= p.tUp + 0.015 && Math.hypot(p.x - tx, p.z - tz) < p.rr + 0.35) jump(p);
+        const dk = Math.hypot(p.x - kx, p.z - kz);
+        if (lead > dk / vRun + 0.15) moveToward(p, kx - ux * APPROACH, kz - uz * APPROACH, pars.spd); // early: back off to the start
+        else if (dk > 0.05) { const v = clamp(dk / Math.max(lead, 0.01), vRun * 0.6, vRun); p.vx = (kx - p.x) / dk * v; p.vz = (kz - p.z) / dk * v; }
+        if (tc <= p.tUp + 0.015 && Math.hypot(p.x - tx, p.z - tz) < air + p.rr + 0.6) jump(p);
       } else moveToward(p, tx, tz, pars.spd * 0.8);
       return;
     }
