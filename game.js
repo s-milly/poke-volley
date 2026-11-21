@@ -72,6 +72,23 @@ function clubCrest(id) {
   return (crestCache[id] = c.toDataURL());
 }
 const clubId = club => Object.keys(CLUBS).find(id => CLUBS[id] === club);
+// Each club's coach: the town's best-known trainer, drawn blocky like the crowd. look: hair (or cap) style and colours.
+const COACHES = {
+  pallet:    { name: 'Ash',      shirt: '#2f6bd8', pants: '#2b4f8a', skin: '#f1c9a0', hair: '#2a2018', style: 'cap', cap: '#e8352b' },
+  viridian:  { name: 'Giovanni', shirt: '#b5652a', pants: '#8a4a1e', skin: '#e0b48a', hair: '#2a2018', style: 'short' },
+  pewter:    { name: 'Brock',    shirt: '#d8782a', pants: '#6b5a3a', skin: '#c9905e', hair: '#3a2a1a', style: 'spiky', vest: '#5f7d3a' },
+  cerulean:  { name: 'Misty',    shirt: '#f4d34e', pants: '#d94a3a', skin: '#f6dcc0', hair: '#ff8a2b', style: 'pony' },
+  vermilion: { name: 'Lt. Surge', shirt: '#6b7a3a', pants: '#4f5a2c', skin: '#e8c098', hair: '#f2d16b', style: 'flat' },
+  lavender:  { name: 'Mr. Fuji', shirt: '#7a5aa8', pants: '#7a5aa8', skin: '#e8c8a0', hair: '#e6e6e6', style: 'old' },
+  celadon:   { name: 'Erika',    shirt: '#4f9a5a', pants: '#4f9a5a', skin: '#f6dcc0', hair: '#1d1d1d', style: 'bob', band: '#e8c34a', bow: '#d8392f' },
+  fuchsia:   { name: 'Koga',     shirt: '#4b3b7a', pants: '#3a2d62', skin: '#e0b48a', hair: '#1d1d1d', style: 'short' },
+  saffron:   { name: 'Sabrina',  shirt: '#b03050', pants: '#1e1e2a', skin: '#f6dcc0', hair: '#1e2a28', style: 'long' },
+  cinnabar:  { name: 'Blaine',   shirt: '#f1efe9', pants: '#6b6b78', skin: '#e8c098', hair: '#f1efe9', style: 'bald' },
+};
+// The home club: yours, except on the road in Road to Glory. Its colours dress the venue.
+const homeSide = () => (careerMatch && !careerMatch.home ? 1 : 0);
+const clubColor = s => (clubs && clubs[s] ? clubs[s].color : TEAM_COLORS[s]);
+const homeColor = () => (clubs && clubs[homeSide()] ? clubs[homeSide()].color : null);
 const crestImg = (id, size = 48) => `<img class="crest" src="${clubCrest(id)}" width="${size}" height="${Math.round(size * 26 / 24)}" alt="">`;
 let HW = 4, HL = 8;         // half width and half length of the court (set per mode)
 
@@ -606,6 +623,21 @@ function newMatch(demo = false) { // demo: the title screen's background match, 
     cam: { x: 0, y: CAM.y, z: -HL - CAM.back, yaw: 0, pitch: CAM.pitch }, demo,
     sideline: [[], []], rookie: null, simFast: false, // players standing by the bench: you before you come on, a starter after
   };
+  G.benchMons = [[], []]; // 6 v 6: five teammates sitting on each team's bench, the same five for a club every match
+  if (n === 6) {
+    const used = new Set([...teams[0], ...teams[1]].map(e => e.mon.id));
+    for (let s = 0; s < 2; s++) {
+      const id = clubs && clubs[s] ? clubId(clubs[s]) : String(s), rnd = seeded([...id].reduce((a, ch) => a * 31 + ch.charCodeAt(0), 7) >>> 0);
+      // the club's own shuffled order of Pokémon up to 1.7 m tall (heights are in decimetres), skipping any already playing
+      const order = DEX.filter(m => !m.leg && m.h <= 17).map(m => [rnd(), m]).sort((a, b) => a[0] - b[0]).map(x => x[1]).filter(m => !used.has(m.id)).slice(0, 5);
+      for (let i = 0; i < order.length; i++) {
+        const m = order[i]; used.add(m.id);
+        const p = new Player(makeEntry(m, false), s, false, size * 0.85);
+        p.x = -(HW + 2.45); p.z = -toward(s) * (3.6 + i * 1.05); p.y = 0.3; p.seat = 0.3;
+        G.benchMons[s].push(p);
+      }
+    }
+  }
   const bench = demo ? null : benchEntry();
   if (bench) {
     const r = new Player(bench, 0, false, size); r.role = settings.role[n]; r.on = false;
@@ -1430,7 +1462,7 @@ function awardPoint(w, label, sub, credit, key) {
   G.score[w]++;
   if (credit && key) credit.stats[key]++;
   if (key === 'kills' && G.lastAttack && G.lastAttack.setter) G.lastAttack.setter.stats.ast++;
-  G.cheer = 1; // the crowd jumps up
+  G.cheer = 1; G.lastW = w; // the crowd jumps up
   if (key === 'kills' && G.lastAttack && G.lastAttack.type === 'spike') G.killCam = { x: G.ball.x, z: G.ball.z, t: 1.4 }; // the camera pushes in on the kill
   G.longestRally = Math.max(G.longestRally, G.rally);
   if (TUT) {
@@ -2206,7 +2238,7 @@ function buildArena() {
     }
   }
   // championship banners hanging from the rafters
-  const cols = ['#ff5d5d', '#3fa7ff', '#ffcf33', '#6bd88a', '#c48bff', '#ff9a3c'];
+  const hc = homeColor(), cols = hc ? [hc, shade(hc, -0.3)] : ['#ff5d5d', '#3fa7ff', '#ffcf33', '#6bd88a', '#c48bff', '#ff9a3c'];
   for (let i = 0; i < 9; i++) {
     const x = 20 + i * 52, col = cols[i % cols.length];
     g.fillStyle = col; g.fillRect(x, 36, 18, 22);
@@ -2216,8 +2248,8 @@ function buildArena() {
   }
   // upper concourse glow along the wall
   g.fillStyle = '#323c62'; g.fillRect(0, hy - 34, UW, 3);
-  g.fillStyle = '#3c4772'; g.fillRect(0, hy - 31, UW, 31);
-  g.fillStyle = '#2a3354';
+  g.fillStyle = hc ? shade(hc, -0.55) : '#3c4772'; g.fillRect(0, hy - 31, UW, 31);
+  g.fillStyle = hc ? shade(hc, -0.68) : '#2a3354';
   for (let x = 0; x < UW; x += 6) g.fillRect(x, hy - 31 + ((x / 6) % 2) * 2, 3, 31);
   // floor: blue free zone with faint boards
   g.fillStyle = '#2f5d9e'; g.fillRect(0, hy, UW, UH - hy);
@@ -2314,17 +2346,18 @@ function backdropFor() {
 
 let crowdCache = null;
 function buildCrowd() {
-  const V = venue(), arena = V.mode === 6, rnd = seeded(arena ? 61 : 23);
+  const V = venue(), arena = V.mode === 6, rnd = seeded(arena ? 61 : 23), hc = homeColor(), ac = clubColor(1 - homeSide());
   const shirts = V.shirts === 'arena'
     ? ['#3fa7ff', '#3fa7ff', '#ff5d5d', '#ff5d5d', '#ffffff', '#ffcf33', '#2b2f3f', '#6bd88a', '#c48bff']
     : ['#ff6b6b', '#ffcf33', '#4fd2ff', '#ffffff', '#ff9a3c', '#6bd88a', '#f49ac0', '#3fa7ff'];
   const skins = ['#f1c9a0', '#d9a477', '#b07a4f', '#8a5a3a', '#f6dcc0'];
   const person = (x, y, z, key, sd, standing) => ({
     x, y, z, key, standing,
-    shirt: V.teamSides && sd ? (rnd() < 0.8 ? TEAM_COLORS[sd < 0 ? 0 : 1] : shirts[Math.floor(rnd() * shirts.length)]) : shirts[Math.floor(rnd() * shirts.length)],
+    shirt: V.teamSides && sd ? (rnd() < 0.8 ? clubColor(sd < 0 ? 0 : 1) : shirts[Math.floor(rnd() * shirts.length)]) // home fans wear the home colours, a few the visitors'
+      : hc ? ((r => (r < 0.45 ? hc : r < 0.58 ? shade(hc, 0.35) : r < 0.66 ? ac : shirts[Math.floor(rnd() * shirts.length)]))(rnd())) : shirts[Math.floor(rnd() * shirts.length)],
     skin: skins[Math.floor(rnd() * skins.length)],
     hat: !arena && rnd() < 0.25 ? ['#ffffff', '#ffcf33', '#ff6b6b'][Math.floor(rnd() * 3)] : null,
-    sign: rnd() < 0.05 ? TEAM_COLORS[rnd() < 0.5 ? 0 : 1] : null,
+    sign: rnd() < 0.05 ? (hc && rnd() < 0.7 ? hc : clubColor(rnd() < 0.5 ? 0 : 1)) : null,
     phone: ((V.extras && V.extras.includes('phones')) || (V.mode === 2 && settings.time === 'night')) && rnd() < 0.08,
     ph: rnd() * 6.28, rate: 3 + rnd() * 3,
   });
@@ -2359,7 +2392,7 @@ function buildCrowd() {
     const sd = i % 2 ? 1 : -1, end = i % 5 === 0;
     um.push(end ? { x: rand(-HW, HW), z: HL + V.standing.gap + 3 + rnd() * 3 } : { x: sd * (HW + V.standing.gap + 3 + rnd() * 3), z: -HL + rnd() * 2 * HL },
       );
-    um[um.length - 1].col = ['#ff5d5d', '#ffcf33', '#3fa7ff', '#6bd88a', '#ffffff'][i % 5];
+    um[um.length - 1].col = hc && i % 2 ? hc : ['#ff5d5d', '#ffcf33', '#3fa7ff', '#6bd88a', '#ffffff'][i % 5];
   }
   const palms = [];
   if (V.mode === 2) {
@@ -2369,7 +2402,9 @@ function buildCrowd() {
     for (let i = 0; i < 5; i++) palms.push({ x: -HW - 4 + i * (2 * HW + 8) / 4 + rnd(), z: endZ + rnd() * 2, h: 8 + rnd() * 3, v: Math.floor(rnd() * 3), flip: rnd() < 0.5 });
     palms.sort((a, b) => b.z - a.z);
   }
-  return { V, people, tiers, byKey, um, palms };
+  // seats in the home colours (an upper deck a shade darker)
+  const seats = hc ? [[shade(hc, -0.15), shade(hc, -0.3)], [shade(hc, -0.45), shade(hc, -0.55)]] : null;
+  return { V, people, tiers, byKey, um, palms, seats };
 }
 
 function quad(pts, col) {
@@ -2397,6 +2432,34 @@ function drawFan(q) {
   if (q.phone && Math.sin(G.time * 2 + q.ph * 5) > 0.3) { ctx.fillStyle = '#ffffff'; ctx.fillRect(f.x + w * 0.3, f.y - h - hd * 1.6, Math.max(2, hd * 0.4), Math.max(2, hd * 0.4)); }
 }
 
+// A coach on the sideline in front of their bench, blocky like the crowd but in their own look; arms up when the team scores.
+function drawCoach(c, s) {
+  const x = -(HW + 1.35), z = -toward(s) * 2.9, f = proj(x, 0, z), k = f.k * 1.2;
+  if (f.x < -40 || f.x > W + 40 || f.y < -40 || f.y > H + 80) return;
+  const w = Math.max(3, 0.42 * k), h = Math.max(4, 0.85 * k), hd = Math.max(2, 0.27 * k), X = Math.round(f.x - w / 2), top = f.y - h, R = (x0, y0, ww, hh, col) => { ctx.fillStyle = col; ctx.fillRect(Math.round(x0), Math.round(y0), Math.max(1, Math.round(ww)), Math.max(1, Math.round(hh))); };
+  const cheer = G.lastW === s && G.cheer > 0.25, aw = Math.max(2, hd * 0.35);
+  if (cheer) { R(X - aw, top - hd * 1.1, aw, hd * 1.2, c.skin); R(X + w, top - hd * 1.1, aw, hd * 1.2, c.skin); }
+  else { R(X - aw, top + 1, aw, h * 0.5, c.shirt); R(X + w, top + 1, aw, h * 0.5, c.shirt); R(X - aw, top + h * 0.5, aw, aw, c.skin); R(X + w, top + h * 0.5, aw, aw, c.skin); }
+  R(X, top + h * 0.6, w, h * 0.4, c.pants);
+  R(X, top, w, h * 0.6, c.shirt);
+  if (c.vest) { R(X, top, w * 0.3, h * 0.6, c.vest); R(X + w * 0.7, top, w * 0.3, h * 0.6, c.vest); }
+  if (c.band) R(X, top + h * 0.42, w, h * 0.12, c.band);
+  if (c.style === 'long') { R(f.x - hd * 0.7, top - hd, hd * 0.25, hd + h * 0.35, c.hair); R(f.x + hd * 0.45, top - hd, hd * 0.25, hd + h * 0.35, c.hair); }
+  const hx = Math.round(f.x - hd / 2), hy = top - hd;
+  R(hx, hy, hd, hd, c.skin);
+  switch (c.style) {
+    case 'cap': R(hx - 1, hy - hd * 0.1, hd + 2, hd * 0.4, c.cap); R(hx + hd * 0.35, hy - hd * 0.05, hd * 0.3, hd * 0.2, '#ffffff'); R(hx + hd * 0.7, hy + hd * 0.22, hd * 0.55, hd * 0.12, c.cap); break;
+    case 'short': R(hx, hy, hd, hd * 0.3, c.hair); break;
+    case 'spiky': R(hx - 1, hy - hd * 0.05, hd + 2, hd * 0.35, c.hair); for (let i = 0; i < 3; i++) R(hx + i * hd * 0.38, hy - hd * 0.25, hd * 0.22, hd * 0.25, c.hair); break;
+    case 'pony': R(hx, hy, hd, hd * 0.3, c.hair); R(hx + hd, hy + hd * 0.05, hd * 0.35, hd * 0.7, c.hair); break;
+    case 'flat': R(hx - 1, hy - hd * 0.25, hd + 2, hd * 0.5, c.hair); break;
+    case 'old': R(hx - 1, hy + hd * 0.15, hd * 0.25, hd * 0.45, c.hair); R(hx + hd * 0.75 + 1, hy + hd * 0.15, hd * 0.25, hd * 0.45, c.hair); R(hx + hd * 0.2, hy + hd * 0.7, hd * 0.6, hd * 0.3, c.hair); break;
+    case 'bob': R(hx - 1, hy, hd + 2, hd * 0.32, c.hair); R(hx - 1, hy, hd * 0.22, hd * 0.85, c.hair); R(hx + hd * 0.78 + 1, hy, hd * 0.22, hd * 0.85, c.hair); if (c.bow) R(hx + hd * 0.6, hy - hd * 0.15, hd * 0.35, hd * 0.2, c.bow); break;
+    case 'long': R(hx, hy, hd, hd * 0.3, c.hair); break;
+    case 'bald': R(hx + hd * 0.1, hy + hd * 0.3, hd * 0.8, hd * 0.18, '#1a1a1a'); R(hx + hd * 0.15, hy + hd * 0.62, hd * 0.7, hd * 0.14, c.hair); break;
+  }
+  if (!G.demo && G.score[0] + G.score[1] === 0 && G.phase === 'serve') pxText(`COACH ${c.name.toUpperCase()}`, f.x * US, (hy - 4) * US - 10, '#ffffff', 8);
+}
 function drawStands() {
   const C = crowdCache || (crowdCache = buildCrowd()), V = C.V, ex = V.extras || [];
   for (const T of C.tiers) {
@@ -2406,10 +2469,10 @@ function drawStands() {
       else { quad([[T.xi, 0, T.z0], [T.xi, 0, T.z1], [T.xi, d.base, T.z1], [T.xi, d.base, T.z0]], '#141a2e'); quad([[T.xi, d.base - 0.9, T.z0], [T.xi, d.base - 0.9, T.z1], [T.xi, d.base, T.z1], [T.xi, d.base, T.z0]], ribbonColor()); }
     }
     if (T.kind === 'end') {
-      quad([[-T.X, T.y1, T.zo], [T.X, T.y1, T.zo], [T.X, T.y1, T.zi], [-T.X, T.y1, T.zi]], d.seat[T.t % 2]);
+      quad([[-T.X, T.y1, T.zo], [T.X, T.y1, T.zo], [T.X, T.y1, T.zi], [-T.X, T.y1, T.zi]], (C.seats ? C.seats[T.di ? 1 : 0] : d.seat)[T.t % 2]);
       quad([[-T.X, T.y0, T.zi], [T.X, T.y0, T.zi], [T.X, T.y1, T.zi], [-T.X, T.y1, T.zi]], d.riser[T.t % 2]);
     } else {
-      quad([[T.xi, T.y1, T.z0], [T.xi, T.y1, T.z1], [T.xo, T.y1, T.z1], [T.xo, T.y1, T.z0]], d.seat[T.t % 2]);
+      quad([[T.xi, T.y1, T.z0], [T.xi, T.y1, T.z1], [T.xo, T.y1, T.z1], [T.xo, T.y1, T.z0]], (C.seats ? C.seats[T.di ? 1 : 0] : d.seat)[T.t % 2]);
       quad([[T.xi, T.y0, T.z0], [T.xi, T.y0, T.z1], [T.xi, T.y1, T.z1], [T.xi, T.y1, T.z0]], d.riser[T.t % 2]);
     }
     for (const q of C.byKey.get(T.key) || []) drawFan(q);
@@ -2417,7 +2480,7 @@ function drawStands() {
   for (let r = 2; r >= 0; r--) for (const q of C.byKey.get(`st${r}`) || []) drawFan(q);
   const z0 = -HL - 2;
   if (ex.includes('led')) { // LED ad boards around the court
-    const lg = V.decks[0].gap - 0.5, bx = HW + lg, zEnd = HL + lg, h = 0.8, cols = ['#ff5d5d', '#3fa7ff', '#ffcf33', '#1b2236'];
+    const lg = V.decks[0].gap - 0.5, bx = HW + lg, zEnd = HL + lg, h = 0.8, hc = homeColor(), cols = hc ? [hc, '#ffffff', shade(hc, -0.35), '#1b2236'] : ['#ff5d5d', '#3fa7ff', '#ffcf33', '#1b2236'];
     for (let i = 0, z = z0; z < zEnd; z += 2.4, i++) for (const sd of [-1, 1]) quad([[sd * bx, 0, z], [sd * bx, 0, z + 2.4], [sd * bx, h, z + 2.4], [sd * bx, h, z]], cols[(i + (sd > 0 ? 2 : 0)) % cols.length]);
     for (let i = 0, x = -bx; x < bx; x += 2.4, i++) quad([[x, 0, zEnd], [x + 2.4, 0, zEnd], [x + 2.4, h, zEnd], [x, h, zEnd]], cols[(i + 1) % cols.length]);
   }
@@ -2466,7 +2529,7 @@ function drawStands() {
     for (const [x, z] of [[-HW - 1.4, -HL - 1.4], [HW + 1.4, -HL - 1.4], [-HW - 1.4, HL + 1.4], [HW + 1.4, HL + 1.4]]) {
       const a = proj(x, 0, z), b = proj(x, 4.5, z), wv = Math.sin(G.time * 5 + x) * 0.25;
       ctx.strokeStyle = '#d9dde6'; ctx.lineWidth = Math.max(2, 0.08 * a.k); ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
-      quad([[x, 4.5, z], [x + 1.4, 4.2 + wv, z], [x, 3.7, z], [x, 3.7, z]], x < 0 ? TEAM_COLORS[0] : TEAM_COLORS[1]);
+      quad([[x, 4.5, z], [x + 1.4, 4.2 + wv, z], [x, 3.7, z], [x, 3.7, z]], homeColor() || (x < 0 ? TEAM_COLORS[0] : TEAM_COLORS[1]));
     }
   }
 }
@@ -2541,7 +2604,7 @@ function drawProps() {
     quad([[x, 0, -1.6], [x, 0, 1.6], [x, 0.8, 1.6], [x, 0.8, -1.6]], '#1b2236');
     quad([[x, 0.62, -1.6], [x, 0.62, 1.6], [x, 0.8, 1.6], [x, 0.8, -1.6]], '#ffcf33');
     seatedPerson(x - 0.5, 0.45, -0.7, '#ffffff'); seatedPerson(x - 0.5, 0.45, 0.7, '#ffffff');
-    for (const [z0, z1, col] of [[-HL * 0.6, -3, TEAM_COLORS[0]], [3, HL * 0.6, TEAM_COLORS[1]]]) {
+    for (const [z0, z1, col] of [[-HL * 0.6, -3, clubColor(0)], [3, HL * 0.6, clubColor(1)]]) {
       quad([[x - 0.3, 0, z0], [x - 0.3, 0, z1], [x - 0.3, 0.45, z1], [x - 0.3, 0.45, z0]], '#3a4466');
       quad([[x - 0.3, 0.45, z0], [x - 0.3, 0.45, z1], [x - 0.8, 0.45, z1], [x - 0.8, 0.45, z0]], col);
       quad([[x + 0.1, 0, z1 + 0.3], [x + 0.1, 0, z1 + 0.8], [x + 0.1, 0.7, z1 + 0.8], [x + 0.1, 0.7, z1 + 0.3]], '#4fa3ff'); // water cooler
@@ -2573,7 +2636,7 @@ function drawArenaWall() {
   for (const sx of [-1, 1]) { // exit signs and banners
     const ex = sx * (X - 2);
     quad([[ex - 0.6, top + 3, z - 0.02], [ex + 0.6, top + 3, z - 0.02], [ex + 0.6, top + 3.5, z - 0.02], [ex - 0.6, top + 3.5, z - 0.02]], '#2bd16b');
-    for (let k = 0; k < 2; k++) { const bx = sx * (8 + k * 3.2), col = k ? TEAM_COLORS[sx < 0 ? 0 : 1] : '#ffcf33';
+    for (let k = 0; k < 2; k++) { const bx = sx * (8 + k * 3.2), col = k ? clubColor(sx < 0 ? 0 : 1) : homeColor() || '#ffcf33';
       quad([[bx - 1, top + 3.2, z - 0.02], [bx + 1, top + 3.2, z - 0.02], [bx + 1, top + 7.5, z - 0.02], [bx - 1, top + 7.5, z - 0.02]], col);
       quad([[bx - 0.4, top + 5.4, z - 0.03], [bx + 0.4, top + 5.4, z - 0.03], [bx + 0.4, top + 6.4, z - 0.03], [bx - 0.4, top + 6.4, z - 0.03]], '#ffffff'); }
   }
@@ -2600,7 +2663,7 @@ function drawArenaWall() {
   }
 }
 
-function ribbonColor() { const c = ['#3fa7ff', '#ff5d5d', '#ffcf33', '#c48bff']; return c[Math.floor(G.time / 2.5) % c.length]; }
+function ribbonColor() { const hc = homeColor(), c = hc ? [hc, '#ffffff', shade(hc, 0.35)] : ['#3fa7ff', '#ff5d5d', '#ffcf33', '#c48bff']; return c[Math.floor(G.time / 2.5) % c.length]; }
 
 // Light poles at the night beach (drawn with the scene, no beams).
 function drawLightPoles() {
@@ -2635,7 +2698,8 @@ function drawVenueLights() {
 function drawArenaFloor() {
   const V = venue(); if (V.mode !== 6) return;
   const d = V.decks[0], X = HW + d.gap + d.depth * d.tiers, Z = HL + d.gap + d.depth * d.endTiers;
-  ctx.fillStyle = (V.extras || []).includes('dark') ? '#16203a' : '#24407a';
+  const hc = homeColor(), dark = (V.extras || []).includes('dark');
+  ctx.fillStyle = hc ? shade(hc, dark ? -0.72 : -0.5) : dark ? '#16203a' : '#24407a'; // the home colours, darkened
   groundPoly([[-X, -HL - 4], [X, -HL - 4], [X, Z], [-X, Z]]); ctx.fill();
 }
 function drawCourt() {
@@ -3058,6 +3122,9 @@ function render() {
   // far side, the net, then the near side
   const items = [...G.players, ...G.bench[0], ...G.bench[1], ...G.sideline[0]].map(p => ({ z: p.z, d: () => drawPlayer(p) }));
   items.push({ z: b.z, d: () => drawBall(b) });
+  for (const p of (G.benchMons || []).flat()) items.push({ z: p.z, d: () => { // a hop when their team scores
+    p.y = p.seat + (G.lastW === p.side ? Math.abs(Math.sin(G.time * 9 + p.z)) * G.cheer * 0.35 : 0); drawPlayer(p); } });
+  if (settings.mode === 6 && clubs) for (let s = 0; s < 2; s++) { const id = clubId(clubs[s]); if (COACHES[id]) items.push({ z: -toward(s) * 2.9, d: () => drawCoach(COACHES[id], s) }); }
   for (const q of G.particles) items.push({ z: q.z, d: () => drawParticle(q) });
   items.sort((a, c) => c.z - a.z);
   let netDrawn = false;
@@ -4083,7 +4150,7 @@ function renderMatchup() {
   const side = s => {
     const c = clubs && clubs[s];
     return `<div class="mub-side ${s ? 'rival' : 'you'}" style="--cc:${c ? c.color : s ? 'var(--rival)' : 'var(--you)'}">${c ? crestImg(clubId(c), 96) : ''}
-      <p><small>${s ? 'Rival' : 'Your team'}</small><b>${teamName(s)}</b></p><span class="mub-ovr"><b>${teamOvr(sideLineup(s).map(x => x.entry))}</b><small>OVR</small></span></div>`;
+      <p><small>${s ? 'Rival' : 'Your team'}${c && COACHES[clubId(c)] ? ` · Coach ${COACHES[clubId(c)].name}` : ''}</small><b>${teamName(s)}</b></p><span class="mub-ovr"><b>${teamOvr(sideLineup(s).map(x => x.entry))}</b><small>OVR</small></span></div>`;
   };
   $('#mu-banner').innerHTML = `${side(0)}<span class="mub-vs" aria-hidden="true">VS</span>${side(1)}`;
   for (let s = 0; s < 2; s++) {
