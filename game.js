@@ -637,7 +637,6 @@ function startServe() {
   G.server = tutServer() || G.sides[s][0];
   Object.assign(G.ball, { vx: 0, vy: 0, vz: 0, gs: 1, trail: [], special: null, noHit: 0, knuck: null, top: false });
   G.touches = [0, 0]; G.lastSide = -1; G.lastToucher = null; G.serveLive = false; G.intended = [null, null]; G.lastAttack = null; G.setBy = null; G.killCam = null;
-  G.lineCall = G.refCall = null;
   G.setterNow = [null, null]; G.play = [null, null];
   G.phase = 'serve'; G.timer = 0; G.rally = 0;
   updateFormation();
@@ -1363,7 +1362,6 @@ function stepBall(h) {
   }
   if (b.y <= BR) { b.y = BR; ballDown(); return true; }
   if (Math.abs(b.x) > HW + 9 || Math.abs(b.z) > HL + 12) {
-    G.lineCall = { kind: lineCall(), t: G.time + 0.15 };
     if (aceFor(1 - G.lastSide)) awardAce(); else awardPoint(1 - G.lastSide, 'OUT', 'Hit out of bounds', null, null);
     return true;
   }
@@ -1387,14 +1385,12 @@ function ballDown() {
   const landSide = inCourt(b.x, b.z, 0) ? 0 : inCourt(b.x, b.z, 1) ? 1 : -1;
   G.rings.push({ x: b.x, z: b.z, t: 0, c: landSide === -1 ? '#ff6b6b' : '#ffffff' }); // a ring spreads where it lands
   if (landSide === -1) {
-    G.lineCall = { kind: lineCall(), t: G.time + 0.15 };
     if (aceFor(1 - G.lastSide)) { awardAce(); return; }
     awardPoint(1 - G.lastSide, 'OUT', `${G.lastToucher ? G.lastToucher.mon.name : 'The block'} hit it out`, null, null);
     return;
   }
   const w = 1 - landSide, la = G.lastAttack;
   let label = 'POINT', sub = 'The ball hit the sand', credit = null, key = null;
-  if (!(G.serveLive && G.lastSide === landSide)) G.lineCall = { kind: 'in', t: G.time + 0.15 };
   if (G.serveLive && G.lastSide === landSide) { label = 'SERVE FAULT'; sub = `${la.p.mon.name}'s serve did not cross the net`; }
   else if (aceFor(w)) { awardAce(); return; }
   else if (la && la.p.side === w && la.type !== 'serve') {
@@ -1432,7 +1428,6 @@ function awardPoint(w, label, sub, credit, key) {
   if (G.phase !== 'rally') return;
   if (!TUT) chargeError(w);
   G.score[w]++;
-  G.refCall = { w, t: G.time + 0.35 };
   if (credit && key) credit.stats[key]++;
   if (key === 'kills' && G.lastAttack && G.lastAttack.setter) G.lastAttack.setter.stats.ast++;
   G.cheer = 1; // the crowd jumps up
@@ -2286,20 +2281,20 @@ function buildSunset() { // sunset over the water, palms in silhouette, orange s
 const ARENA_SEATS = { riser: ['#20283f', '#262f4a'], seat: ['#33406a', '#2b365a'] };
 const VENUES = {
   beach: { mode: 2, name: 'Bleachers', backdrop: 'beach', court: 'sand', shirts: 'beach',
-    decks: [{ tiers: 4, endTiers: 3, rise: 0.45, depth: 0.85, gap: 3.0, base: 0, fill: 0.72, riser: ['#7a5232', '#8a5e3a'], seat: ['#c98d55', '#b97f4a'] }] },
+    decks: [{ tiers: 4, endTiers: 3, rise: 0.45, depth: 0.85, gap: 5.5, base: 0, fill: 0.72, riser: ['#7a5232', '#8a5e3a'], seat: ['#c98d55', '#b97f4a'] }] },
   pro: { mode: 2, name: 'Pro tour stadium', backdrop: 'beach', court: 'sand', shirts: 'beach', extras: ['sponsors', 'flags'],
-    decks: [{ tiers: 10, endTiers: 3, rise: 0.62, depth: 0.9, gap: 3.6, base: 0, fill: 0.88, riser: ['#8f98ab', '#7f889b'], seat: ['#3a7bd5', '#2f6bc0'] }] },
+    decks: [{ tiers: 10, endTiers: 3, rise: 0.62, depth: 0.9, gap: 6.1, base: 0, fill: 0.88, riser: ['#8f98ab', '#7f889b'], seat: ['#3a7bd5', '#2f6bc0'] }] },
   boardwalk: { mode: 2, name: 'Boardwalk', backdrop: 'beach', court: 'sand', shirts: 'beach', extras: ['rope', 'umbrellas', 'tower', 'lights'],
-    decks: [], standing: { rows: 3, gap: 2.8 } },
+    decks: [], standing: { rows: 3, gap: 5.3 } },
   arena: { mode: 6, name: 'Classic arena', backdrop: buildArena, court: '#e0904c', shirts: 'arena', extras: ['led'],
-    decks: [{ tiers: 7, endTiers: 6, rise: 0.55, depth: 0.95, gap: 3.4, base: 0, fill: 0.92, ...ARENA_SEATS }] },
+    decks: [{ tiers: 7, endTiers: 6, rise: 0.55, depth: 0.95, gap: 5.9, base: 0, fill: 0.92, ...ARENA_SEATS }] },
   bowl: { mode: 6, name: 'Mega bowl', backdrop: buildArenaBig, court: '#e0904c', shirts: 'arena', extras: ['led'],
     decks: [
-      { tiers: 10, endTiers: 10, rise: 0.6, depth: 0.9, gap: 3.4, base: 0, fill: 0.93, ...ARENA_SEATS },
-      { tiers: 12, endTiers: 12, rise: 0.85, depth: 1.0, gap: 3.4 + 9 + 2.2, base: 6 + 2.0, fill: 0.9, riser: ['#1a2036', '#20273f'], seat: ['#3a2f6a', '#32285c'], ribbon: true },
+      { tiers: 10, endTiers: 10, rise: 0.6, depth: 0.9, gap: 5.9, base: 0, fill: 0.93, ...ARENA_SEATS },
+      { tiers: 12, endTiers: 12, rise: 0.85, depth: 1.0, gap: 5.9 + 9 + 2.2, base: 6 + 2.0, fill: 0.9, riser: ['#1a2036', '#20273f'], seat: ['#3a2f6a', '#32285c'], ribbon: true },
     ] },
   night: { mode: 6, name: 'Championship night', backdrop: buildNight, court: '#d9874a', shirts: 'arena', extras: ['led', 'phones', 'lasers', 'dark'], teamSides: true,
-    decks: [{ tiers: 14, endTiers: 13, rise: 0.72, depth: 0.95, gap: 3.4, base: 0, fill: 0.95, riser: ['#141a2c', '#181f34'], seat: ['#222a44', '#1d243b'] }] },
+    decks: [{ tiers: 14, endTiers: 13, rise: 0.72, depth: 0.95, gap: 5.9, base: 0, fill: 0.95, riser: ['#141a2c', '#181f34'], seat: ['#222a44', '#1d243b'] }] },
 };
 const VENUE_DESC = {
   beach: 'Wooden bleachers along the sand, with palms, the sea and an island lighthouse behind.',
@@ -2422,12 +2417,12 @@ function drawStands() {
   for (let r = 2; r >= 0; r--) for (const q of C.byKey.get(`st${r}`) || []) drawFan(q);
   const z0 = -HL - 2;
   if (ex.includes('led')) { // LED ad boards around the court
-    const bx = HW + 2.9, zEnd = HL + 2.9, h = 0.8, cols = ['#ff5d5d', '#3fa7ff', '#ffcf33', '#1b2236'];
+    const lg = V.decks[0].gap - 0.5, bx = HW + lg, zEnd = HL + lg, h = 0.8, cols = ['#ff5d5d', '#3fa7ff', '#ffcf33', '#1b2236'];
     for (let i = 0, z = z0; z < zEnd; z += 2.4, i++) for (const sd of [-1, 1]) quad([[sd * bx, 0, z], [sd * bx, 0, z + 2.4], [sd * bx, h, z + 2.4], [sd * bx, h, z]], cols[(i + (sd > 0 ? 2 : 0)) % cols.length]);
     for (let i = 0, x = -bx; x < bx; x += 2.4, i++) quad([[x, 0, zEnd], [x + 2.4, 0, zEnd], [x + 2.4, h, zEnd], [x, h, zEnd]], cols[(i + 1) % cols.length]);
   }
   if (ex.includes('sponsors')) { // painted sponsor boards on the sand
-    const bx = HW + 3.0, zEnd = HL + 3.0, h = 0.9, logos = ['#ff5d5d', '#3fa7ff', '#ffcf33', '#6bd88a'];
+    const sg = V.decks[0].gap - 0.6, bx = HW + sg, zEnd = HL + sg, h = 0.9, logos = ['#ff5d5d', '#3fa7ff', '#ffcf33', '#6bd88a'];
     const board = (a, b, i, side) => {
       quad([[a[0], 0, a[1]], [b[0], 0, b[1]], [b[0], h, b[1]], [a[0], h, a[1]]], '#f4f6fb');
       const m = (u, v) => [a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u, v];
@@ -2452,7 +2447,7 @@ function drawStands() {
     ctx.fillStyle = u.col; ctx.beginPath(); ctx.moveTo(b.x - r, b.y + r * 0.3); ctx.lineTo(b.x, b.y - r * 0.35); ctx.lineTo(b.x + r, b.y + r * 0.3); ctx.closePath(); ctx.fill();
   }
   if (ex.includes('tower')) { // lifeguard tower
-    const x = HW + 8, z = HL - 2, legs = [[-0.8, -0.8], [0.8, -0.8], [-0.8, 0.8], [0.8, 0.8]];
+    const x = HW + 10.5, z = HL - 2, legs = [[-0.8, -0.8], [0.8, -0.8], [-0.8, 0.8], [0.8, 0.8]];
     ctx.strokeStyle = '#f4f6fb'; ctx.lineWidth = 4;
     for (const [dx, dz] of legs) { const a = proj(x + dx, 0, z + dz), b = proj(x + dx, 2.4, z + dz); ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke(); }
     quad([[x - 1, 2.4, z - 1], [x + 1, 2.4, z - 1], [x + 1, 3.6, z - 1], [x - 1, 3.6, z - 1]], '#f4f6fb');
@@ -2536,110 +2531,7 @@ function drawRefStand() { // the up referee's tall chair at the right-hand net p
   ctx.strokeStyle = '#d9dde6'; ctx.lineWidth = 4;
   for (const [dx, dz] of [[-0.4, -0.4], [0.4, -0.4], [-0.4, 0.4], [0.4, 0.4]]) { const a = proj(x + dx, 0, z + dz), b = proj(x + dx * 0.6, 1.8, z + dz * 0.6); ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke(); }
   quad([[x - 0.5, 1.8, z - 0.5], [x + 0.5, 1.8, z - 0.5], [x + 0.5, 1.8, z + 0.5], [x - 0.5, 1.8, z + 0.5]], '#9aa3b5');
-}
-// The officials: the first referee on the stand, the second referee on the floor across the net, and two line judges
-// in opposite corners (far right, near left), each watching the end line and the sideline that meet at their corner.
-// Line judge flags: IN points the flag down at the court, OUT raises it straight up, TOUCHED holds it up in front with
-// the other forearm laid across the top. After a point the first referee holds an arm out toward the team that scored.
-function officials() { // f: the way each one faces (unit vector on the ground)
-  const d = Math.SQRT1_2;
-  return [
-    { kind: 'up', x: HW + 1.4, y: 1.8, z: 0.02, f: [-1, 0] },          // side on, toward the net
-    { kind: 'down', x: -(HW + 1.1), y: 0, z: 0.02, f: [1, 0] },        // side on, toward the net
-    { kind: 'line', x: HW + 0.8, y: 0, z: HL + 0.8, f: [-d, -d] },     // diagonal, toward their corner
-    { kind: 'line', x: -(HW + 0.8), y: 0, z: -(HL + 0.9), f: [d, d] },     // usually just below the frame, like a broadcast
-  ];
-}
-function lineCall() { // what the line judges show for the ball that just landed (ballDown / out of bounds)
-  const la = G.lastAttack;
-  return la && (la.type === 'block' || la.p.side !== G.lastSide) ? 'touch' : 'out';
-}
-function hull(pts) { // convex hull of screen points (monotone chain)
-  pts = pts.slice().sort((a, b) => a.x - b.x || a.y - b.y);
-  const cr = (o, a, b) => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x), lo = [], up = [];
-  for (const p of pts) { while (lo.length > 1 && cr(lo[lo.length - 2], lo[lo.length - 1], p) <= 0) lo.pop(); lo.push(p); }
-  for (const p of pts.reverse()) { while (up.length > 1 && cr(up[up.length - 2], up[up.length - 1], p) <= 0) up.pop(); up.push(p); }
-  return lo.slice(0, -1).concat(up.slice(0, -1));
-}
-function drawOfficial(o) {
-  const SZ = 1.5; // drawn a little larger than life so the signals read at a distance
-  const Pw = (dx, dy, dz) => proj(o.x + dx * SZ, o.y + dy * SZ, o.z + dz * SZ);
-  // body space: l to the official's right, y up, f forward (the way they face)
-  const [fx, fz] = o.f, rx = fz, rz = -fx;
-  const Wd = ([l, y, f]) => [l * rx + f * fx, y, l * rz + f * fz];
-  const P = q => Pw(...Wd(q));
-  const f0 = Pw(0, 0, 0), k = f0.k * SZ;
-  if (f0.x < -120 || f0.x > W + 120 || f0.y < -80 || f0.y > H + 260) return;
-  const shirt = '#1f3a7a', pants = '#2a2f3d', skin = '#e0b48a', hair = '#2a2018';
-  const lw = Math.max(2, 0.11 * k), line = (a, b, col, w = lw) => { ctx.strokeStyle = col; ctx.lineWidth = w; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke(); };
-  const box = (l0, l1, y0, y1, g0, g1, col) => {
-    const pts = [];
-    for (const l of [l0, l1]) for (const y of [y0, y1]) for (const g of [g0, g1]) pts.push(P([l, y, g]));
-    const h = hull(pts); ctx.fillStyle = col; ctx.beginPath(); h.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y))); ctx.closePath(); ctx.fill();
-  };
-  const HIP = 0.55, SH = 1.02, faceCam = fz < -0.3; // the camera looks down +z, so a face toward -z is seen from the front
-  // arms: [shoulder, elbow, hand] in body space; the pose eases in over a fifth of a second
-  const sL = [-0.2, SH, 0], sR = [0.2, SH, 0];
-  const down = s => [s, [s[0] * 1.1, SH - 0.25, 0], [s[0] * 1.15, SH - 0.5, 0.03]];
-  let arms = [down(sL), down(sR)], flag = null;
-  const mix = (a, b, e) => a.map((v, i) => v + (b[i] - v) * e);
-  const ease = t0 => { const e = clamp((G.time - t0) / 0.2, 0, 1); return e * e * (3 - 2 * e); };
-  if (o.kind === 'line') { // the flag is in the right hand
-    const idleHand = [0.23, SH - 0.5, 0.08];
-    let hand = idleHand, tip = [0.25, SH - 0.95, 0.2], other = down(sL);
-    const call = G.lineCall;
-    if (call && call.t <= G.time) {
-      const ee = ease(call.t);
-      let h2, t2, o2 = other;
-      if (call.kind === 'in') { h2 = [0.3, SH - 0.32, 0.34]; t2 = [0.42, SH - 0.72, 0.76]; } // arm out and down, the flag pointing at the court
-      else if (call.kind === 'out') { h2 = [0.22, SH + 0.5, 0]; t2 = [0.23, SH + 1.0, 0]; } // straight up over the head
-      else { // touched: flag upright in front of the middle of the body, its top at shoulder/chest height, the other forearm across the top
-        h2 = [0, SH - 0.55, 0.24]; t2 = [0, SH - 0.06, 0.24];
-        const top = SH - 0.03;
-        o2 = [sL, [-0.32, top, 0.14], [0.12, top, 0.24]];
-      }
-      hand = mix(idleHand, h2, ee); tip = mix(tip, t2, ee); other = other.map((q, i) => mix(q, o2[i], ee));
-    }
-    arms = [other, [sR, mix(sR, hand, 0.5), hand]];
-    flag = [hand, tip];
-  } else if (o.kind === 'up' && G.refCall && G.time >= G.refCall.t) { // arm out sideways toward the team that won the point
-    const ee = ease(G.refCall.t), zs = -toward(G.refCall.w), side = zs * rz > 0 ? 1 : -1;
-    const out = [[0.2 * side, SH, 0], [0.46 * side, SH, 0], [0.72 * side, SH, 0]]; // straight out to the side at shoulder height, the whole arm extended
-    const i = side > 0 ? 1 : 0;
-    arms[i] = arms[i].map((q, j) => mix(q, out[j], ee));
-  }
-  // blocky like the crowd: each arm is a rectangular prism (a short sleeve, then the bare arm), the body one block, no legs
-  const prism = (a, b, t, col) => {
-    const d = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], dl = Math.hypot(...d) || 1, n = d.map(v => v / dl);
-    const crs = (p, q) => [p[1] * q[2] - p[2] * q[1], p[2] * q[0] - p[0] * q[2], p[0] * q[1] - p[1] * q[0]], nrm = v => { const L = Math.hypot(...v) || 1; return v.map(x => x / L); };
-    const u = nrm(Math.abs(n[1]) > 0.9 ? crs(n, [1, 0, 0]) : crs(n, [0, 1, 0])), v = nrm(crs(n, u)), pts = [];
-    for (const e of [a, b]) for (const su of [-t, t]) for (const sv of [-t, t]) pts.push(P([e[0] + u[0] * su + v[0] * sv, e[1] + u[1] * su + v[1] * sv, e[2] + u[2] * su + v[2] * sv]));
-    const h = hull(pts); ctx.fillStyle = col; ctx.beginPath(); h.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y))); ctx.closePath(); ctx.fill();
-  };
-  const drawArm = ([s0, el, hn]) => { prism(el, hn, 0.05, skin); prism(s0, el, 0.055, skin); prism(s0, mix(s0, el, 0.45), 0.065, shirt); };
-  const far = arm => Wd(arm[0])[2] > 0.01; // the shoulder away from the camera: that arm goes behind the body
-  arms.filter(far).forEach(drawArm);
-  // legs, body, head
-  if (venue().court === 'sand') { box(-0.19, 0.19, 0, HIP - 0.22, -0.09, 0.09, skin); box(-0.21, 0.21, HIP - 0.22, HIP, -0.11, 0.11, pants); } // beach: shorts
-  else box(-0.21, 0.21, 0, HIP, -0.11, 0.11, pants);
-  box(-0.21, 0.21, HIP, SH + 0.04, -0.11, 0.11, shirt);
-  if (faceCam) box(-0.06, 0.06, SH, SH + 0.05, 0.11, 0.12, '#ffffff'); // collar
-  const h0 = SH + 0.07, h1 = SH + 0.34;
-  if (faceCam) box(-0.135, 0.135, h0 + 0.05, h1, -0.135, -0.03, hair);
-  box(-0.135, 0.135, h0, h1, -0.135, 0.135, skin);
-  if (!faceCam) box(-0.135, 0.135, h0 + 0.05, h1, -0.135, -0.03, hair); // the back of the head
-  box(-0.135, 0.135, h1 - 0.07, h1, -0.135, 0.135, hair);
-  arms.filter(a => !far(a)).forEach(drawArm);
-  if (flag) { // stick, then a red and yellow cloth near the tip
-    const [h, t] = flag.map(Wd), a = Pw(...h), b = Pw(...t);
-    line(a, b, hair, Math.max(1.5, 0.04 * k));
-    const d = [t[0] - h[0], t[1] - h[1], t[2] - h[2]], L = Math.hypot(...d) || 1, u = d.map(v => v / L);
-    const back = [t[0] - u[0] * 0.24, t[1] - u[1] * 0.24, t[2] - u[2] * 0.24];
-    const side = Math.abs(u[1]) > 0.7 ? [rx * 0.24, 0, rz * 0.24] : [0, 0.2, 0]; // the cloth flies to one side
-    const c0 = Pw(...t), c1 = Pw(...back), c2 = Pw(back[0] + side[0], back[1] + side[1], back[2] + side[2]), c3 = Pw(t[0] + side[0], t[1] + side[1], t[2] + side[2]);
-    ctx.fillStyle = '#e8352b'; ctx.beginPath(); ctx.moveTo(c0.x, c0.y); ctx.lineTo(c1.x, c1.y); ctx.lineTo(c2.x, c2.y); ctx.closePath(); ctx.fill();
-    ctx.fillStyle = '#ffd23a'; ctx.beginPath(); ctx.moveTo(c0.x, c0.y); ctx.lineTo(c2.x, c2.y); ctx.lineTo(c3.x, c3.y); ctx.closePath(); ctx.fill();
-  }
+  drawFan({ x, y: 1.8, z, shirt: '#1b1f2a', skin: '#e0b48a', ph: 1, rate: 1, standing: true });
 }
 function drawProps() {
   const V = venue(), C = crowdCache;
@@ -2660,7 +2552,7 @@ function drawProps() {
   for (const p of C.palms) drawPalm(p.x, p.z, p.h, p.v, p.flip);
   if (settings.time === 'night') drawLightPoles();
   for (const sd of [-1, 1]) {
-    const x = sd * (HW + 2.2), z = -HL - 0.8;
+    const x = sd * (HW + 1.6), z = -HL - 0.8;
     quad([[x - 0.35, 0, z], [x + 0.35, 0, z], [x + 0.35, 0.45, z], [x - 0.35, 0.45, z]], sd < 0 ? '#3fa7ff' : '#ff5d5d'); // cooler
     quad([[x - 0.35, 0.45, z], [x + 0.35, 0.45, z], [x + 0.35, 0.5, z + 0.45], [x - 0.35, 0.5, z + 0.45]], '#ffffff');
     const bx = sd * (HW + 2.3), bz = -HL + 1.2; // surfboard stuck in the sand
@@ -2739,6 +2631,13 @@ function drawVenueLights() {
   }
 }
 
+// Indoors: the hall floor out to the stands, so the wider run-off around the court reads as floor, not the painted backdrop.
+function drawArenaFloor() {
+  const V = venue(); if (V.mode !== 6) return;
+  const d = V.decks[0], X = HW + d.gap + d.depth * d.tiers, Z = HL + d.gap + d.depth * d.endTiers;
+  ctx.fillStyle = (V.extras || []).includes('dark') ? '#16203a' : '#24407a';
+  groundPoly([[-X, -HL - 4], [X, -HL - 4], [X, Z], [-X, Z]]); ctx.fill();
+}
 function drawCourt() {
   ctx.fillStyle = venue().court === 'sand' ? (settings.time === 'sunset' ? '#efc98f' : '#f7e6b8') : venue().court;
   groundPoly([[-HW, -HL], [HW, -HL], [HW, HL], [-HW, HL]]); ctx.fill();
@@ -3089,6 +2988,7 @@ function render() {
   drawBackdrop();
   drawSkyFx();
   drawArenaWall();
+  drawArenaFloor();
   drawStands();
   drawProps();
   drawCourt();
@@ -3158,7 +3058,6 @@ function render() {
   // far side, the net, then the near side
   const items = [...G.players, ...G.bench[0], ...G.bench[1], ...G.sideline[0]].map(p => ({ z: p.z, d: () => drawPlayer(p) }));
   items.push({ z: b.z, d: () => drawBall(b) });
-  for (const o of officials()) items.push({ z: o.z, d: () => drawOfficial(o) });
   for (const q of G.particles) items.push({ z: q.z, d: () => drawParticle(q) });
   items.sort((a, c) => c.z - a.z);
   let netDrawn = false;
