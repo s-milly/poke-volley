@@ -1282,8 +1282,9 @@ function doBlock(p) {
     // a stuff mostly angles down off the hands or carries deeper into their court; now and then it drops straight down at the hitter's feet
     b.z = t * (BR + 0.12);
     const k = Math.random();
-    if (k < 0.2) { b.vz = t * rand(0.4, 1.6); b.vy = -rand(4.5, 7.5); b.vx = rand(-0.6, 0.6); } // straight down
-    else if (k < 0.62) { b.vz = t * rand(0.8, 2.4); b.vy = -rand(3.5, 6.5); b.vx = side * rand(1.8, 3.6); } // down on a diagonal
+    // your own stuffs drop straight down far less often, and less hard, than the computer's
+    if (k < (human ? 0.08 : 0.2)) { b.vz = t * rand(human ? 0.8 : 0.4, human ? 2 : 1.6); b.vy = -(human ? rand(3.5, 5.5) : rand(4.5, 7.5)); b.vx = rand(-0.6, 0.6); } // straight down
+    else if (k < (human ? 0.48 : 0.62)) { b.vz = t * rand(0.8, 2.4); b.vy = -rand(3.5, 6.5); b.vx = side * rand(1.8, 3.6); } // down on a diagonal
     else { b.vz = t * rand(2.5, 5); b.vy = -rand(1, 3); b.vx = glance(0.5, 3); } // deeper into their court
     G.lastAttack = { p, type: 'block', hitter: atk };
     G.shake = 0.2; hitstop(0.16, '#ffffff');
