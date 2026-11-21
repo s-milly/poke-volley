@@ -45,8 +45,8 @@ const customStart = () => { // an even spread, the leftover points from the left
 };
 const sumStats = r => STAT_IDS.reduce((a, k) => a + r[k], 0);
 
-// XP for one more point in a stat now at v: 10 in the 30s, then 4 more for each band of ten.
-const upCost = v => 10 + 4 * Math.max(0, Math.floor((v - 30) / 10));
+// XP for one more point in any stat: 10 at OVR 40, then 6.5% more for each point of OVR, so it climbs faster the higher you get.
+const upCost = c => Math.round(10 * Math.pow(1.065, Math.max(0, careerOvr(c) - 40)));
 
 // ---------- saves ----------
 // A career: { v, name, mon, pos, arch ('custom' or an ARCHETYPES key), r, cap, xp, xpEarned, season, diff, created }.
@@ -327,7 +327,7 @@ function renderTabs(c) {
   $('#tab-awards').hidden = !(L && phaseOf(L) === 'done' && (L.awards || []).length);
   const canDrill = !$('#hub-train-wrap').hidden && !(c.drill && c.drill.key === drillKey(c));
   $('#tab-home-badge').hidden = !canDrill; $('#tab-home-badge').textContent = 'Train';
-  const canUp = STAT_KEYS.some(([k]) => c.r[k] < c.cap[k] && c.xp >= upCost(c.r[k]));
+  const canUp = STAT_KEYS.some(([k]) => c.r[k] < c.cap[k] && c.xp >= upCost(c));
   $('#tab-up-badge').hidden = !canUp; $('#tab-up-badge').textContent = `${c.xp} XP`;
   setHubTab(hubTab);
 }
@@ -340,7 +340,7 @@ function renderHub(focusStat) {
   $('#hub-xp').innerHTML = `<b>${c.xp}</b> XP to spend`;
   const ups = $('#hub-ups'); ups.innerHTML = '';
   for (const [k, label, tip] of STAT_KEYS) {
-    const v = c.r[k], full = v >= c.cap[k], cost = upCost(v);
+    const v = c.r[k], full = v >= c.cap[k], cost = upCost(c);
     const row = el('div', 'rtg-up');
     row.innerHTML = `<span class="rtg-stat" title="${tip}">${label}</span><span class="track" aria-hidden="true"><span class="fill ${barClass(v)}" style="width:${v}%"></span><i class="cap" style="left:${c.cap[k]}%"></i></span><b>${v}</b><span class="cap-n">/ ${c.cap[k]}</span>`;
     const b = el('button', 'ghost small', full ? 'At cap' : `+1 · ${cost} XP`); b.type = 'button';
@@ -362,7 +362,7 @@ function renderHub(focusStat) {
 }
 function upgrade(k) {
   const c = careers[slot]; if (!c) return;
-  const cost = upCost(c.r[k]);
+  const cost = upCost(c);
   if (c.r[k] >= c.cap[k] || c.xp < cost) return;
   c.xp -= cost; c.r[k]++;
   const up = promote(c); saveCareers();
