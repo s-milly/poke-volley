@@ -641,7 +641,7 @@ function startServe() {
   G.phase = 'serve'; G.timer = 0; G.rally = 0;
   updateFormation();
   for (const p of G.players) {
-    p.x = p.homeX; p.z = p.homeZ; p.y = 0; p.vx = p.vy = p.vz = 0; p.onGround = true; p.cool = 0; p.ai.blockWait = -1;
+    p.x = p.homeX; p.z = p.homeZ; p.y = 0; p.vx = p.vy = p.vz = 0; p.onGround = true; p.cool = 0; p.hitAir = false; p.ai.blockWait = -1;
     p.dive = p.rec = 0;
   }
   const sv = G.server;
@@ -673,7 +673,7 @@ function stepPlayer(p, h) {
   if (!p.onGround) p.vy -= pGrav(p.vy) * h;
   p.x += p.vx * h; p.z += p.vz * h; p.y += p.vy * h;
   if (p.y <= 0) {
-    if (!p.onGround) { p.squash = 0.78; p.blockUp = false; dust(p.x, p.z, 4, '#e8d3a2'); }
+    if (!p.onGround) { p.squash = 0.78; p.blockUp = false; p.hitAir = false; dust(p.x, p.z, 4, '#e8d3a2'); }
     p.y = 0; p.vy = 0; p.onGround = true;
   }
   clampPlayer(p);
@@ -883,6 +883,7 @@ function serveMiss(kind, s, tx, T, gs) {
 const ownServe = p => G.serveLive && p.side === G.lastSide;
 function doServe(p, q = null) {
   const s = p.side, t = toward(s);
+  G.ball.offBlock = false;
   for (const k of [1 - s, s]) {
     if (!TUT && overlaps(k).length) { // out of rotation order when the ball is served
       G.phase = 'rally';
@@ -972,10 +973,11 @@ function contact(p) {
   }
 
   // block at the net (a libero may not block)
-  if (p.role !== 'L' && !p.onGround && !p.dive && (aiControlled(p) || p.blockUp) && Math.abs(p.z) < p.rr + 0.9 && fromOpp && b.vz * t < 0 && b.y > NET_H - 0.3 && G.lastSide !== -1) {
+  if (canBlock(p) && Math.abs(p.z) < p.rr + 0.9 && fromOpp && b.vz * t < 0 && b.y > NET_H - 0.3 && G.lastSide !== -1) {
     doBlock(p);
     return;
   }
+  b.offBlock = false; if (!p.onGround) p.hitAir = true; // a player who plays the ball in the air cannot block on that same jump
 
   if (fromOpp) { G.touches[s] = 0; G.intended[1 - s] = null; }
   G.touches[s]++;
@@ -1249,6 +1251,8 @@ function spikeError(p, tx) {
   return true;
 }
 
+// A ball that just came off a block cannot be blocked straight back, and nobody blocks on the same jump they already played the ball on.
+const canBlock = p => p.role !== 'L' && !p.onGround && !p.dive && !p.hitAir && !G.ball.offBlock && (aiControlled(p) || p.blockUp);
 function doBlock(p) {
   const s = p.side, t = toward(s), b = G.ball;
   const atk = G.lastAttack && G.lastAttack.p;
@@ -1259,7 +1263,7 @@ function doBlock(p) {
   // a computer blocker can be beaten clean; when you get there in time you always get a hand on it
   if (!human && !stuff && roll < clamp(chance, 0.08, 0.75) + 0.4) { p.cool = 0.5; return; }
   if (human) tutEvent('block', { stuff });
-  p.cool = 0.3; b.noHit = 0.08; b.special = null; b.gs = 1; G.tid++;
+  p.cool = 0.3; b.noHit = 0.08; b.special = null; b.gs = 1; G.tid++; b.offBlock = true; p.hitAir = true;
   // beach rules (2 v 2): the block counts as one of the 3 touches. Indoors (6 v 6) it does not. Either way the blocker may play it next.
   G.lastToucher = null; G.lastSide = s; G.serveLive = false; G.touches[s] = settings.mode === 2 ? 1 : 0; G.intended[s] = null; G.intended[1 - s] = null;
   // where it meets the hands steers it: off the outside of a hand it glances away diagonally
@@ -1313,7 +1317,7 @@ function stepBall(h) {
     const sIn = b.z < 0 ? 0 : 1;
     if (G.lastSide === 1 - sIn) {
       for (const p of G.sides[sIn]) {
-        if (p.role === 'L' || p.onGround || p.cool > 0 || Math.abs(p.z) > p.rr + 1.0 || !(aiControlled(p) || p.blockUp)) continue; // you block with right click in the air
+        if (!canBlock(p) || p.cool > 0 || Math.abs(p.z) > p.rr + 1.0) continue; // you block with right click in the air
         if (Math.abs(b.x - p.x) < p.rr + 0.55 && b.y <= p.y + p.rr * 2 + 0.9) { doBlock(p); break; }
       }
     }
