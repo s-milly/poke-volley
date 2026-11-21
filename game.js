@@ -1261,7 +1261,7 @@ function doBlock(p) {
   const human = !aiControlled(p);
   // a second blocker on the same spike, after the first was beaten, has far less of the ball to get to
   const again = b.blkTid === G.tid; b.blkTid = G.tid;
-  const chance = ((human ? 0.5 : parsOf(s).block * 0.8)
+  const chance = ((human ? 0.45 : parsOf(s).block * 0.7)
              + (p.r.jmp - (atk ? atk.r.pwr : 50)) / 250) * (again ? 0.45 : 1);
   const c = clamp(chance, human ? 0.12 : 0.05, human ? 0.75 : 0.55);
   const roll = Math.random(), stuff = roll < c;
@@ -1279,11 +1279,11 @@ function doBlock(p) {
   const off = clamp((b.x - p.x) / (p.rr + 0.55), -1, 1), side = off === 0 ? (Math.random() < 0.5 ? -1 : 1) : Math.sign(off);
   const glance = (lo, hi) => side * rand(lo, hi) * (0.5 + Math.abs(off)) + rand(-0.6, 0.6);
   if (stuff) {
-    // a stuff mostly goes straight down at the hitter's feet, or down at an angle off the hands; now and then it carries deeper
+    // a stuff mostly angles down off the hands or carries deeper into their court; now and then it drops straight down at the hitter's feet
     b.z = t * (BR + 0.12);
     const k = Math.random();
-    if (k < 0.45) { b.vz = t * rand(0.4, 1.6); b.vy = -rand(4.5, 7.5); b.vx = rand(-0.6, 0.6); } // straight down
-    else if (k < 0.85) { b.vz = t * rand(0.8, 2.4); b.vy = -rand(3.5, 6.5); b.vx = side * rand(1.8, 3.6); } // down on a diagonal
+    if (k < 0.2) { b.vz = t * rand(0.4, 1.6); b.vy = -rand(4.5, 7.5); b.vx = rand(-0.6, 0.6); } // straight down
+    else if (k < 0.62) { b.vz = t * rand(0.8, 2.4); b.vy = -rand(3.5, 6.5); b.vx = side * rand(1.8, 3.6); } // down on a diagonal
     else { b.vz = t * rand(2.5, 5); b.vy = -rand(1, 3); b.vx = glance(0.5, 3); } // deeper into their court
     G.lastAttack = { p, type: 'block', hitter: atk };
     floatText('BLOCK!', p.x, p.cy + p.rr + 0.6, p.z, '#fff', 1);
@@ -1291,28 +1291,25 @@ function doBlock(p) {
   } else {
     // a touch that does not stuff it: the spike can go on through the hands, pop up, drop on either side of the net or glance off wide
     const r = Math.random();
-    let label;
-    if (r < 0.36) { // hit through the block: it keeps its line, a little slower, so it lands near where it was aimed and is diggable
+    if (r < 0.34) { // hit through the block: it keeps its line, a little slower, so it lands near where it was aimed and is diggable
       const sp = spikeGs || 1, kk = rand(0.65, 0.82);
       b.z = -t * (BR + 0.12);
       b.vx = b.vx * kk + rand(-0.8, 0.8); b.vz = b.vz * kk; b.vy = b.vy * kk + rand(0, 1); b.gs = sp * kk * kk;
       if (b.vz * t > -1) b.vz = -t * rand(4, 7); // never stalls at the net
-      label = 'Through the block';
-    } else if (r < 0.50) { // pops up on the blocker's side, playable
-      b.z = -t * (BR + 0.12); b.vz = -t * rand(0.8, 2.6); b.vy = rand(2.2, 4.5); b.vx = glance(0.3, 2); label = 'Soft block';
-    } else if (r < 0.64) { // deflects down into the blocker's side near the net
-      b.z = -t * (BR + 0.12); b.vz = -t * rand(2.5, 5.5); b.vy = -rand(0.3, 2.5); b.vx = glance(0.8, 3.5); label = 'Deflected';
-    } else if (r < 0.78) { // flies high off the hands and far from the net: a long chase, deep on either side, sometimes out the back
+    } else if (r < 0.47) { // pops up on the blocker's side, playable
+      b.z = -t * (BR + 0.12); b.vz = -t * rand(0.8, 2.6); b.vy = rand(2.2, 4.5); b.vx = glance(0.3, 2);
+    } else if (r < 0.60) { // deflects down into the blocker's side near the net
+      b.z = -t * (BR + 0.12); b.vz = -t * rand(2.5, 5.5); b.vy = -rand(0.3, 2.5); b.vx = glance(0.8, 3.5);
+    } else if (r < 0.76) { // flies high off the hands and far from the net: a long chase, deep on either side, sometimes out the back
       const back = Math.random() < 0.65 ? -t : t, vy = rand(5, 7.5);
       const T = (vy + Math.sqrt(vy * vy + 2 * GB * Math.max(0, b.y - BR))) / GB;
-      b.z = back * (BR + 0.12); b.vy = vy; b.vz = back * HL * rand(0.6, 1.08) / T; b.vx = glance(0.5, 2.5); label = 'Off the block, long';
-    } else if (r < 0.89) { // falls back onto the hitter's side
-      b.z = t * (BR + 0.12); b.vz = t * rand(1, 3); b.vy = rand(-1.5, 2); b.vx = glance(0.5, 2.5); label = 'Off the block';
+      b.z = back * (BR + 0.12); b.vy = vy; b.vz = back * HL * rand(0.6, 1.08) / T; b.vx = glance(0.5, 2.5);
+    } else if (r < 0.87) { // falls back onto the hitter's side
+      b.z = t * (BR + 0.12); b.vz = t * rand(1, 3); b.vy = rand(-1.5, 2); b.vx = glance(0.5, 2.5);
     } else { // glances off the edge of the hands toward the sideline
       const back = Math.random() < 0.5 ? t : -t;
-      b.z = back * (BR + 0.12); b.vz = back * rand(1.5, 4); b.vy = rand(-0.5, 2.5); b.vx = side * rand(4, 7); label = 'Off the hands';
+      b.z = back * (BR + 0.12); b.vz = back * rand(1.5, 4); b.vy = rand(-0.5, 2.5); b.vx = side * rand(4, 7);
     }
-    floatText(label, p.x, p.cy + p.rr + 0.6, p.z, '#dfe8ff', 0.8);
   }
   rerollAI();
   Sfx.block();
