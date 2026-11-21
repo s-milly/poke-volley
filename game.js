@@ -1262,16 +1262,30 @@ function doBlock(p) {
   p.cool = 0.3; b.noHit = 0.08; b.special = null; b.gs = 1; G.tid++;
   // beach rules (2 v 2): the block counts as one of the 3 touches. Indoors (6 v 6) it does not. Either way the blocker may play it next.
   G.lastToucher = null; G.lastSide = s; G.serveLive = false; G.touches[s] = settings.mode === 2 ? 1 : 0; G.intended[s] = null; G.intended[1 - s] = null;
+  // where it meets the hands steers it: off the outside of a hand it glances away diagonally
+  const off = clamp((b.x - p.x) / (p.rr + 0.55), -1, 1), side = off === 0 ? (Math.random() < 0.5 ? -1 : 1) : Math.sign(off);
+  const glance = (lo, hi) => side * rand(lo, hi) * (0.5 + Math.abs(off)) + rand(-0.6, 0.6);
   if (stuff) {
     b.z = t * (BR + 0.12);
-    b.vz = t * rand(3, 6); b.vy = -rand(1, 3); b.vx = rand(-1.5, 1.5);
+    b.vz = t * rand(2.5, 6); b.vy = -rand(1, 3.5); b.vx = glance(0.5, 3.2);
     G.lastAttack = { p, type: 'block' };
     floatText('BLOCK!', p.x, p.cy + p.rr + 0.6, p.z, '#fff', 1);
     G.shake = 0.2; hitstop(0.16, '#ffffff');
   } else {
-    b.z = -t * (BR + 0.12);
-    b.vz = -t * rand(1, 2.5); b.vy = rand(4, 6); b.vx = rand(-1, 1);
-    floatText('Soft block', p.x, p.cy + p.rr + 0.6, p.z, '#dfe8ff', 0.8);
+    // a touch that does not stuff it: it can pop up, drop on either side of the net or glance off wide
+    const r = Math.random();
+    let label;
+    if (r < 0.35) { // pops up on the blocker's side, playable
+      b.z = -t * (BR + 0.12); b.vz = -t * rand(0.8, 2.6); b.vy = rand(2.2, 4.5); b.vx = glance(0.3, 2); label = 'Soft block';
+    } else if (r < 0.65) { // deflects down into the blocker's side near the net
+      b.z = -t * (BR + 0.12); b.vz = -t * rand(2.5, 5.5); b.vy = -rand(0.3, 2.5); b.vx = glance(0.8, 3.5); label = 'Deflected';
+    } else if (r < 0.85) { // falls back onto the hitter's side
+      b.z = t * (BR + 0.12); b.vz = t * rand(1, 3); b.vy = rand(-1.5, 2); b.vx = glance(0.5, 2.5); label = 'Off the block';
+    } else { // glances off the edge of the hands toward the sideline
+      const back = Math.random() < 0.5 ? t : -t;
+      b.z = back * (BR + 0.12); b.vz = back * rand(1.5, 4); b.vy = rand(-0.5, 2.5); b.vx = side * rand(4, 7); label = 'Off the hands';
+    }
+    floatText(label, p.x, p.cy + p.rr + 0.6, p.z, '#dfe8ff', 0.8);
   }
   rerollAI();
   Sfx.block();
