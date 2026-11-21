@@ -462,7 +462,11 @@ function overlaps(s) {
 // The libero always replaces the middle blocker who is in the back row (zones 1, 5 and 6).
 // Swaps happen between rallies. The benched player waits at the sideline.
 // Both teams' benches are on the same sideline as the scorer's table (world x < 0), each on its own half.
-const benchSpot = s => [-(HW + 1.6), -0.3 * HL * toward(s)];
+// 6 v 6: the bench's first two seats (nearest the net) are kept for players coming on and off: seat 0 for the libero
+// or the middle sitting for it, seat 1 for you before you come on and the starter you replace. The rest of the bench
+// is teammates who never play. Smaller games have no bench, so players wait standing by the sideline.
+const seatSpot = (s, i) => [-(HW + 2.45), -toward(s) * (3.6 + i * 1.05)];
+const benchSpot = (s, i = 0) => settings.mode === 6 ? seatSpot(s, i) : [-(HW + 1.6), -0.3 * HL * toward(s) - i * 1.2];
 const subZone = s => [-(HW + 0.5), -attackLine() * 0.5 * toward(s)]; // the sub zone: on the sideline between the 10 foot (attack) line and the net, on that team's half
 
 // The libero plays in place of the middle blocker who is in the back row (zones 1, 5 and 6), as in real volleyball.
@@ -532,7 +536,7 @@ function runSubs(dt) {
         if (job.rookie) rookieSwap(job); else finishSub(job);
       }
     } else if (job.stage === 'leave') { // off to the bench, on to the court
-      const [bx, bz] = benchSpot(s);
+      const [bx, bz] = benchSpot(s, job.rookie ? 1 : 0);
       moveToward(out, bx, bz, 0.75); moveToward(inn, inn.homeX, inn.homeZ, 0.75);
       const done = Math.hypot(out.x - bx, out.z - bz) < 0.2 && Math.hypot(inn.x - inn.homeX, inn.z - inn.homeZ) < 0.3;
       if (done || job.t > 3) { job.stage = 'done'; out.subbing = inn.subbing = false; }
@@ -623,17 +627,17 @@ function newMatch(demo = false) { // demo: the title screen's background match, 
     cam: { x: 0, y: CAM.y, z: -HL - CAM.back, yaw: 0, pitch: CAM.pitch }, demo,
     sideline: [[], []], rookie: null, simFast: false, // players standing by the bench: you before you come on, a starter after
   };
-  G.benchMons = [[], []]; // 6 v 6: five teammates sitting on each team's bench, the same five for a club every match
+  G.benchMons = [[], []]; // 6 v 6: three teammates on each team's bench (seats 2 to 4), the same three for a club every match
   if (n === 6) {
     const used = new Set([...teams[0], ...teams[1]].map(e => e.mon.id));
     for (let s = 0; s < 2; s++) {
       const id = clubs && clubs[s] ? clubId(clubs[s]) : String(s), rnd = seeded([...id].reduce((a, ch) => a * 31 + ch.charCodeAt(0), 7) >>> 0);
       // the club's own shuffled order of Pokémon up to 1.7 m tall (heights are in decimetres), skipping any already playing
-      const order = DEX.filter(m => !m.leg && m.h <= 17).map(m => [rnd(), m]).sort((a, b) => a[0] - b[0]).map(x => x[1]).filter(m => !used.has(m.id)).slice(0, 5);
+      const order = DEX.filter(m => !m.leg && m.h <= 17).map(m => [rnd(), m]).sort((a, b) => a[0] - b[0]).map(x => x[1]).filter(m => !used.has(m.id)).slice(0, 3);
       for (let i = 0; i < order.length; i++) {
         const m = order[i]; used.add(m.id);
         const p = new Player(makeEntry(m, false), s, false, size * 0.85);
-        p.x = -(HW + 2.45); p.z = -toward(s) * (3.6 + i * 1.05); p.y = 0.3; p.seat = 0.3;
+        [p.x, p.z] = seatSpot(s, i + 2); p.y = 0.3; p.seat = 0.3;
         G.benchMons[s].push(p);
       }
     }
@@ -641,7 +645,7 @@ function newMatch(demo = false) { // demo: the title screen's background match, 
   const bench = demo ? null : benchEntry();
   if (bench) {
     const r = new Player(bench, 0, false, size); r.role = settings.role[n]; r.on = false;
-    const [bx, bz] = benchSpot(0); r.x = bx; r.z = bz - 1.2; r.face = 1;
+    const [bx, bz] = benchSpot(0, 1); r.x = bx; r.z = bz; r.face = 1;
     G.rookie = r; G.sideline[0].push(r); all[0].push(r);
   }
   startServe();
@@ -662,7 +666,7 @@ function startServe() {
   else for (const job of G.subs) { // never start a serve mid-swap
     if (job.stage !== 'leave') { if (job.rookie) rookieSwap(job); else finishSub(job); }
     job.out.subbing = job.inn.subbing = false;
-    const [bx, bz] = benchSpot(job.s); job.out.x = bx; job.out.z = bz;
+    const [bx, bz] = benchSpot(job.s, job.rookie ? 1 : 0); job.out.x = bx; job.out.z = bz;
   }
   G.subs = [];
   G.players = [...G.sides[0], ...G.sides[1]];
@@ -3120,7 +3124,10 @@ function render() {
     }
   }
   // far side, the net, then the near side
-  const items = [...G.players, ...G.bench[0], ...G.bench[1], ...G.sideline[0]].map(p => ({ z: p.z, d: () => drawPlayer(p) }));
+  const items = G.players.map(p => ({ z: p.z, d: () => drawPlayer(p) }));
+  for (const p of [...G.bench[0], ...G.bench[1], ...G.sideline[0]]) items.push({ z: p.z, d: () => { // sit while waiting on a bench seat
+    const y0 = p.y, sit = settings.mode === 6 && !p.subbing && p.x < -(HW + 2.2);
+    if (sit) p.y = 0.3; drawPlayer(p); p.y = y0; } });
   items.push({ z: b.z, d: () => drawBall(b) });
   for (const p of (G.benchMons || []).flat()) items.push({ z: p.z, d: () => { // a hop when their team scores
     p.y = p.seat + (G.lastW === p.side ? Math.abs(Math.sin(G.time * 9 + p.z)) * G.cheer * 0.35 : 0); drawPlayer(p); } });
