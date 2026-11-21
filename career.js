@@ -303,7 +303,8 @@ function renderStrip(c) { // the season at a glance, over the tabs
     chips.push(['Season ' + c.season, ph === 'regular' ? `Week ${Math.min(L.week + 1, WEEKS)} of ${WEEKS}` : ph === 'done' ? 'Season over' : ROUND_NAMES[ph]]);
     chips.push(['Record', `${t.w}-${t.l}`]);
     chips.push(['Division', t.w + t.l ? `${ORD[place]} in the ${DIV_NAMES[divOf(L.myClub)].split(' ')[0]}` : DIV_NAMES[divOf(L.myClub)]]); // no place until a match is played
-    chips.push(['Status', c.starter ? 'Starter' : `Bench · trust ${c.trust || 0}/${TRUST_START}`]);
+    chips.push(['Status', c.starter ? 'Starter' : 'Bench']);
+    chips.push(['Team trust', `${trustOf(c)}% · ${trustLabel(trustOf(c))}`]);
   } else chips.push(['Season ' + c.season, 'Not drafted yet']);
   chips.push(['XP to spend', `${c.xp} XP`]);
   $('#hub-strip').innerHTML = chips.map(([k, v]) => `<li><small>${k}</small><b>${v}</b></li>`).join('');
@@ -542,19 +543,35 @@ function matchXp(c, st, won, ph) {
   return Math.round((10 + (won ? 10 : 0) + perf) * (ph === 'regular' ? 1 : 1.5));
 }
 
-// ---------- the bench ----------
-// A rookie starts on the bench and earns a starting spot one of two ways: the coach's trust reaches TRUST_START from
-// good play off the bench, or your OVR catches up with the starter ahead of you. (OVR, not position fit: a build made
-// for a position already fits it about as well as a weak club's starter does.)
-const TRUST_START = 100, BENCH_XP = 5;
+// ---------- team trust ----------
+// Trust runs from 0% (a new rookie, or a new arrival at a club) to 100%. It decides two things:
+// - Playing time. Off the bench, the coach only calls you in at more moments as trust grows (careerCallIn), and you
+//   start once it reaches TRUST_START, or once your OVR catches up with the starter ahead of you and trust is at least
+//   TRUST_OVR. (OVR, not position fit: a build made for a position already fits it about as well as a weak club's
+//   starter does.)
+// - How often the setter picks you (trustSetWeight, used by choosePlay in game.js). It keeps growing once you start.
+const TRUST_START = 60, TRUST_OVR = 35, BENCH_XP = 5;
 const callLate = target => Math.round(target * 2 / 3); // 10 in a set to 15, 17 in a set to 25
-// 10 for coming on, 1.5 per point of your box score share (as in matchXp, up to 25) and 10 for a win (a met coach's
-// goal adds GOAL_TRUST): about 20 to 35 for a usual outing off the bench, so a starting spot in three to five
-// matches, and never fewer than two.
-function trustGain(c, st, won) {
+const trustOf = c => clamp(Math.round(c.trust || 0), 0, 100);
+// A match: 2 for coming on, up to 6 from your box score (as in matchXp), 1 for a win and GOAL_TRUST for a met
+// coach's goal. A short outing off the bench is about 2 to 5, a full match as a starter 5 to 10, and a starter's
+// quiet loss costs 2. Sitting the whole match gives 1. With training (drillTrust), a rookie usually starts some
+// time in the second half of the first season.
+function trustGain(c, st, won, played, met) {
+  if (!played) return 1;
   const perf = POS_XP[c.pos] * (2 * st.kills + 3 * st.aces + 3 * st.blocks + 1.5 * st.digs + 0.5 * st.ast);
-  return 10 + Math.min(25, Math.round(perf * 1.5)) + (won ? 10 : 0);
+  if (c.starter && perf < 3 && !won && !met) return -2;
+  return 2 + Math.min(6, Math.round(perf / 4)) + (won ? 1 : 0) + (met ? GOAL_TRUST : 0);
 }
+const drillTrust = score => (score >= 70 ? 3 : score >= 35 ? 2 : 1); // showing up to train counts too
+// The setter's weight for you against a teammate's 1 (game.js). 0.22 at 0% trust, 0.85 at 55% and 1.6 at 100%: as
+// an outside in the front row, about 1 set in 10 at 0%, 3 in 10 at 55% and 4 in 10 at 100%. Calling for the ball
+// multiplies it by 1 at 0% (they do not listen yet) up to 3.5 at 100%. (Quick play has no trust: 3, and 12 called.)
+function trustSetWeight(callMe) {
+  const u = trustOf(careers[careerMatch.slot]) / 100;
+  return (0.22 + 1.38 * u ** 1.3) * (callMe ? 1 + 2.5 * u ** 1.5 : 1);
+}
+const trustLabel = t => (t >= 85 ? 'Go-to hitter' : t >= 60 ? 'Trusted' : t >= 35 ? 'Earning it' : t >= 15 ? 'Unproven' : 'New face');
 // The starter ahead of you: the weaker (by position fit) of those your club puts at your position without you.
 function rivalStarter(c) {
   const fit = ROLES[c.pos].fit, mine = lineup(clubEntries(c.league, c.league.myClub), null, c.pos, 6).filter(x => x.role === c.pos);
@@ -562,17 +579,31 @@ function rivalStarter(c) {
 }
 function promote(c) { // true if you have just become a starter
   if (c.starter || !c.league) return false;
-  if ((c.trust || 0) >= TRUST_START || careerOvr(c) >= rivalStarter(c).ovr) { c.starter = true; c.trust = TRUST_START; return true; }
+  const t = trustOf(c);
+  if (t >= TRUST_START || (t >= TRUST_OVR && careerOvr(c) >= rivalStarter(c).ovr)) { c.starter = true; return true; }
   return false;
 }
-// Called by game.js at each dead ball while you sit: should the coach send you on now?
+// Called by game.js at each dead ball while you sit: should the coach send you on now? The more trust, the more
+// moments count. At any trust: once the set is decided (a team 3 from the target and 6 ahead), or in the last points
+// of set 2 or later. From 20%: when the team falls 5 behind. From 40%: after a lost set, and from callLate points in
+// set 2 or later.
 function careerCallIn() {
   if (!careerMatch || !G) return false;
-  const [us, them] = G.score, last = G.setLog[G.setLog.length - 1];
-  if (us + them === 0 && last && last[0] < last[1]) return coachSays('THE LAST SET GOT AWAY. YOU ARE IN!');
-  if (us + them >= 6 && them - us >= 5) return coachSays('WE NEED A SPARK. YOU ARE IN!');
-  if (G.setNo >= 2 && Math.max(us, them) >= callLate(settings.target)) return coachSays('TIME FOR YOUR MINUTES. YOU ARE IN!');
+  const t = trustOf(careers[careerMatch.slot]), T = settings.target;
+  const [us, them] = G.score, last = G.setLog[G.setLog.length - 1], hi = Math.max(us, them);
+  if (hi >= T - 3 && Math.abs(us - them) >= 6) return coachSays('THIS SET IS DECIDED. GET SOME REPS IN!');
+  if (G.setNo >= 2 && hi >= T - 2) return coachSays('A FEW POINTS FOR YOU. YOU ARE IN!');
+  if (t >= 20 && us + them >= 6 && them - us >= 5) return coachSays('WE NEED A SPARK. YOU ARE IN!');
+  if (t >= 40 && us + them === 0 && last && last[0] < last[1]) return coachSays('THE LAST SET GOT AWAY. YOU ARE IN!');
+  if (t >= 40 && G.setNo >= 2 && hi >= callLate(T)) return coachSays('TIME FOR YOUR MINUTES. YOU ARE IN!');
   return false;
+}
+function callInText(c, target) { // when the coach may send you on, at your trust
+  const t = trustOf(c), now = [`a set is out of reach (a team on ${target - 3} and 6 ahead)`, 'a set from set 2 on reaches its last points'];
+  if (t >= 20) now.push('the team falls 5 behind');
+  if (t >= 40) now.push('the team has lost the last set', `a team reaches ${callLate(target)} points in set 2 or later`);
+  const next = t < 20 ? ' At 20% the coach also turns to you when the team falls 5 behind.' : t < 40 ? ' At 40% you also come on after a lost set and earlier in late sets.' : '';
+  return `${now.slice(0, -1).join(', ')} or ${now[now.length - 1]}.${next}`;
 }
 function coachSays(text) { toast(`COACH: ${text}`, 2.5); return true; }
 
@@ -588,7 +619,7 @@ function setupCareerMatch() {
   clubs = [CLUBS[L.myClub], CLUBS[opp]];
   careerMatch.bench = c.starter ? null : teams[0][0]; // the lineup leaves you out and you wait on the sideline
   renderMatchup();
-  if (careerMatch.bench) $('#mu-you').appendChild(el('p', 'rot-note rtg-bench-note', `<b>${escHtml(careerName(c))} starts on the bench.</b> The coach sends you on for ${rivalStarter(c).mon.name} during the match: after a lost set, when the team falls 5 behind, or once a team reaches ${callLate(FMT[ph].target)} points in set 2 or later.`));
+  if (careerMatch.bench) $('#mu-you').appendChild(el('p', 'rot-note rtg-bench-note', `<b>${escHtml(careerName(c))} starts on the bench.</b> At ${trustOf(c)}% team trust the coach sends you on for ${rivalStarter(c).mon.name} when ${callInText(c, FMT[ph].target)}`));
   $('#mu-meta').textContent = `${ROUND_NAMES[ph]}${ph === 'regular' ? `, week ${L.week + 1}` : ''} · ${careerMatch.home ? 'Home' : 'Away'} · ${VENUES[VENUE_FOR[ph]].name} · You play ${ROLES[c.pos].name} · ${cap(c.diff)} · ${matchFormat()} · Coach's goal: ${goalText(coachGoal(c))}`;
   MU_BACK.innerHTML = '<span aria-hidden="true">◀</span> Career'; MU_BACK.dataset.back = 'scr-rtg-hub';
   show('scr-matchup');
@@ -620,12 +651,11 @@ function careerMatchOver() {
   const log = careerLog(c);
   if (played) { log.gp++; for (const k of [...STAT_LINE, 'att']) log[k] += me.stats[k] || 0; }
   c.goal = null;
-  let trust = '';
-  if (!c.starter) {
-    const gain = played ? trustGain(c, me.stats, won) + (met ? GOAL_TRUST : 0) : 0;
-    c.trust = Math.min(TRUST_START, (c.trust || 0) + gain);
-    trust = promote(c) ? ` · <b class="rtg-up-msg">You earned a starting spot!</b>` : ` · Coach's trust +${gain} (${c.trust}/${TRUST_START})`;
-  }
+  const gain = trustGain(c, me.stats, won, played, met), was = trustOf(c);
+  c.trust = clamp(was + gain, 0, 100);
+  const d = trustOf(c) - was;
+  let trust = ` · Team trust ${d >= 0 ? '+' : ''}${d}% (${trustOf(c)}%)`;
+  if (promote(c)) trust += ` · <b class="rtg-up-msg">You earned a starting spot!</b>`;
   finishRound(c, sets);
   saveCareers();
   $('#res-xp').hidden = false;
@@ -669,8 +699,8 @@ function renderNext(c) {
     const home = g.h === L.myClub, opp = home ? g.a : g.h;
     info.innerHTML = `<p class="rtg-round">${label}</p><div class="rtg-vs">${crestImg(L.myClub, 40)}<b>${CLUBS[L.myClub].abbr}</b><span>${home ? 'vs' : 'at'}</span><b>${CLUBS[opp].abbr}</b>${crestImg(opp, 40)}</div>
       <p class="settings-note">${home ? 'Home' : 'Away'} against ${CLUBS[opp].name} (team rating ${clubOvr(c, opp)}). ${ph === 'regular' ? 'Best of 3 sets to 15.' : 'Best of 3 sets to 25.'}</p>
-      <p class="rtg-goal"><b>Coach's goal:</b> ${goalText(coachGoal(c))} (+${Math.round(GOAL_XP * (ph === 'regular' ? 1 : 1.5))} XP${c.starter ? '' : `, +${GOAL_TRUST} trust`})</p>
-      ${c.starter ? '' : `<p class="settings-note rtg-bench-line">On the bench behind ${rivalStarter(c).mon.name} (OVR ${rivalStarter(c).ovr}); the coach calls you in mid-match. Start by earning ${TRUST_START} trust or reaching OVR ${rivalStarter(c).ovr}.</p>`}`;
+      <p class="rtg-goal"><b>Coach's goal:</b> ${goalText(coachGoal(c))} (+${Math.round(GOAL_XP * (ph === 'regular' ? 1 : 1.5))} XP, +${GOAL_TRUST}% trust)</p>
+      ${c.starter ? '' : `<p class="settings-note rtg-bench-line">On the bench behind ${rivalStarter(c).mon.name} (OVR ${rivalStarter(c).ovr}); the coach calls you in mid-match. You start at ${TRUST_START}% team trust, or at ${TRUST_OVR}% once your OVR reaches ${rivalStarter(c).ovr}.</p>`}`;
     btn.innerHTML = '<span aria-hidden="true">▶</span> Play match'; btn.onclick = setupCareerMatch;
   } else { // your club is out: the rest of the playoffs are simulated
     info.innerHTML = `<p class="rtg-round">${label}</p><p class="settings-note">${CLUBS[L.myClub].name} did not make it this far. Watch the other results come in.</p>`;
@@ -793,10 +823,10 @@ function endSeason(c) {
 }
 
 // Coach goals: before each match the coach sets one goal for your position. Off the bench (fewer minutes) it is half
-// as big, in the playoffs (sets to 25) half as big again. Meeting it gives GOAL_XP (and coach's trust while you sit).
+// as big, in the playoffs (sets to 25) half as big again. Meeting it gives GOAL_XP and GOAL_TRUST.
 const GOALS = { OH: [['kills', 5], ['digs', 5]], OPP: [['kills', 5], ['aces', 2]], MB: [['blocks', 2], ['kills', 3]], S: [['ast', 12], ['aces', 1]], L: [['digs', 4]] };
 const GOAL_NAMES = { kills: ['kill', 'kills'], digs: ['dig', 'digs'], aces: ['ace', 'aces'], blocks: ['block', 'blocks'], ast: ['assist', 'assists'] };
-const GOAL_XP = 15, GOAL_TRUST = 10;
+const GOAL_XP = 15, GOAL_TRUST = 2;
 const goalText = g => `${g.n} ${GOAL_NAMES[g.stat][g.n === 1 ? 0 : 1]}`;
 function roundKey(L) { const ph = phaseOf(L); return `${ph}-${ph === 'regular' ? L.week : 0}`; }
 function coachGoal(c) { // the goal for the coming match, set once and saved so a reload does not change it
@@ -968,7 +998,8 @@ function drillFinish() {
   const want = score >= 70 ? 2 : score >= 35 ? 1 : 0, room = c.cap[st] - c.r[st], gain = Math.min(want, room);
   const xp = (want - gain) * 8 + (want ? 0 : 5); // at the cap, the points come as XP instead; a poor drill still gives 5
   c.r[st] += gain; c.xp += xp; c.xpEarned += xp;
-  c.drill = { key: drillKey(c), kind: D.kind, score, gain, xp };
+  const tr = drillTrust(score); c.trust = clamp(trustOf(c) + tr, 0, 100);
+  c.drill = { key: drillKey(c), kind: D.kind, score, gain, xp, trust: tr };
   promote(c); saveCareers();
   D.done = true; D.result = c.drill;
   TUT.wait = true; G.paused = true;
@@ -984,7 +1015,7 @@ function drillQuit() { // back to the hub; an unfinished drill gives nothing and
   $('#coach').hidden = true;
   saveSettings(); renderHub(); show('scr-rtg-hub');
 }
-const drillResultText = r => `${DRILLS[r.kind].name}: ${r.score}/100, ${r.gain ? `+${r.gain} ${DRILLS[r.kind].stat.toUpperCase()}` : 'no stat gain'}${r.xp ? `, +${r.xp} XP` : ''}`;
+const drillResultText = r => `${DRILLS[r.kind].name}: ${r.score}/100, ${r.gain ? `+${r.gain} ${DRILLS[r.kind].stat.toUpperCase()}` : 'no stat gain'}${r.xp ? `, +${r.xp} XP` : ''}${r.trust ? `, +${r.trust}% team trust` : ''}`;
 function renderDrillCoach(box) {
   const D = TUT.drill, info = DRILLS[D.kind];
   const reps = Array.from({ length: DRILL_REPS }, (_, i) => {
@@ -1058,8 +1089,8 @@ function makeClubOffers(c) {
 }
 function acceptOffer(c, o) {
   const L = c.league;
-  L.myClub = o.club; c.starter = o.start; c.trust = o.start ? TRUST_START : 0; L.offers = [];
-  startNextSeason(c, `You signed with the ${CLUBS[o.club].name}. ${o.start ? 'You start from day one.' : 'You start on the bench and earn your spot again.'}`);
+  L.myClub = o.club; c.starter = o.start; c.trust = Math.round(trustOf(c) * 0.3); L.offers = []; // new teammates: most of the trust is earned again
+  startNextSeason(c, `You signed with the ${CLUBS[o.club].name}. ${o.start ? 'You start from day one, but your new teammates still have to learn to trust you.' : 'You start on the bench and earn your spot again.'}`);
 }
 function startNextSeason(c, note = '') {
   c.season++;

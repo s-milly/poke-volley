@@ -1090,7 +1090,8 @@ function choosePlay(s, setter, tm = null) {
   }
   if (!pick) {
     const callMe = (G.chat && G.chat.k === 1 && G.time - G.chat.t < 4) || !!(tutStep() && tutStep().callMe); // you called for the ball
-    const wt = o => o.w * (o.q.r.pwr + o.q.r.jmp) * (o.q.human && !AUTO ? (callMe ? 12 : 3) : 1);
+    const youW = careerMatch ? trustSetWeight(callMe) : callMe ? 12 : 3; // Road to Glory: how much your team trusts you
+    const wt = o => o.w * (o.q.r.pwr + o.q.r.jmp) * (o.q.human && !AUTO ? youW : 1);
     let x = Math.random() * opts.reduce((a, o) => a + wt(o), 0);
     pick = opts.find(o => (x -= wt(o)) <= 0) || opts[0];
     const you = s === 1 && tutBlockDrill() && tutYou();
