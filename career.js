@@ -316,16 +316,17 @@ function renderTasks(c) {
   const trained = !!(L && c.drill && c.drill.key === drillKey(c));
   $('#task-train').hidden = $('#hub-train-wrap').hidden;
   $('#task-train').classList.toggle('done', trained);
-  $('#task-train-state').textContent = trained ? 'Done' : 'To do · before the match';
+  $('#task-train-state').textContent = trained ? 'Done' : c.pending ? 'Missed this week' : 'To do · before the match';
   $('#task-play-t').textContent = !L ? 'Join the draft' : ph === 'done' ? `Start season ${c.season + 1}`
     : !g ? 'Follow the playoffs' : ph === 'regular' ? `Play your week ${L.week + 1} match` : `Play the ${ROUND_NAMES[ph].toLowerCase()}`;
-  $('#task-play-state').textContent = 'To do';
+  $('#task-play').classList.toggle('done', !!c.pending);
+  $('#task-play-state').textContent = c.pending ? 'Done' : 'To do';
 }
 function renderTabs(c) {
   const L = c.league;
   $('#tab-stand').hidden = $('#tab-sched').hidden = !L;
   $('#tab-awards').hidden = !(L && phaseOf(L) === 'done' && (L.awards || []).length);
-  const canDrill = !$('#hub-train-wrap').hidden && !(c.drill && c.drill.key === drillKey(c));
+  const canDrill = !$('#hub-train-wrap').hidden && !c.pending && !(c.drill && c.drill.key === drillKey(c));
   $('#tab-home-badge').hidden = !canDrill; $('#tab-home-badge').textContent = 'Train';
   const canUp = STAT_KEYS.some(([k]) => c.r[k] < c.cap[k] && c.xp >= upCost(c));
   $('#tab-up-badge').hidden = !canUp; $('#tab-up-badge').textContent = `${c.xp} XP`;
@@ -665,7 +666,7 @@ function careerMatchOver() {
   const d = trustOf(c) - was, bad = played ? tc.why : [];
   let trust = ` · Team trust ${d >= 0 ? '+' : ''}${d}% (${trustOf(c)}%)${bad.length ? `<br><span class="rtg-trust-loss">Lost trust: ${bad.join('; ')}.</span>` : ''}`;
   if (promote(c)) trust += ` · <b class="rtg-up-msg">You earned a starting spot!</b>`;
-  finishRound(c, sets);
+  myGame(c.league).set(sets); c.pending = { sets }; // your result is in; the rest of the round waits for "Advance"
   saveCareers();
   $('#res-xp').hidden = false;
   const goalLine = goal ? `<br>Coach's goal, ${goalText(goal)}: ${met ? `<b class="rtg-up-msg">done, +${bonus} XP</b>` : `missed (${played ? me.stats[goal.stat] || 0 : 0} of ${goal.n})`}` : '';
@@ -704,7 +705,14 @@ function renderNext(c) {
     return;
   }
   const label = ph === 'regular' ? `Week ${L.week + 1} of ${WEEKS}` : ROUND_NAMES[ph];
-  if (g) {
+  if (g && c.pending) { // played: show the result and wait for you to move the season on
+    const home = g.h === L.myClub, opp = home ? g.a : g.h, sets = c.pending.sets, won = homeWon(sets) === home;
+    info.innerHTML = `<p class="rtg-round">${label} · played</p><div class="rtg-vs">${crestImg(L.myClub, 40)}<b>${CLUBS[L.myClub].abbr}</b><span>${home ? 'vs' : 'at'}</span><b>${CLUBS[opp].abbr}</b>${crestImg(opp, 40)}</div>
+      <p class="settings-note"><b>${won ? 'Win' : 'Loss'}</b> ${setLine(sets, !home)} ${home ? 'against' : 'at'} ${CLUBS[opp].name}. Spend XP or check the standings, then move on when you are ready.</p>`;
+    const next = ph === 'regular' ? (L.week + 1 < WEEKS ? 'Advance to next week' : 'Advance to the playoffs') : ph === 'semi' ? 'Advance to the final' : 'Finish the season';
+    btn.innerHTML = `<span aria-hidden="true">▶</span> ${next}`;
+    btn.onclick = () => { const st = c.pending.sets; c.pending = null; finishRound(c, st); saveCareers(); hubTab = 'home'; renderHub(); };
+  } else if (g) {
     const home = g.h === L.myClub, opp = home ? g.a : g.h;
     info.innerHTML = `<p class="rtg-round">${label}</p><div class="rtg-vs">${crestImg(L.myClub, 40)}<b>${CLUBS[L.myClub].abbr}</b><span>${home ? 'vs' : 'at'}</span><b>${CLUBS[opp].abbr}</b>${crestImg(opp, 40)}</div>
       <p class="settings-note">${home ? 'Home' : 'Away'} against ${CLUBS[opp].name} (team rating ${clubOvr(c, opp)}). ${ph === 'regular' ? 'Best of 3 sets to 15.' : 'Best of 3 sets to 25.'}</p>
@@ -1043,9 +1051,10 @@ function renderTraining(c) {
   if (wrap.hidden) return;
   box.innerHTML = '';
   if (c.drill && c.drill.key === drillKey(c)) {
-    box.appendChild(el('p', 'rtg-goal', `<b>Done for now.</b> ${drillResultText(c.drill)}. The next drill opens after your next match.`));
+    box.appendChild(el('p', 'rtg-goal', `<b>Done for now.</b> ${drillResultText(c.drill)}. The next drill opens ${c.pending ? 'when you advance to the next week' : 'after your next match'}.`));
     return;
   }
+  if (c.pending) { box.appendChild(el('p', 'rtg-goal', '<b>This week\'s match is played.</b> The next drill opens when you advance to the next week.')); return; }
   for (const [kind, d] of Object.entries(DRILLS)) {
     const b = el('button', 'rtg-build rtg-drill', `<i class="drill-stat" aria-hidden="true">${d.stat.toUpperCase()}</i><b>${d.name}</b><span>${c.r[d.stat]} / ${c.cap[d.stat]}<span class="dr-role"> · as ${ROLES[d.role].name.toLowerCase()}</span></span>`);
     b.setAttribute('aria-label', `${d.name} drill: trains ${d.stat.toUpperCase()}, now ${c.r[d.stat]} of ${c.cap[d.stat]}, plays as ${ROLES[d.role].name.toLowerCase()}`);
