@@ -641,7 +641,7 @@ function startServe() {
   G.phase = 'serve'; G.timer = 0; G.rally = 0;
   updateFormation();
   for (const p of G.players) {
-    p.x = p.homeX; p.z = p.homeZ; p.y = 0; p.vx = p.vy = p.vz = 0; p.onGround = true; p.cool = 0; p.hitAir = false; p.ai.blockWait = -1;
+    p.x = p.homeX; p.z = p.homeZ; p.y = 0; p.vx = p.vy = p.vz = 0; p.onGround = true; p.cool = 0; p.hitAir = false; p.noTouch = false; p.ai.blockWait = -1;
     p.dive = p.rec = 0;
   }
   const sv = G.server;
@@ -673,7 +673,7 @@ function stepPlayer(p, h) {
   if (!p.onGround) p.vy -= pGrav(p.vy) * h;
   p.x += p.vx * h; p.z += p.vz * h; p.y += p.vy * h;
   if (p.y <= 0) {
-    if (!p.onGround) { p.squash = 0.78; p.blockUp = false; p.hitAir = false; dust(p.x, p.z, 4, '#e8d3a2'); }
+    if (!p.onGround) { p.squash = 0.78; p.blockUp = false; p.hitAir = false; p.noTouch = false; dust(p.x, p.z, 4, '#e8d3a2'); }
     p.y = 0; p.vy = 0; p.onGround = true;
   }
   clampPlayer(p);
@@ -759,7 +759,7 @@ function sweetSpot(dx, dy, dz, vx, vy, vz, y, core) {
 }
 function predictContact(p) {
   const b = G.ball, t = toward(p.side);
-  if (p.cool > 0.5 || ownServe(p) || (G.lastToucher === p && G.lastSide === p.side && G.touches[p.side] > 0)) return null;
+  if (p.cool > 0.5 || ownServe(p) || p.noTouch || (G.lastToucher === p && G.lastSide === p.side && G.touches[p.side] > 0)) return null;
   const g = GB * (b.gs || 1), R = reachOf(p), core = (p.rr + BR) * 0.85;
   let x = b.x, y = b.y, z = b.z, vx = b.vx, vy = b.vy, vz = b.vz, py = p.y, pvy = p.onGround ? 0 : p.vy, best = Infinity, bestT = 0;
   for (let k = 0; k <= 130; k++) {
@@ -938,7 +938,7 @@ function doServe(p, q = null) {
 
 // ===================== contacts =====================
 function canContact(p, b) {
-  if (p.cool > 0 || b.noHit > 0 || ownServe(p)) return false;
+  if (p.cool > 0 || b.noHit > 0 || ownServe(p) || p.noTouch) return false;
   if (b.z * toward(p.side) > 0.7) return false;               // ball well over on the other side
   if (G.lastToucher === p && G.lastSide === p.side && G.touches[p.side] > 0) return false; // no double touch
   const dx = b.x - p.x, dy = b.y - contactY(p), dz = b.z - p.z; // you get a longer reach than the computer
@@ -1117,12 +1117,13 @@ function pass(p, incoming, fromOpp, q = null, dove = false, setTm = null) {
     floatText(play.call, p.x, p.cy + p.rr + 0.6, p.z, '#ffe9a0', 0.9);
     p.stats.sets++; G.setBy = p;
   }
-  const heat = clamp(incoming / 16, 0, 1.6);
+  const serveRx = G.lastAttack && G.lastAttack.type === 'serve' && fromOpp; // a serve has slowed over the length of the court: easier to pass than a spike
+  const heat = clamp(incoming / (serveRx ? 21 : 16), 0, 1.6);
   // your timing: no click is the old auto pass (x1), a perfect click nearly takes the error away
   const tq = q == null ? 1 : clamp(1 - q * 0.85, 0.15, 1.4);
   const err = (100 - skill) * 0.022 * (0.4 + (G.touches[s] === 1 ? heat : 0.2)) * (tq + (dove ? 0.3 : 0)) * (TUT && aiControlled(p) ? 0.35 : 1); // tutorial: the computer passes and sets cleanly
   tx += rand(-1, 1) * err; tz += rand(-1, 1) * err * 0.7; apexY += rand(-0.3, 0.3) * err;
-  tz = -t * Math.max(0.5, -tz * t);
+  tz = -t * Math.max(G.touches[s] === 1 ? 1.4 : 0.5, -tz * t); // a pass that strays still stays off the net
 
   // a hard spike can shank off the arms
   // (a serve has to travel the length of the court, so it shanks on a gentler curve than a spike: a hard topspin is a threat, not a coin flip)
@@ -1130,7 +1131,7 @@ function pass(p, incoming, fromOpp, q = null, dove = false, setTm = null) {
   // A knuckling float is hard to pass cleanly too: the more it is moving, the likelier a shank.
   const kn = fromServe && b.knuck ? b.knuck.amp : 0;
   if (G.touches[s] === 1 && fromOpp && (incoming > (fromServe ? 15 : 12.5) || kn)) {
-    const heavy = fromServe ? clamp((incoming - 15) / 12, 0, 1) * 0.6 + kn * 0.1 : clamp((incoming - 12.5) / 8, 0, 1);
+    const heavy = fromServe ? clamp((incoming - 15) / 12, 0, 1) * 0.13 + kn * 0.03 : clamp((incoming - 12.5) / 8, 0, 1); // serves: about 1 ace in 15
     const shank = heavy * (1.35 - p.r.def / 100) * (q == null ? 1 : clamp(1 - q, 0, 1.3));
     if (Math.random() < shank) {
       const sx = Math.random() < 0.5 ? -1 : 1;
@@ -1265,6 +1266,9 @@ function doBlock(p) {
   if (!human && !stuff && roll < clamp(chance, 0.08, 0.75) + 0.4) { p.cool = 0.5; return; }
   if (human) tutEvent('block', { stuff });
   p.cool = 0.3; b.noHit = 0.08; b.special = null; b.gs = 1; G.tid++; b.offBlock = true; p.hitAir = true;
+  // nobody still in the air at the net plays the ball again before landing: not the blocker (beach: no free second touch
+  // off your own block), not their fellow blockers, not the hitter who was just blocked. That stops block-to-block ping-pong.
+  for (const q of G.players) if (!q.onGround && Math.abs(q.z) < q.rr + 1.6) q.noTouch = true;
   // beach rules (2 v 2): the block counts as one of the 3 touches. Indoors (6 v 6) it does not. Either way the blocker may play it next.
   G.lastToucher = null; G.lastSide = s; G.serveLive = false; G.touches[s] = settings.mode === 2 ? 1 : 0; G.intended[s] = null; G.intended[1 - s] = null;
   // where it meets the hands steers it: off the outside of a hand it glances away diagonally
@@ -2543,12 +2547,21 @@ function drawArenaWall() {
   const bw = 5.5, b0 = top + 3.0, b1 = top + 7.6;
   quad([[-bw - 0.3, b0 - 0.3, z - 0.05], [bw + 0.3, b0 - 0.3, z - 0.05], [bw + 0.3, b1 + 0.3, z - 0.05], [-bw - 0.3, b1 + 0.3, z - 0.05]], '#3a4466');
   quad([[-bw, b0, z - 0.06], [bw, b0, z - 0.06], [bw, b1, z - 0.06], [-bw, b1, z - 0.06]], '#05070d');
-  const c = proj(0, (b0 + b1) / 2, z), tx = c.x * US, ty = c.y * US;
-  if (ty > 2 && ty < UH) {
+  // the text lives on the board: drawn in the same space as the board (no snapping to the UI pixel grid, which made
+  // it jitter against the board as the camera moved), sized to the board and clipped to its screen
+  const p0 = proj(-bw, b1, z), p1 = proj(bw, b0, z), w = p1.x - p0.x, h = p1.y - p0.y;
+  if (h > 6 && p1.y > 0) {
     const msg = G.cheer > 0.4 ? (Math.floor(G.time * 4) % 2 ? 'MAKE SOME NOISE!' : 'POINT!') : settings.sets > 1 ? `SETS ${G.sets[0]}-${G.sets[1]}` : 'VOLLEYDEX';
-    ctx.save(); ctx.setTransform(U, 0, 0, U, 0, 0);
-    pxText(msg, tx, ty - 10, '#ffcf33', 8, 'center', null);
-    pxText(`${G.score[0]} - ${G.score[1]}`, tx, ty + 1, '#ffffff', 8, 'center', null);
+    const line = (text, cy, col, max) => {
+      ctx.font = `${max}px ${PX_FONT}`;
+      const fit = Math.min(max, max * w * 0.88 / Math.max(1, ctx.measureText(text).width));
+      ctx.font = `${fit}px ${PX_FONT}`; ctx.fillStyle = col; ctx.fillText(text, p0.x + w / 2, cy);
+    };
+    ctx.save();
+    ctx.beginPath(); ctx.rect(p0.x, p0.y, w, h); ctx.clip();
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    line(msg, p0.y + h * 0.3, '#ffcf33', h * 0.22);
+    line(`${G.score[0]} - ${G.score[1]}`, p0.y + h * 0.68, '#ffffff', h * 0.34);
     ctx.restore();
   }
 }
