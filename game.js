@@ -88,7 +88,7 @@ const BODY_COLORS = {
 const CAPTAIN_BOOST = 14;
 const STAT_KEYS = [['spd', 'SPD', 'Speed: how fast it runs'], ['jmp', 'JMP', 'Jump: how high it leaps'],
   ['pwr', 'PWR', 'Power: how hard it spikes and serves'], ['def', 'DEF', 'Defense: how cleanly it receives'],
-  ['skl', 'SKL', 'Skill: how accurately it sets']];
+  ['skl', 'SKL', 'Skill: how accurately it sets and spikes']];
 
 // Opponent AI by difficulty. Your teammates always use MATE.
 const DIFF = {
@@ -733,6 +733,9 @@ const perfectWin = p => clamp(0.04 + (p.r.pwr - 30) * 0.0011, 0.04, 0.12);
 // How far a serve or spike can land from where you aimed, in metres, by timing: a PERFECT lands almost on the spot,
 // a WEAK can land a few metres off. Aim at a line and anything short of PERFECT can carry it out.
 const aimRadius = q => (q == null ? 2.4 : q >= 1 ? 0.4 : q >= 0.65 ? 1.3 : q >= 0.3 ? 2.4 : 3.4);
+// Spikes also scale the circle by the hitter's skill (SKL), as SKL does for sets: SKL 20 about 1.26x, SKL 50 about
+// 1.05x, SKL 70 about 0.91x, SKL 99 about 0.71x. Serves use the plain radius.
+const hitSpread = p => clamp(1.4 - p.r.skl * 0.007, 0.7, 1.3);
 function scatter(x, z, R) { const a = rand(0, Math.PI * 2), r = R * Math.sqrt(Math.random()); return [x + Math.cos(a) * r, z + Math.sin(a) * r]; }
 // E is the set. Its meter is a charge, not a timing window: start holding while you run in,
 // and if it is full when you touch the ball you get a quick set (low and fast); before that, a high set.
@@ -1175,8 +1178,9 @@ function spike(p, q = null) {
       if (ix) tx = clamp(b.x + ix * HW, -HW * 0.85, HW * 0.85);
       if (keys.up) tz = t * 1.8; else if (keys.down) tz = t * (HL - 1);
     }
-    // your timing sets how far from the aim it can land: PERFECT almost on the spot, WEAK a few metres off, in or out
-    [tx, tz] = scatter(tx, tz, aimRadius(q));
+    // your timing sets how far from the aim it can land (PERFECT almost on the spot, WEAK a few metres off, in or out),
+    // and your skill tightens or widens it
+    [tx, tz] = scatter(tx, tz, aimRadius(q) * hitSpread(p));
     if (q != null && q < 0 && Math.random() < (q <= -0.5 ? 0.55 : 0.45) && spikeError(p, tx)) return true; // a mistimed swing can miss
   } else {
     const e = parsOf(s).err;
