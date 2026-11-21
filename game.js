@@ -2225,7 +2225,7 @@ function drawSkyFx() {
 // ===================== venues: the arena (6 v 6) and the beach (2 v 2), with crowds =====================
 function seeded(n) { return () => ((n = (n * 1664525 + 1013904223) >>> 0) / 4294967296); }
 
-// Indoor backdrop, drawn once at low resolution: arena walls, light rigs and banners above, the blue floor below.
+// Indoor backdrop, drawn once at low resolution: arena walls, light rigs and banners above, an upper deck below.
 function buildArena() {
   const c = document.createElement('canvas'); c.width = UW; c.height = UH; const g = c.getContext('2d');
   const hy = Math.round(horizonY() * US);
@@ -2255,11 +2255,26 @@ function buildArena() {
   g.fillStyle = hc ? shade(hc, -0.55) : '#3c4772'; g.fillRect(0, hy - 31, UW, 31);
   g.fillStyle = hc ? shade(hc, -0.68) : '#2a3354';
   for (let x = 0; x < UW; x += 6) g.fillRect(x, hy - 31 + ((x / 6) % 2) * 2, 3, 31);
-  // floor: blue free zone with faint boards
-  g.fillStyle = '#2f5d9e'; g.fillRect(0, hy, UW, UH - hy);
-  g.fillStyle = '#2a5592';
-  for (let y = hy + 2; y < UH; y += 4) g.fillRect(0, y, UW, 1);
+  arenaBehind(g, hy, hc);
   return c;
+}
+// Behind the stands, below the backdrop's horizon: the bowl keeps rising as an upper deck of small fans under a
+// ribbon board in the home colour (dim indoors, darker still on championship night).
+function arenaBehind(g, hy, hc, dark = -0.35) {
+  const r = seeded(77);
+  const shirts = ['#3fa7ff', '#ff5d5d', '#ffffff', '#ffcf33', '#6bd88a', '#c48bff', '#2b2f3f'].concat(hc ? [hc, hc, hc] : []);
+  const skins = ['#f1c9a0', '#d9a477', '#b07a4f', '#8a5a3a'];
+  g.fillStyle = '#141a2e'; g.fillRect(0, hy, UW, UH - hy);
+  g.fillStyle = hc ? shade(hc, -0.35) : '#ffcf33'; g.fillRect(0, hy, UW, 2);
+  for (let y = hy + 2, k = 0; y < UH; k++) { // rows get taller toward the bottom, as if nearer
+    const rh = 3 + Math.floor((y - hy) / 22);
+    g.fillStyle = shade(k % 2 ? '#1f2742' : '#252e4c', dark + 0.35); g.fillRect(0, y, UW, rh);
+    for (let x = (k * 3) % 4; x < UW; x += rh + 1) if (r() < 0.85) {
+      g.fillStyle = shade(shirts[Math.floor(r() * shirts.length)], dark); g.fillRect(x, y + 1, rh - 1, rh - 1);
+      g.fillStyle = shade(skins[Math.floor(r() * skins.length)], dark); g.fillRect(x, y, Math.max(1, rh - 2), 1);
+    }
+    y += rh;
+  }
 }
 
 // Stands and fans, in world coordinates so they move with the camera. Built once per match.
@@ -2274,8 +2289,7 @@ function buildArenaBig() { // mega bowl: roof trusses and big light rigs above
   for (let x = -40; x < UW + 40; x += 30) { g.fillRect(x, 0, 2, hy); for (let y = 0; y < hy; y += 2) g.fillRect(x + y * 0.6, y, 1, 1); }
   for (let y = 6; y < hy; y += 12) g.fillRect(0, y, UW, 1);
   for (let x = 10; x < UW; x += 40) { g.fillStyle = '#fffbe6'; g.fillRect(x, 4, 14, 4); g.fillStyle = 'rgba(255,246,208,0.10)'; g.fillRect(x - 6, 8, 26, 30); }
-  g.fillStyle = '#2f5d9e'; g.fillRect(0, hy, UW, UH - hy);
-  g.fillStyle = '#2a5592'; for (let y = hy + 2; y < UH; y += 4) g.fillRect(0, y, UW, 1);
+  arenaBehind(g, hy, homeColor());
   return c;
 }
 function buildNight() { // championship night: dark roof and light rigs
@@ -2284,8 +2298,7 @@ function buildNight() { // championship night: dark roof and light rigs
   g.fillStyle = '#05070d'; g.fillRect(0, 0, UW, hy);
   g.fillStyle = '#121828'; for (let x = 0; x < UW; x += 24) g.fillRect(x, 0, 1, hy);
   for (let x = 30; x < UW; x += 70) { g.fillStyle = '#ffffff'; g.fillRect(x, 6, 6, 3); g.fillStyle = '#ffcf33'; g.fillRect(x + 1, 9, 4, 1); }
-  g.fillStyle = '#1b2d52'; g.fillRect(0, hy, UW, UH - hy);
-  g.fillStyle = '#18284a'; for (let y = hy + 2; y < UH; y += 4) g.fillRect(0, y, UW, 1);
+  arenaBehind(g, hy, homeColor(), -0.65);
   return c;
 }
 function buildSunset() { // sunset over the water, palms in silhouette, orange sand
@@ -2367,16 +2380,18 @@ function buildCrowd() {
   });
   const people = [], tiers = [];
   V.decks.forEach((d, di) => {
-    const zEnd = HL + d.gap, X = HW + d.gap, wideX = X + d.depth * d.tiers;
+    const zEnd = HL + d.gap, X = HW + d.gap;
+    // each row wraps the far corners in an L: a side row runs on to meet the end row of the same height, and the
+    // end row runs out to the side row's outer edge, so the corner seats join both
     for (let t = 0; t < d.endTiers; t++) {
-      const zi = zEnd + d.depth * t, y0 = d.base + d.rise * t;
-      tiers.push({ kind: 'end', d, di, t, zi, zo: zi + d.depth, y0, y1: y0 + d.rise, X: wideX, key: `e${di}.${t}` });
-      for (let x = -X + 0.4; x <= X - 0.4; x += 0.72) if ((Math.abs(x) % 9) > 0.8 && rnd() < d.fill) people.push(person(x + (rnd() - 0.5) * 0.25, y0 + d.rise, zi + d.depth * 0.5, `e${di}.${t}`, 0));
+      const zi = zEnd + d.depth * t, y0 = d.base + d.rise * t, ex = X + d.depth * (t + 1);
+      tiers.push({ kind: 'end', d, di, t, zi, zo: zi + d.depth, y0, y1: y0 + d.rise, X: ex, Xr: X + d.depth * t, key: `e${di}.${t}` });
+      for (let x = -ex + 0.4; x <= ex - 0.4; x += 0.72) if ((Math.abs(x) % 9) > 0.8 && rnd() < d.fill) people.push(person(x + (rnd() - 0.5) * 0.25, y0 + d.rise, zi + d.depth * 0.5, `e${di}.${t}`, Math.abs(x) > X ? Math.sign(x) : 0));
     }
     for (const sd of [-1, 1]) for (let t = 0; t < d.tiers; t++) {
-      const xi = sd * (X + d.depth * t), y0 = d.base + d.rise * t;
-      tiers.push({ kind: 'side', d, di, t, sd, xi, xo: xi + sd * d.depth, y0, y1: y0 + d.rise, z0: -HL - 2, z1: zEnd, key: `s${di}.${sd}.${t}` });
-      for (let z = -HL - 1.5; z <= zEnd - 0.4; z += 0.72) if (((z + 40) % 8) > 0.8 && rnd() < d.fill) people.push(person(xi + sd * d.depth * 0.5 + (rnd() - 0.5) * 0.25, y0 + d.rise, z + (rnd() - 0.5) * 0.3, `s${di}.${sd}.${t}`, sd));
+      const xi = sd * (X + d.depth * t), y0 = d.base + d.rise * t, z1 = zEnd + d.depth * Math.min(t, d.endTiers);
+      tiers.push({ kind: 'side', d, di, t, sd, xi, xo: xi + sd * d.depth, y0, y1: y0 + d.rise, z0: -HL - 2, z1, key: `s${di}.${sd}.${t}` });
+      for (let z = -HL - 1.5; z <= z1 - 0.4; z += 0.72) if (((z + 40) % 8) > 0.8 && rnd() < d.fill) people.push(person(xi + sd * d.depth * 0.5 + (rnd() - 0.5) * 0.25, y0 + d.rise, z + (rnd() - 0.5) * 0.3, `s${di}.${sd}.${t}`, sd));
     }
   });
   if (V.standing) { // fans standing on the sand behind a rope line
@@ -2387,8 +2402,8 @@ function buildCrowd() {
       for (let x = -HW - gap; x <= HW + gap; x += 0.62) if (rnd() < 0.8) people.push(person(x + (rnd() - 0.5) * 0.3, 0, HL + off + (rnd() - 0.5) * 0.3, key, 0, true));
     }
   }
-  // back to front: upper decks before lower ones, outer tiers before inner ones, the far end before the sides
-  tiers.sort((a, b) => (b.di - a.di) || ((a.kind === 'end' ? 0 : 1) - (b.kind === 'end' ? 0 : 1)) || (b.t - a.t));
+  // back to front: upper decks before lower ones, outer rows before inner ones, the far end before the sides
+  tiers.sort((a, b) => (b.di - a.di) || (b.t - a.t) || ((a.kind === 'end' ? 0 : 1) - (b.kind === 'end' ? 0 : 1)));
   const byKey = new Map();
   for (const q of people) { if (!byKey.has(q.key)) byKey.set(q.key, []); byKey.get(q.key).push(q); }
   const um = [];
@@ -2469,12 +2484,12 @@ function drawStands() {
   for (const T of C.tiers) {
     const d = T.d;
     if (T.t === 0 && d.base > 0) { // an upper deck's front wall, topped by a glowing LED ribbon board
-      if (T.kind === 'end') { quad([[-T.X, 0, T.zi], [T.X, 0, T.zi], [T.X, d.base, T.zi], [-T.X, d.base, T.zi]], '#141a2e'); quad([[-T.X, d.base - 0.9, T.zi], [T.X, d.base - 0.9, T.zi], [T.X, d.base, T.zi], [-T.X, d.base, T.zi]], ribbonColor()); }
+      if (T.kind === 'end') { quad([[-T.Xr, 0, T.zi], [T.Xr, 0, T.zi], [T.Xr, d.base, T.zi], [-T.Xr, d.base, T.zi]], '#141a2e'); quad([[-T.Xr, d.base - 0.9, T.zi], [T.Xr, d.base - 0.9, T.zi], [T.Xr, d.base, T.zi], [-T.Xr, d.base, T.zi]], ribbonColor()); }
       else { quad([[T.xi, 0, T.z0], [T.xi, 0, T.z1], [T.xi, d.base, T.z1], [T.xi, d.base, T.z0]], '#141a2e'); quad([[T.xi, d.base - 0.9, T.z0], [T.xi, d.base - 0.9, T.z1], [T.xi, d.base, T.z1], [T.xi, d.base, T.z0]], ribbonColor()); }
     }
     if (T.kind === 'end') {
       quad([[-T.X, T.y1, T.zo], [T.X, T.y1, T.zo], [T.X, T.y1, T.zi], [-T.X, T.y1, T.zi]], (C.seats ? C.seats[T.di ? 1 : 0] : d.seat)[T.t % 2]);
-      quad([[-T.X, T.y0, T.zi], [T.X, T.y0, T.zi], [T.X, T.y1, T.zi], [-T.X, T.y1, T.zi]], d.riser[T.t % 2]);
+      quad([[-T.Xr, T.y0, T.zi], [T.Xr, T.y0, T.zi], [T.Xr, T.y1, T.zi], [-T.Xr, T.y1, T.zi]], d.riser[T.t % 2]); // the riser meets the side rows' risers at the corner
     } else {
       quad([[T.xi, T.y1, T.z0], [T.xi, T.y1, T.z1], [T.xo, T.y1, T.z1], [T.xo, T.y1, T.z0]], (C.seats ? C.seats[T.di ? 1 : 0] : d.seat)[T.t % 2]);
       quad([[T.xi, T.y0, T.z0], [T.xi, T.y0, T.z1], [T.xi, T.y1, T.z1], [T.xi, T.y1, T.z0]], d.riser[T.t % 2]);
