@@ -2258,23 +2258,12 @@ function buildArena() {
   arenaBehind(g, hy, hc);
   return c;
 }
-// Behind the stands, below the backdrop's horizon: the bowl keeps rising as an upper deck of small fans under a
-// ribbon board in the home colour (dim indoors, darker still on championship night).
+// Behind the stands, below the backdrop's horizon: a plain dark back wall (no painted fans, which would slide with
+// the camera; the real upper decks are built in world coordinates). A thin band in the home colour along the top.
 function arenaBehind(g, hy, hc, dark = -0.35) {
-  const r = seeded(77);
-  const shirts = ['#3fa7ff', '#ff5d5d', '#ffffff', '#ffcf33', '#6bd88a', '#c48bff', '#2b2f3f'].concat(hc ? [hc, hc, hc] : []);
-  const skins = ['#f1c9a0', '#d9a477', '#b07a4f', '#8a5a3a'];
-  g.fillStyle = '#141a2e'; g.fillRect(0, hy, UW, UH - hy);
+  g.fillStyle = shade('#141a2e', dark + 0.35); g.fillRect(0, hy, UW, UH - hy);
+  g.fillStyle = shade('#1a2140', dark + 0.35); for (let y = hy + 6; y < UH; y += 10) g.fillRect(0, y, UW, 1);
   g.fillStyle = hc ? shade(hc, -0.35) : '#ffcf33'; g.fillRect(0, hy, UW, 2);
-  for (let y = hy + 2, k = 0; y < UH; k++) { // rows get taller toward the bottom, as if nearer
-    const rh = 3 + Math.floor((y - hy) / 22);
-    g.fillStyle = shade(k % 2 ? '#1f2742' : '#252e4c', dark + 0.35); g.fillRect(0, y, UW, rh);
-    for (let x = (k * 3) % 4; x < UW; x += rh + 1) if (r() < 0.85) {
-      g.fillStyle = shade(shirts[Math.floor(r() * shirts.length)], dark); g.fillRect(x, y + 1, rh - 1, rh - 1);
-      g.fillStyle = shade(skins[Math.floor(r() * skins.length)], dark); g.fillRect(x, y, Math.max(1, rh - 2), 1);
-    }
-    y += rh;
-  }
 }
 
 // Stands and fans, in world coordinates so they move with the camera. Built once per match.
@@ -2327,6 +2316,7 @@ function buildSunset() { // sunset over the water, palms in silhouette, orange s
 
 // The venues you can pick on the title screen. Stands are built in world coordinates from these settings:
 // tiers along each sideline and behind the far end; a deck with `base` > 0 is an upper deck.
+const HL6 = 14; // court half length in 6 v 6
 const ARENA_SEATS = { riser: ['#20283f', '#262f4a'], seat: ['#33406a', '#2b365a'] };
 const VENUES = {
   beach: { mode: 2, name: 'Bleachers', backdrop: 'beach', court: 'sand', shirts: 'beach',
@@ -2336,7 +2326,9 @@ const VENUES = {
   boardwalk: { mode: 2, name: 'Boardwalk', backdrop: 'beach', court: 'sand', shirts: 'beach', extras: ['rope', 'umbrellas', 'tower', 'lights'],
     decks: [], standing: { rows: 3, gap: 5.3 } },
   arena: { mode: 6, name: 'Classic arena', backdrop: buildArena, court: '#e0904c', shirts: 'arena', extras: ['led'],
-    decks: [{ tiers: 7, endTiers: 6, rise: 0.55, depth: 0.95, gap: 5.9, base: 0, fill: 0.92, ...ARENA_SEATS }] },
+    decks: [{ tiers: 7, endTiers: 6, rise: 0.55, depth: 0.95, gap: 5.9, base: 0, fill: 0.92, ...ARENA_SEATS },
+      // an upper deck along each side only, running up to the end wall with the scoreboard (zMax)
+      { tiers: 8, endTiers: 0, rise: 0.85, depth: 1.0, gap: 13, base: 5, zMax: HL6 + 5.9 + 0.95 * 6, fill: 0.9, riser: ['#1a2036', '#20273f'], seat: ['#3a2f6a', '#32285c'], ribbon: true }] },
   bowl: { mode: 6, name: 'Mega bowl', backdrop: buildArenaBig, court: '#e0904c', shirts: 'arena', extras: ['led'],
     decks: [
       { tiers: 10, endTiers: 10, rise: 0.6, depth: 0.9, gap: 5.9, base: 0, fill: 0.93, ...ARENA_SEATS },
@@ -2349,7 +2341,7 @@ const VENUE_DESC = {
   beach: 'Wooden bleachers along the sand, with palms, the sea and an island lighthouse behind.',
   pro: 'Tall grandstands on both sides, sponsor boards and corner flags, like a pro beach tour stop.',
   boardwalk: 'No stands: fans stand three deep behind a rope line, with umbrellas, a lifeguard tower and string lights.',
-  arena: 'A busy indoor gym with stands on three sides and LED boards around the court.',
+  arena: 'A busy indoor gym with stands on three sides, an upper deck along each side and LED boards around the court.',
   bowl: 'A huge two-deck arena: a lower bowl, a concourse with an LED ribbon board, and a steep upper deck rising to the roof.',
   night: 'A dark, packed bowl: the crowd is split into blue and red halves, phone lights twinkle and lasers fly overhead.',
 };
@@ -2380,7 +2372,7 @@ function buildCrowd() {
   });
   const people = [], tiers = [];
   V.decks.forEach((d, di) => {
-    const zEnd = HL + d.gap, X = HW + d.gap;
+    const zEnd = d.zMax || HL + d.gap, X = HW + d.gap;
     // each row wraps the far corners in an L: a side row runs on to meet the end row of the same height, and the
     // end row runs out to the side row's outer edge, so the corner seats join both
     for (let t = 0; t < d.endTiers; t++) {
@@ -2645,7 +2637,7 @@ function drawProps() {
 
 // Indoors: the far wall behind the end stand, with lit suites, exit signs, banners and a video board showing the score.
 function drawArenaWall() {
-  const V = venue(); if (V.mode !== 6 || V.decks.length !== 1) return;
+  const V = venue(); if (V.mode !== 6 || V.decks.some(d => d.endTiers && d.base > 0)) return; // not in the mega bowl, whose upper deck wraps the end
   const d = V.decks[0], z = HL + d.gap + d.depth * d.endTiers + 0.2, top = d.base + d.rise * d.endTiers, X = HW + d.gap + d.depth * d.tiers + 4;
   const night = (V.extras || []).includes('dark');
   quad([[-X, 0, z], [X, 0, z], [X, top + 9, z], [-X, top + 9, z]], night ? '#0b0f1c' : '#1a2140');
