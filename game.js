@@ -2225,71 +2225,57 @@ function drawSkyFx() {
 // ===================== venues: the arena (6 v 6) and the beach (2 v 2), with crowds =====================
 function seeded(n) { return () => ((n = (n * 1664525 + 1013904223) >>> 0) / 4294967296); }
 
-// Indoor backdrop, drawn once at low resolution: arena walls, light rigs and banners above, an upper deck below.
-function buildArena() {
+// Indoor backdrop: one plain dark colour. Anything with detail (walls, pillars, roof, lights) is built in world
+// coordinates by drawArenaShell, so it stays fixed with the stands while the camera turns, tilts and slides.
+function buildIndoor(col) {
   const c = document.createElement('canvas'); c.width = UW; c.height = UH; const g = c.getContext('2d');
-  const hy = Math.round(horizonY() * US);
-  const bands = ['#0f1424', '#141a2e', '#182038', '#1c2642', '#212c4c', '#263256'];
-  const bh = Math.ceil(hy / bands.length);
-  bands.forEach((col, i) => { g.fillStyle = col; g.fillRect(0, i * bh, UW, bh); });
-  // light rigs
-  for (let row = 0; row < 2; row++) {
-    const y = 8 + row * 14;
-    g.fillStyle = '#2d3550'; g.fillRect(0, y + 3, UW, 2);
-    for (let x = 6 + row * 10; x < UW; x += 22) {
-      g.fillStyle = '#fff6d0'; g.fillRect(x, y, 6, 3);
-      g.fillStyle = 'rgba(255,246,208,0.12)'; g.fillRect(x - 3, y + 3, 12, 10);
-    }
-  }
-  // championship banners hanging from the rafters
-  const hc = homeColor(), cols = hc ? [hc, shade(hc, -0.3)] : ['#ff5d5d', '#3fa7ff', '#ffcf33', '#6bd88a', '#c48bff', '#ff9a3c'];
-  for (let i = 0; i < 9; i++) {
-    const x = 20 + i * 52, col = cols[i % cols.length];
-    g.fillStyle = col; g.fillRect(x, 36, 18, 22);
-    g.fillStyle = 'rgba(0,0,0,0.25)'; g.fillRect(x, 54, 18, 4);
-    g.fillStyle = '#ffffff'; g.fillRect(x + 7, 41, 4, 4); g.fillRect(x + 4, 48, 10, 2);
-    g.fillStyle = col; g.fillRect(x, 58, 9, 3);
-  }
-  // upper concourse glow along the wall
-  g.fillStyle = '#323c62'; g.fillRect(0, hy - 34, UW, 3);
-  g.fillStyle = hc ? shade(hc, -0.55) : '#3c4772'; g.fillRect(0, hy - 31, UW, 31);
-  g.fillStyle = hc ? shade(hc, -0.68) : '#2a3354';
-  for (let x = 0; x < UW; x += 6) g.fillRect(x, hy - 31 + ((x / 6) % 2) * 2, 3, 31);
-  arenaBehind(g, hy, hc);
+  g.fillStyle = col; g.fillRect(0, 0, UW, UH);
   return c;
 }
-// Behind the stands, below the backdrop's horizon: a plain dark back wall (no painted fans, which would slide with
-// the camera; the real upper decks are built in world coordinates). A thin band in the home colour along the top.
-function arenaBehind(g, hy, hc, dark = -0.35) {
-  g.fillStyle = shade('#141a2e', dark + 0.35); g.fillRect(0, hy, UW, UH - hy);
-  g.fillStyle = shade('#1a2140', dark + 0.35); for (let y = hy + 6; y < UH; y += 10) g.fillRect(0, y, UW, 1);
-  g.fillStyle = hc ? shade(hc, -0.35) : '#ffcf33'; g.fillRect(0, hy, UW, 2);
+const buildArena = () => buildIndoor('#141a2e'), buildArenaBig = () => buildIndoor('#0f1424'), buildNight = () => buildIndoor('#05070d');
+
+// Indoors: the building around the stands, in world coordinates. Side and end walls rise behind the top rows to a
+// roof. A band in the home colours with pillars runs above the top rows, and light rigs hang under the roof.
+// Drawn in short pieces so no quad reaches behind the camera.
+function drawArenaShell() {
+  const V = venue(); if (V.mode !== 6) return;
+  const dark = (V.extras || []).includes('dark'), hc = homeColor();
+  let Xw = 0, Zw = 0, top = 0;
+  for (const d of V.decks) {
+    Xw = Math.max(Xw, HW + d.gap + d.depth * d.tiers + 0.4);
+    Zw = Math.max(Zw, (d.zMax || HL + d.gap) + d.depth * d.endTiers + 0.4);
+    top = Math.max(top, d.base + d.rise * Math.max(d.tiers, d.endTiers));
+  }
+  const roof = top + 9, b0 = top + 0.4, b1 = top + 3.2, L = 3;
+  const wall = dark ? '#0a0d18' : '#161c32', band = hc ? shade(hc, dark ? -0.7 : -0.55) : dark ? '#1a2036' : '#3c4772';
+  const pillar = hc ? shade(hc, dark ? -0.8 : -0.68) : dark ? '#10152a' : '#2a3354', lamp = dark ? '#ffd27a' : '#fff6d0';
+  const ceil = dark ? '#05070d' : '#0f1424', truss = dark ? '#121828' : '#26304c';
+  const seen = (...ps) => ps.every(([x, y, z]) => proj(x, y, z).Z > 0.5);
+  // a strip on a wall from u0 to u1 (along z on a side wall at x = sx * Xw, along x on the end wall)
+  const strip = (side, u0, u1, y0, y1, col) => quad(side === 'end'
+    ? [[u0, y0, Zw], [u1, y0, Zw], [u1, y1, Zw], [u0, y1, Zw]]
+    : [[side * Xw, y0, u0], [side * Xw, y0, u1], [side * Xw, y1, u1], [side * Xw, y1, u0]], col);
+  // the roof, with trusses running across
+  for (let z = -HL - 6; z < Zw; z += L) {
+    const z1 = Math.min(Zw, z + L);
+    if (!seen([-Xw, roof, z], [Xw, roof, z])) continue;
+    quad([[-Xw, roof, z], [Xw, roof, z], [Xw, roof, z1], [-Xw, roof, z1]], ceil);
+    quad([[-Xw, roof - 0.01, z], [Xw, roof - 0.01, z], [Xw, roof - 0.01, z + 0.35], [-Xw, roof - 0.01, z + 0.35]], truss);
+  }
+  const panel = (side, u0, u1, i) => {
+    strip(side, u0, u1, 0, roof, wall);
+    strip(side, u0, u1, b0, b1, band);
+    strip(side, u0, u0 + 0.5, b0, b1, pillar);               // pillars through the band
+    strip(side, u0, u0 + 0.3, b1, roof, pillar);             // and up to the roof
+    if (i % 2 === 0) { strip(side, u0 + 1.0, u1 - 0.5, roof - 1.6, roof - 1.0, lamp); strip(side, u0 + 0.8, u1 - 0.3, roof - 1.0, roof - 0.8, truss); }
+  };
+  for (const sd of [-1, 1]) for (let z = -HL - 6, i = 0; z < Zw; z += L, i++) {
+    const z1 = Math.min(Zw, z + L);
+    if (seen([sd * Xw, 0, z], [sd * Xw, roof, z])) panel(sd, z, z1, i);
+  }
+  for (let x = -Xw, i = 0; x < Xw; x += L, i++) panel('end', x, Math.min(Xw, x + L), i);
 }
 
-// Stands and fans, in world coordinates so they move with the camera. Built once per match.
-// More painted backdrops (UI grid, UW x UH), one per venue style.
-function buildArenaBig() { // mega bowl: roof trusses and big light rigs above
-  const c = document.createElement('canvas'); c.width = UW; c.height = UH; const g = c.getContext('2d');
-  const hy = Math.round(horizonY() * US);
-  const bands = ['#0b0f1c', '#0f1424', '#131a2e', '#172038'];
-  const bh = Math.ceil(hy / bands.length);
-  bands.forEach((col, i) => { g.fillStyle = col; g.fillRect(0, i * bh, UW, bh); });
-  g.fillStyle = '#26304c';
-  for (let x = -40; x < UW + 40; x += 30) { g.fillRect(x, 0, 2, hy); for (let y = 0; y < hy; y += 2) g.fillRect(x + y * 0.6, y, 1, 1); }
-  for (let y = 6; y < hy; y += 12) g.fillRect(0, y, UW, 1);
-  for (let x = 10; x < UW; x += 40) { g.fillStyle = '#fffbe6'; g.fillRect(x, 4, 14, 4); g.fillStyle = 'rgba(255,246,208,0.10)'; g.fillRect(x - 6, 8, 26, 30); }
-  arenaBehind(g, hy, homeColor());
-  return c;
-}
-function buildNight() { // championship night: dark roof and light rigs
-  const c = document.createElement('canvas'); c.width = UW; c.height = UH; const g = c.getContext('2d');
-  const hy = Math.round(horizonY() * US);
-  g.fillStyle = '#05070d'; g.fillRect(0, 0, UW, hy);
-  g.fillStyle = '#121828'; for (let x = 0; x < UW; x += 24) g.fillRect(x, 0, 1, hy);
-  for (let x = 30; x < UW; x += 70) { g.fillStyle = '#ffffff'; g.fillRect(x, 6, 6, 3); g.fillStyle = '#ffcf33'; g.fillRect(x + 1, 9, 4, 1); }
-  arenaBehind(g, hy, homeColor(), -0.65);
-  return c;
-}
 function buildSunset() { // sunset over the water, palms in silhouette, orange sand
   const c = document.createElement('canvas'); c.width = UW; c.height = UH; const g = c.getContext('2d');
   const hy = Math.round(horizonY() * US);
@@ -3062,6 +3048,7 @@ function render() {
   if (G.shake > 0 && !G.simFast) ctx.translate(Math.round(rand(-1, 1) * 3 * G.shake) / S, Math.round(rand(-1, 1) * 3 * G.shake) / S);
   drawBackdrop();
   drawSkyFx();
+  drawArenaShell();
   drawArenaWall();
   drawArenaFloor();
   drawStands();
