@@ -562,18 +562,19 @@ function matchXp(c, st, won, ph) {
 const TRUST_START = 75, TRUST_OVR = 50, BENCH_XP = 5;
 const callLate = target => Math.round(target * 2 / 3); // 10 in a set to 15, 17 in a set to 25
 const trustOf = c => clamp(Math.round(c.trust || 0), 0, 100);
-// A match you play: 2 for coming on, up to 5 from your box score (as in matchXp), 1 for a win and GOAL_TRUST for a
-// met coach's goal. A bad game costs trust, and each of these counts on its own:
+// A match you play: 1 for coming on, up to 3 from your box score, 1 for a win and GOAL_TRUST for a met coach's goal.
+// The higher your trust already is, the less a good game adds: the gain shrinks to 40% of that at 100% trust (never
+// below 1). A bad game costs trust, in full, and each of these counts on its own:
 // - hitting errors: 2 or more attacks hit out, into the net or stuffed, and more of them than kills: -3
 // - the coach's goal: under half of it: -2
 // - serving and passing: 2 or more serves missed or first passes the team could not play: -2 (-4 for 4 or more)
-// Sitting the whole match gives 1. A short outing off the bench is about 2 to 5 before losses, a full match as a
-// starter 4 to 10. With training (drillTrust), a rookie usually starts around the end of the first season.
+// Sitting the whole match gives 1. Training gives none: trust comes from matches only.
 function trustChange(c, st, won, played, goal) {
   if (!played) return { d: 1, why: ['sat the whole match'] };
   const perf = POS_XP[c.pos] * (2 * st.kills + 3 * st.aces + 3 * st.blocks + 1.5 * st.digs + 0.5 * st.ast);
   const met = goal && (st[goal.stat] || 0) >= goal.n;
-  let d = 2 + Math.min(5, Math.round(perf / 5)) + (won ? 1 : 0) + (met ? GOAL_TRUST : 0);
+  const gain = 1 + Math.min(3, Math.round(perf / 8)) + (won ? 1 : 0) + (met ? GOAL_TRUST : 0);
+  let d = Math.max(1, Math.round(gain * (1 - 0.6 * trustOf(c) / 100)));
   const why = [];
   if (st.herr >= 2 && st.herr > st.kills) { d -= 3; why.push(`${st.herr} hitting errors to ${st.kills} kill${st.kills === 1 ? "" : "s"}`); }
   if (goal && !met && (st[goal.stat] || 0) < goal.n / 2) { d -= 2; why.push('well short of the coach\'s goal'); }
@@ -581,13 +582,20 @@ function trustChange(c, st, won, played, goal) {
   if (sp >= 2) { d -= sp >= 4 ? 4 : 2; why.push(`${st.serr} missed serve${st.serr === 1 ? '' : 's'} and ${st.rerr} bad pass${st.rerr === 1 ? '' : 'es'}`); }
   return { d, why };
 }
-const drillTrust = score => (score >= 70 ? 2 : score >= 35 ? 1 : 0);
-// The setter's weight for you against a teammate's 1 (game.js). 0.22 at 0% trust, 1.17 at 75% and 1.6 at 100%: as
+// How far your OVR lets the setter lean on you, whatever the trust: 1 when you are as good as your teammates' average,
+// falling 5% per point below it to 0.1 (18 or more below), up to 1.2 when you are 4 above. It also shrinks what calling
+// for the ball adds. A rookie can be trusted and still not be the one who gets the ball.
+function ovrSetFactor(c) {
+  const mates = clubEntries(c.league, c.league.myClub);
+  return clamp(1 - (teamOvr(mates) - careerOvr(c)) * 0.05, 0.1, 1.2);
+}
+// The setter's weight for you against a teammate's 1 (game.js), before ovrSetFactor. 0.22 at 0% trust, 1.17 at 75% and 1.6 at 100%: as
 // an outside in the front row, about 1 set in 10 at 0%, 1 in 3 at 75% and 4 in 10 at 100%. Calling for the ball
 // multiplies it by 1 at 0% (they do not listen yet) up to 3.5 at 100%. (Quick play has no trust: 3, and 12 called.)
 function trustSetWeight(callMe) {
-  const u = trustOf(careers[careerMatch.slot]) / 100;
-  return (0.22 + 1.38 * u ** 1.3) * (callMe ? 1 + 2.5 * u ** 1.5 : 1);
+  const c = careers[careerMatch.slot], u = trustOf(c) / 100;
+  const f = ovrSetFactor(c);
+  return (0.22 + 1.38 * u ** 1.3) * (callMe ? 1 + 2.5 * u ** 1.5 * Math.min(1, f) : 1) * f;
 }
 const trustLabel = t => (t >= 90 ? 'Go-to hitter' : t >= 75 ? 'Trusted' : t >= 40 ? 'Earning it' : t >= 15 ? 'Unproven' : 'New face');
 // The starter ahead of you: the weaker (by position fit) of those your club puts at your position without you.
@@ -851,7 +859,7 @@ function endSeason(c) {
 // as big, in the playoffs (sets to 25) half as big again. Meeting it gives GOAL_XP and GOAL_TRUST.
 const GOALS = { OH: [['kills', 5], ['digs', 5]], OPP: [['kills', 5], ['aces', 2]], MB: [['blocks', 2], ['kills', 3]], S: [['ast', 12], ['aces', 1]], L: [['digs', 4]] };
 const GOAL_NAMES = { kills: ['kill', 'kills'], digs: ['dig', 'digs'], aces: ['ace', 'aces'], blocks: ['block', 'blocks'], ast: ['assist', 'assists'] };
-const GOAL_XP = 15, GOAL_TRUST = 2;
+const GOAL_XP = 15, GOAL_TRUST = 1;
 const goalText = g => `${g.n} ${GOAL_NAMES[g.stat][g.n === 1 ? 0 : 1]}`;
 function roundKey(L) { const ph = phaseOf(L); return `${ph}-${ph === 'regular' ? L.week : 0}`; }
 function coachGoal(c) { // the goal for the coming match, set once and saved so a reload does not change it
@@ -1341,8 +1349,7 @@ function drillFinish() {
   const want = score >= 70 ? 2 : score >= 35 ? 1 : 0, room = c.cap[st] - c.r[st], gain = Math.min(want, room);
   const xp = (want - gain) * 8 + (want ? 0 : 5); // at the cap, the points come as XP instead; a poor drill still gives 5
   c.r[st] += gain; c.xp += xp; c.xpEarned += xp;
-  const tr = drillTrust(score); c.trust = clamp(trustOf(c) + tr, 0, 100);
-  c.drill = { key: drillKey(c), kind: D.kind, name: info.name, stat: st, score, gain, xp, trust: tr };
+  c.drill = { key: drillKey(c), kind: D.kind, name: info.name, stat: st, score, gain, xp }; // training builds no team trust
   promote(c); saveCareers();
   D.done = true; D.result = c.drill;
   TUT.wait = true; G.paused = true;
