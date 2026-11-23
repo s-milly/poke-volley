@@ -1220,6 +1220,43 @@ body:has(#scr-rtg-hub:not([hidden])) #menu { padding-bottom: 0; }
 .hist-note { font-size: 17px !important; }
 .hub-toast { position: absolute; left: 50%; bottom: 24px; z-index: 4; translate: -50% 0; width: max-content; max-width: min(560px, calc(100% - 24px)); margin: 0; background: #2a2510; box-shadow: 3px 3px 0 var(--ink); }
 
+/* Every tab has the same footprint: the hub always spans the full width (it used to shrink to its content, so it slid
+   sideways between tabs) and each tab's panel fills the height that is left, so switching tabs never moves anything.
+   The hub is also wider on big screens, and the standings and schedule spread their rows over the whole panel. */
+body:has(#scr-rtg-hub:not([hidden])) #menu { max-width: 1480px; }
+.rtg-hub { align-self: stretch; width: 100%; }
+@media (min-width: 1240px) { .rtg-hub { grid-template-columns: 320px minmax(0, 1fr); } }
+.hub-pane { display: flex; flex-direction: column; }
+.hub-pane > .panel { flex: none; }
+.hub-pane > .panel:last-child { flex: 1 0 auto; align-content: start; }
+/* the leader boards grow with the panel, their three rows spread down each board */
+@media (min-width: 1240px) {
+  #leaders-wrap { grid-template-rows: auto minmax(0, 1fr); align-content: stretch; }
+  .leader { grid-template-rows: auto minmax(0, 1fr); }
+  .leader ol { grid-auto-rows: minmax(0, 1fr); }
+}
+#hub-league, #hub-sched-wrap { display: flex; flex-direction: column; }
+#hub-league .rtg-tables, #hub-sched { flex: 1; }
+.rtg-tables { align-items: stretch; grid-auto-rows: minmax(0, 1fr); --cap: 26px; }
+.rtg-hub .rtg-tables table.rtg-table caption { box-sizing: border-box; height: var(--cap); padding: 0; } /* fixed so the table can fill the rest */
+.rtg-tables table.rtg-table { height: calc(100% - var(--cap)); }
+#hub-sched { grid-template-rows: repeat(var(--rows, 8), minmax(0, 1fr)); }
+#hub-sched li { align-content: center; }
+@media (min-width: 1240px) {
+  .rtg-hub table.rtg-table caption { font-size: 12px; }
+  .rtg-hub table.rtg-table thead th { font-size: 9px; }
+  .rtg-hub table.rtg-table tbody th, .rtg-hub table.rtg-table td { font-size: 27px; padding: 6px 12px; }
+  .rtg-hub table.rtg-table .crest { width: 26px; }
+  #hub-sched li { font-size: 27px; gap: 12px; padding-inline: 4px; }
+  #hub-sched .rtg-wk { font-size: 11px; }
+  #hub-sched .crest { width: 26px; }
+  .rtg-hub .rtg-step .settings-note { font-size: 21px; }
+  .leader h4 { font-size: 11px; }
+  .leader li { font-size: 23px; }
+}
+/* phones: the schedule keeps its natural row height (stretched rows read as gaps on a narrow screen) */
+@media (max-width: 760px) { #hub-sched { grid-template-rows: repeat(var(--rows, 8), auto); align-content: start; } }
+
 /* phones: the card and strip shrink away, the tabs wrap into rows of three */
 @media (max-width: 760px) {
   #scr-rtg-hub .bar-head { margin-bottom: 8px; padding-block: 8px; }
@@ -1268,7 +1305,7 @@ body:has(#scr-rtg-hub:not([hidden])) #menu { padding-bottom: 0; }
   .rtg-up { grid-template-columns: 38px minmax(40px, 1fr) 3ch 3.5ch auto; gap: 8px; }
   .rtg-up .ghost.small { min-width: 0; padding-inline: 8px; font-size: 8px; }
   .hub-perk { font-size: 17px; }
-  .rtg-tables { grid-template-columns: 1fr; gap: 8px; }
+  .rtg-tables { grid-template-columns: 1fr; gap: 8px; --cap: 18px; }
   .rtg-hub table.rtg-table caption { padding-bottom: 4px; font-size: 9px; }
   .rtg-hub table.rtg-table th, .rtg-hub table.rtg-table td { padding: 3px 5px; font-size: 17px; }
   .rtg-hub table.rtg-table thead th { font-size: 7px; }
@@ -1332,6 +1369,7 @@ body:has(#scr-rtg-hub:not([hidden])) #menu { padding-bottom: 0; }
    Standings, trust on Home and XP on Upgrades) and the tabs get shorter */
 @media (max-width: 760px) and (max-height: 760px) {
   .hub-strip { display: none; }
+  .hub-main { grid-template-rows: auto minmax(0, 1fr); } /* without the strip, the pane still takes the row that fills */
   .hub-tabs [role="tab"] { min-height: 34px; padding-block: 6px 4px; }
   .rtg-hub table.rtg-table th, .rtg-hub table.rtg-table td { padding-block: 2px; }
   .rtg-hub .rtg-step { padding-block: 7px; }
