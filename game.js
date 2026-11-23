@@ -672,7 +672,7 @@ function startServe() {
   G.players = [...G.sides[0], ...G.sides[1]];
   G.server = tutServer() || G.sides[s][0];
   Object.assign(G.ball, { vx: 0, vy: 0, vz: 0, gs: 1, trail: [], special: null, noHit: 0, knuck: null, top: false });
-  G.touches = [0, 0]; G.lastSide = -1; G.lastToucher = null; G.serveLive = false; G.intended = [null, null]; G.lastAttack = null; G.setBy = null; G.killCam = null;
+  G.touches = [0, 0]; G.lastSide = -1; G.lastToucher = null; G.serveLive = false; G.intended = [null, null]; G.lastAttack = null; G.setBy = null; G.killCam = null; G.shanked = false;
   G.setterNow = [null, null]; G.play = [null, null];
   G.phase = 'serve'; G.timer = 0; G.rally = 0;
   updateFormation();
@@ -1015,7 +1015,7 @@ function contact(p) {
   }
   G.shank = null; b.offBlock = false; if (!p.onGround) p.hitAir = true; // a player who plays the ball in the air cannot block on that same jump
 
-  if (fromOpp) { G.touches[s] = 0; G.intended[1 - s] = null; }
+  if (fromOpp) { G.touches[s] = 0; G.intended[1 - s] = null; G.shanked = false; }
   G.touches[s]++;
   if (G.touches[s] > 3) {
     awardPoint(1 - s, 'FOUR HITS', 'Only 3 touches per side', null, null);
@@ -1172,7 +1172,7 @@ function pass(p, incoming, fromOpp, q = null, dove = false, setTm = null) {
     if (Math.random() < shank) {
       const sx = Math.random() < 0.5 ? -1 : 1;
       tx = b.x + sx * rand(2.5, 7); tz = b.z - t * rand(1, 8); apexY = b.y + rand(0.2, 1.4); target = null;
-      floatText('SHANKED', p.x, p.cy + p.rr + 0.6, p.z, '#ffd6d6', 0.8); G.shank = p;
+      floatText('SHANKED', p.x, p.cy + p.rr + 0.6, p.z, '#ffd6d6', 0.8); G.shank = p; G.shanked = true; // the serve or spike keeps its credit
     }
   }
   launchTo(tx, tz, ty, apexY);
@@ -1199,7 +1199,7 @@ function openSpot(s, tries = 16) {
   let best = [0, t * HL * 0.6], bs = -1;
   for (let i = 0; i < tries; i++) {
     const x = rand(-HW * 0.85, HW * 0.85), z = t * rand(1.4, HL - 0.7);
-    let d = Infinity; for (const q of opp) d = Math.min(d, Math.hypot(q.x - x, q.z - z));
+    let d = Infinity; for (const q of opp) d = Math.min(d, Math.hypot(q.x - x, q.z - z) - (q.human ? 1.2 : 0)); // gives you a wider berth, so you are not the one they always hit at
     if (d > bs) { bs = d; best = [x, z]; }
   }
   return best;
@@ -1398,17 +1398,27 @@ function stepBall(h) {
   if (b.y <= BR) { b.y = BR; if (G.solo) soloLand(false); else ballDown(); return true; }
   if (Math.abs(b.x) > HW + 9 || Math.abs(b.z) > HL + 12) {
     if (G.solo) { soloLand(true); return true; }
-    if (aceFor(1 - G.lastSide)) awardAce(); else awardPoint(1 - G.lastSide, 'OUT', 'Hit out of bounds', null, null);
+    if (aceFor(1 - G.lastSide)) awardAce(); else if (killFor(1 - G.lastSide)) awardKill(1 - G.lastSide); else awardPoint(1 - G.lastSide, 'OUT', 'Hit out of bounds', null, null);
     return true;
   }
   return false;
 }
 
 // An ace: the serve wins the point outright. It lands untouched, or the receivers get only one touch on it,
-// such as a shanked pass that goes out or drops. Once they make a second contact the ball was playable.
+// or their first touch was a shank they never recovered from (a teammate chasing it down does not undo the ace).
+// Once they make a clean first pass the ball was playable.
 function aceFor(w) {
   const la = G.lastAttack;
-  return !!la && la.type === 'serve' && la.p.side === w && (G.lastSide === w || G.touches[G.lastSide] <= 1);
+  return !!la && la.type === 'serve' && la.p.side === w && (G.lastSide === w || G.touches[G.lastSide] <= 1 || G.shanked);
+}
+// A kill that ends out of bounds: the spike (or tip) was dug once and went out, or was shanked and never recovered.
+function killFor(w) {
+  const la = G.lastAttack;
+  return !!la && (la.type === 'spike' || la.type === 'tip') && la.p.side === w && G.lastSide === 1 - w && (G.touches[1 - w] <= 1 || G.shanked);
+}
+function awardKill(w) {
+  const la = G.lastAttack;
+  awardPoint(w, la.type === 'tip' ? 'TIP!' : 'KILL!', `${la.p.mon.name} put it away`, la.p, 'kills');
 }
 function awardAce() {
   const p = G.lastAttack.p;
@@ -1422,6 +1432,7 @@ function ballDown() {
   G.rings.push({ x: b.x, z: b.z, t: 0, c: landSide === -1 ? '#ff6b6b' : '#ffffff' }); // a ring spreads where it lands
   if (landSide === -1) {
     if (aceFor(1 - G.lastSide)) { awardAce(); return; }
+    if (killFor(1 - G.lastSide)) { awardKill(1 - G.lastSide); return; }
     awardPoint(1 - G.lastSide, 'OUT', `${G.lastToucher ? G.lastToucher.mon.name : 'The block'} hit it out`, null, null);
     return;
   }
@@ -1503,8 +1514,8 @@ function chooseReceiver(s, lx, lz) {
   const you = cands.find(p => p.human);
   if (you && !AUTO && s === 0 && G.chat && G.chat.k === 0 && G.time - G.chat.t < 3 && G.chat.tid >= G.tid - 1) return you;
   if (you && first && s === 0 && tutStep() && tutStep().mine && Math.hypot(you.x - lx, you.z - lz) < 5) return you; // tutorial: the first ball is yours
-  // the ball is yours when it comes to you; teammates cover what you cannot reach
-  if (best && best.human && !AUTO && Math.hypot(best.x - lx, best.z - lz) > 2.4) {
+  // the ball is yours when it comes right to you; teammates cover the rest
+  if (best && best.human && !AUTO && Math.hypot(best.x - lx, best.z - lz) > 1.6) {
     const ais = cands.filter(p => !p.human);
     if (ais.length) best = ais.reduce((a, p) => (cost(p) < cost(a) ? p : a));
   }
