@@ -428,7 +428,15 @@ function makeRosters(yourMon) {
 
 // Entries for a match or a rating. Your club is you plus its seven, and the lineup leaves one of them out.
 const youEntry = c => ({ mon: BY_ID.get(c.mon), captain: false, r: { ...c.r }, ovr: careerOvr(c), career: true });
-const clubEntries = (L, id) => L.clubs[id].map(m => makeEntry(BY_ID.get(m), false));
+// League players play above their species ratings: every stat gets LEAGUE_BOOST (up to 99), which lifts an OVR by
+// about 1.25 points per stat point. Rosters are still picked by species OVR (CLUB_OVR), so the clubs end up much stronger.
+const LEAGUE_BOOST = 12;
+function leagueEntry(id) {
+  const mon = BY_ID.get(id), r = {};
+  for (const k in mon.r) r[k] = Math.min(99, mon.r[k] + LEAGUE_BOOST);
+  return { mon, captain: false, r, ovr: ovrOf(r) };
+}
+const clubEntries = (L, id) => L.clubs[id].map(leagueEntry);
 function matchEntries(c, id) { return id === c.league.myClub ? [youEntry(c), ...clubEntries(c.league, id)] : clubEntries(c.league, id); }
 function clubOvr(c, id) { // the seven who start: on your club that includes you only once you are a starter
   if (id !== c.league.myClub || !c.starter) return teamOvr(lineup(clubEntries(c.league, id), null, c.pos, 6).map(x => x.entry));
@@ -1387,12 +1395,12 @@ function ageStats(c) {
   for (const k of STAT_IDS) c.r[k] = Math.max(20, c.r[k] - drop);
   return drop;
 }
-// Each club replaces its lowest-rated player with a free Pokémon near its own average (give or take 4), so ratings
+// Each club replaces its lowest-rated player with a free Pokémon near its own species average (give or take 4), so ratings
 // drift from season to season.
 function churnRosters(c) {
   const L = c.league, used = new Set([c.mon, ...Object.values(L.clubs).flat()]);
   for (const id of Object.keys(L.clubs)) {
-    const ros = L.clubs[id], avg = clubAvg(L, id), target = avg + (Math.random() - 0.5) * 8;
+    const ros = L.clubs[id], avg = ros.reduce((a, m) => a + BY_ID.get(m).ovr, 0) / ros.length, target = avg + (Math.random() - 0.5) * 8; // by species OVR, as the rosters were picked
     const worst = ros.reduce((a, b) => (BY_ID.get(b).ovr < BY_ID.get(a).ovr ? b : a));
     const near = DEX.filter(m => !m.leg && !used.has(m.id)).sort((a, b) => Math.abs(a.ovr - target) - Math.abs(b.ovr - target)).slice(0, 5);
     if (!near.length) continue;
