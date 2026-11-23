@@ -955,68 +955,380 @@ let fitTimer = 0;
 addEventListener('resize', () => { clearTimeout(fitTimer); fitTimer = setTimeout(fitHistory, 150); });
 
 // ===================== training drills =====================
-// One drill between matches, on the real match engine through the tutorial's drill mode (soft serves, clean passes
-// and sets from the computer, no score). Each drill trains one stat and plays at the position that uses it most.
-// A rally is a rep, scored 0 to 1 from your timing (PERFECT 1, GOOD 0.7, OK 0.4, WEAK 0.1, too long or missed 0).
-// After DRILL_REPS reps the average sets the reward: 70 or more raises the stat by 2, 35 or more by 1.
-const DRILL_REPS = 6;
+// One drill between matches. Each drill is its own exercise on the real court and physics, not a match: game.js
+// hands the court to G.solo, and the code below feeds the balls, scores each rep and puts the next one up.
+// Every rep scores 0 to 1. After all the reps the average sets the reward: 70 or more raises the stat by 2, 35 or more by 1.
 const DRILLS = {
-  serve: { stat: 'pwr', name: 'Serving', role: 'OPP', serve: 'you', ev: 'serve',
-    text: 'Serve 6 balls. Hold left click to toss and let go as it drops back to your hand. Better timing scores more, an ace scores full marks and a fault scores nothing.' },
-  pass: { stat: 'def', name: 'Passing', role: 'OH', serve: 'them', mine: true, ev: 'pass',
-    text: 'They serve 6 balls at you. Get to the green carets, hold left click and let go as the ball arrives.' },
-  block: { stat: 'jmp', name: 'Blocking', role: 'MB', serve: 'us', ev: 'block',
-    text: 'Your side serves and they attack. Stand at the net, jump just after their hitter and right click. A stuff block scores most, a touch scores well and a block put up at the net scores a little.' },
-  set: { stat: 'skl', name: 'Setting', role: 'S', serve: 'them', ev: 'set',
-    text: 'They serve and your team passes to you. Point at a hitter and press E as the ball arrives. Every set scores half marks, and a set that becomes a kill scores full marks.' },
-  dive: { stat: 'spd', name: 'Diving', role: 'L', serve: 'them', ev: 'pass',
-    text: 'Chase down every ball as the libero. Right click to dive: a pass after a dive scores most, a plain pass scores a little.' },
+  dive:  { stat: 'spd', name: 'Diving',   reps: 10,
+    text: () => 'Only you are on the court. Balls come over the net one after another, away from where you stand. Run each one down and right click to dive for the far ones. A dig off a dive scores full marks, a dig on your feet scores 80, and a ball that drops scores nothing.' },
+  block: { stat: 'jmp', name: 'Blocking', reps: 6,
+    text: () => 'Their hitter attacks from a different spot each time. Slide along the net to the green ring in front of them. Hold Space to charge and let go to jump as they jump; your hands go up on their own. A full charge scores 70, and getting a hand on the spike adds 30 for a stuff block or 20 for a touch.' },
+  hit:   { stat: 'pwr', name: 'Hitting',  reps: 6,
+    text: d => `Your setter sets you at each spot your position hits from: ${hitSpots(d.pos).map(h => h.name).join(', ')}. Start at the green ring, jump as the set comes down and hold left click; let go to swing. The score is your timing: PERFECT 100, GOOD 70, OK 40, WEAK 10.` },
+  pass:  { stat: 'def', name: 'Passing',  reps: 8,
+    text: () => 'Serves come straight at you. Hold left click as the ball comes in and let go as it arrives, to pass it to your setter. The score is your timing: PERFECT 100, GOOD 70, OK 40, WEAK 10, and a pass with no wind-up 20.' },
+  serve: { stat: 'skl', name: 'Serving',  reps: 6,
+    text: () => 'A gold zone is marked on their court, in a new spot each serve. Serve into it: the cursor aims, and your timing sets how close to the aim the ball lands. In the zone scores 100, close to it 60, anywhere else in the court 25, and a fault scores nothing.' },
 };
+// Results saved before the drills were remade name their drill by its old key.
+const OLD_DRILLS = { serve: ['Serving', 'pwr'], pass: ['Passing', 'def'], block: ['Blocking', 'jmp'], set: ['Setting', 'skl'], dive: ['Diving', 'spd'] };
 const repScore = q => (q == null ? 0.2 : q >= 1 ? 1 : q >= 0.65 ? 0.7 : q >= 0.3 ? 0.4 : q > -0.4 ? 0.1 : 0);
 const drillKey = c => `${c.season}-${roundKey(c.league)}`;
+// Where each position hits from, in your own court coordinates (your right is +x, the net is z = 0).
+// sx, sz: the start of the approach; feed: where the ball comes from, when it is not your setter's spot.
+function hitSpots(pos) {
+  const front = -1.0, back = -(attackLine() + 0.7), [setX] = setterSpot();
+  const at = (name, ox, oz, apex, sx = ox * 0.85, sz = oz - 2.8, feed = null) => ({ name, call: name.toUpperCase(), ox, oz, apex: NET_H + apex, sx, sz, feed });
+  const outside = at('Outside', -0.72 * HW, front, 2.8), right = at('Right side', 0.72 * HW, front, 2.6);
+  const quick = at('Quick', setX - 1.1, -0.8, 1.5, setX - 0.8, -3.4), slide = at('Slide', setX + 2.2, -0.8, 1.7, setX - 0.4, -3.0);
+  const pipe = at('Pipe', 0, back, 2.5, 0, back - 2.2), backL = at('Back left', -0.6 * HW, back, 2.6, -0.6 * HW, back - 2.2), backR = at('Back right', 0.6 * HW, back, 2.6, 0.6 * HW, back - 2.2);
+  const second = at('Second ball', setX, -0.7, 2.1, setX + 0.6, -3.0, [0, -HL * 0.55]); // a pass comes to you at the net and you attack it
+  return { OH: [outside, pipe, backL], OPP: [right, backR], MB: [quick, slide], S: [second, right], L: [backL, pipe, backR] }[pos] || [outside, pipe];
+}
 function startDrill(kind) {
-  const c = careers[slot], L = c.league, D = DRILLS[kind];
+  const c = careers[slot], L = c.league;
   Sfx.init();
   const opp = pickOne(Object.keys(CLUBS).filter(id => id !== L.myClub)); // a sparring partner
-  TUT = { mode: 6, roles: [D.role], ri: 0, saved: JSON.parse(JSON.stringify(settings)),
-    steps: [{ title: D.name, text: D.text, ev: D.ev, serve: D.serve, mine: !!D.mine }], si: 0, marks: [], moved: 0, hitters: new Set(), wait: false, endAt: null,
-    drill: { kind, slot, reps: [], cur: null, oppSpike: false, setBy: false, done: false, result: null } };
+  TUT = { mode: 6, roles: [c.pos], ri: 0, saved: JSON.parse(JSON.stringify(settings)),
+    steps: [], si: 0, marks: [], moved: 0, hitters: new Set(), wait: false, endAt: null,
+    drill: { kind, slot, pos: c.pos, reps: [], done: false, result: null } };
   Object.assign(settings, { mode: 6, diff: 'easy', target: 25, sets: 1 });
-  settings.role[6] = D.role; settings.venue[6] = 'arena';
+  settings.role[6] = c.pos; settings.venue[6] = 'arena';
   teams = [[youEntry(c), ...clubEntries(L, L.myClub)], clubEntries(L, opp)];
   clubs = [CLUBS[L.myClub], CLUBS[opp]];
-  startMatch(); renderCoach();
+  startMatch(); soloSetup(kind); renderCoach();
 }
+
+// ---------- the drill court (G.solo) ----------
+// After startMatch: clear the court down to the players the drill uses. You, plus a setter who feeds you in the hitting
+// drill, or their setter and hitter in the blocking drill. Everyone else sits out.
+function soloSetup(kind) {
+  const you = G.me, mates = G.all[0].filter(p => p !== you), opp = G.all[1];
+  const pick = (list, ...roles) => roles.map(r => list.find(p => p.role === r)).find(Boolean) || list[0];
+  const S = { kind, next: G.time + 1.0, rep: null, last: -1 };
+  if (kind === 'hit') { S.feeder = pick(mates, 'S', 'OPP'); S.spots = hitSpots(TUT.drill.pos); }
+  if (kind === 'block') { S.hitter = pick(opp, 'OH', 'OPP'); S.oppSetter = pick(opp.filter(p => p !== S.hitter), 'S'); S.hitter.ai.jumpErr = 0; }
+  if (kind === 'block' && you.role === 'L') you.role = 'MB'; // a libero may not block, but this is practice
+  G.sides = [[you, ...(S.feeder ? [S.feeder] : [])], kind === 'block' ? [S.hitter, S.oppSetter] : []];
+  G.players = [...G.sides[0], ...G.sides[1]];
+  G.rot = [[null, you, null, null, null, null], [null, S.hitter || null, null, null, null, null]]; // both in the front row
+  G.libero = [null, null]; G.libSub = [null, null]; G.bench = [[], []]; G.sideline = [[], []]; G.blockers = [[], []]; G.subs = [];
+  G.solo = S; G.phase = 'wait'; G.serving = kind === 'serve' ? 0 : 1;
+  const [x, z] = { dive: [0, -HL * 0.5], pass: [0, -HL * 0.6], block: [0, -0.8], hit: [0, -4], serve: [0, -HL * 0.5] }[kind];
+  Object.assign(you, { x, z, y: 0, vx: 0, vy: 0, vz: 0, onGround: true, dive: 0, rec: 0 });
+  if (S.feeder) { const [fx, fz] = setterSpot(); Object.assign(S.feeder, { x: fx, z: fz, vx: 0, vz: 0 }); }
+  if (S.oppSetter) { const [fx, fz] = setterSpot(); Object.assign(S.oppSetter, { x: -fx, z: -fz, vx: 0, vz: 0 }); Object.assign(S.hitter, { x: 0, z: 4, vx: 0, vz: 0 }); }
+  Object.assign(G.ball, { x: 0, y: BR, z: 3, vx: 0, vy: 0, vz: 0, trail: [] });
+  Object.assign(G.cam, camWant(you, false));
+}
+// Send the ball from where it is to land on (tx, tz) after about T seconds, raising the arc until it clears the net.
+function soloFire(tx, tz, T) {
+  const b = G.ball;
+  for (let k = 0; k < 12; k++, T *= 1.08) {
+    b.vx = (tx - b.x) / T; b.vz = (tz - b.z) / T; b.vy = (BR - b.y) / T + 0.5 * GB * T;
+    if (clearsNet(b.x, b.y, b.z, b.vx, b.vy, b.vz)) break;
+  }
+  b.gs = 1;
+}
+// The bookkeeping of a touch, and the ball pushed out of the body so it leaves cleanly (as contact() does in a match).
+function soloTouch(p) {
+  const b = G.ball, t = toward(p.side);
+  G.lastToucher = p; G.lastSide = p.side; G.serveLive = false; G.intended = [null, null]; p.cool = 0.4; b.noHit = 0.08; b.special = null; G.tid++;
+  const nx = b.x - p.x, ny = b.y - p.cy, nz = b.z - p.z, d = Math.hypot(nx, ny, nz) || 1, k = (p.rr + BR + 0.02) / d;
+  b.x = p.x + nx * k; b.y = p.cy + ny * k; b.z = p.z + nz * k;
+  if (b.z * t > -0.05) b.z = -t * 0.05;
+  if (!p.onGround) p.hitAir = true;
+  p.squash = 0.85;
+}
+// Your wind-up for this touch, graded as in a match: a spike in the air uses the hitter's narrower PERFECT window.
+function soloGrade(p) {
+  let tm = holdGrade();
+  const spike = !!tm && !tm.set && !p.onGround && G.ball.y > NET_H && !(p.dive > 0);
+  if (spike && tm !== TOO_LONG) tm = gradeL(holdLevel(G.hold), perfectWin(p));
+  if (tm) {
+    G.meterShow = { p, L: holdLevel(G.hold), color: tm.color, t: G.time, win: spike ? perfectWin(p) : undefined };
+    floatText(tm.label, p.x, p.cy + p.rr + 1.1, p.z, tm.color, 0.7);
+    if (tm.q >= 1) Sfx.tone(1320, 0.06, 'square', 0.03);
+  }
+  G.hold = null;
+  return tm;
+}
+// A rep is done: its score goes on the board, with a call-out at the top of the screen.
+function soloScore(v, label) {
+  const D = TUT.drill, S = G.solo;
+  if (!S.rep || S.rep.scored) return;
+  S.rep.scored = true; D.reps.push(v);
+  G.texts = G.texts.filter(t => !t.big);
+  G.texts.push({ big: true, text: label, sub: `Rep ${D.reps.length}: ${Math.round(v * 100)}`, color: v >= 0.7 ? '#ffcf33' : v >= 0.35 ? '#50e68c' : '#ff6b6b', t: 0, life: 1.3 });
+  Sfx.tone(v >= 0.7 ? 990 : v >= 0.35 ? 660 : 220, 0.09, 'square', 0.03);
+  renderCoach();
+}
+// A new rep: a fresh ball, or the drill is over.
+function soloStart() {
+  const D = TUT.drill, S = G.solo, b = G.ball;
+  if (D.reps.length >= DRILLS[D.kind].reps) { drillFinish(); return; }
+  if (G.phase === 'rally' && b.y > BR + 0.1) burst(b.x, b.y, b.z, '#ffffff', 5); // a ball still in the air leaves in a puff
+  Object.assign(b, { vx: 0, vy: 0, vz: 0, gs: 1, trail: [], special: null, noHit: 0, knuck: null, top: false, offBlock: false });
+  G.touches = [0, 0]; G.lastSide = -1; G.lastToucher = null; G.serveLive = false; G.intended = [null, null]; G.lastAttack = null; G.setBy = null;
+  G.hold = null; G.toss = false; G.tid++; G.rally = 0;
+  input.hitQ = input.setQ = input.diveQ = false;
+  for (const p of G.players) { p.noTouch = false; p.hitAir = false; p.blockUp = false; if (p.human) p.cool = 0; }
+  S.rep = { scored: false }; S.hit = false;
+  SOLO[D.kind].start(S, G.me, b);
+}
+// One frame of a drill, in place of a match's rally and point phases (a serve still runs through the match's own code).
+function soloUpdate(dt, you) {
+  const S = G.solo, K = SOLO[S.kind];
+  input.hitQ = input.setQ = false;
+  if (S.next != null && G.time >= S.next) {
+    S.next = null; soloStart();
+    if (TUT.wait || G.phase === 'serve') return;
+  }
+  if (K.tick && S.rep) K.tick(S, you, dt); // nothing to run before the first rep is up
+  if (you) humanControl(you, dt);
+  if (G.phase === 'rally') { // the clock steps with the physics, so a touch is graded at the moment it happens
+    const steps = Math.max(1, Math.round(dt / STEP)), h = dt / steps, tEnd = G.time;
+    G.time -= dt;
+    for (let i = 0; i < steps; i++) {
+      G.time += h;
+      for (const p of G.players) stepPlayer(p, h);
+      if (stepBall(h) || G.freeze > 0) break;
+    }
+    G.time = tEnd;
+  } else for (const p of G.players) stepPlayer(p, dt);
+}
+function soloContact(p) {
+  const S = G.solo, K = SOLO[S.kind];
+  if (K.touch && S.rep) K.touch(S, p); else p.cool = 0.5;
+}
+function soloLand(out) {
+  const b = G.ball, S = G.solo, K = SOLO[S.kind];
+  if (!out) {
+    dust(b.x, b.z, 14, '#f3e2b5');
+    G.rings.push({ x: b.x, z: b.z, t: 0, c: inCourt(b.x, b.z, 0) || inCourt(b.x, b.z, 1) ? '#ffffff' : '#ff6b6b' });
+  }
+  b.vx = b.vy = b.vz = 0; b.y = BR; b.trail.length = 0;
+  G.phase = 'wait';
+  if (K.land && S.rep) K.land(S, out);
+  if (S.next == null) S.next = G.time + 0.9;
+}
+// A different pick from last time.
+function soloPick(S, n) { let i = Math.floor(Math.random() * n); if (n > 1 && i === S.last) i = (i + 1 + Math.floor(Math.random() * (n - 1))) % n; S.last = i; return i; }
+
+const SOLO = {
+  // SPD: balls one after another, landing 3 to 6.5 metres from where you stand. A slower Pokémon has to dive more.
+  dive: {
+    start(S, you, b) {
+      b.x = rand(-HW * 0.4, HW * 0.4); b.y = 2.8; b.z = 2.2;
+      let tx = 0, tz = -HL / 2;
+      for (let k = 0; k < 40; k++) {
+        tx = rand(-HW + 1, HW - 1); tz = rand(-HL + 1.2, -1.8);
+        const d = Math.hypot(tx - you.x, tz - you.z);
+        if (d > 3 && d < 6.5) break;
+      }
+      soloFire(tx, tz, 0.5 + Math.hypot(tx - you.x, tz - you.z) / 9);
+      G.lastSide = 1; G.phase = 'rally';
+      burst(b.x, b.y, b.z, '#ffffff', 6); Sfx.bump();
+    },
+    touch(S, p) {
+      if (!p.human) return;
+      const dove = p.dive > 0;
+      soloGrade(p); soloTouch(p);
+      launchTo(rand(-2, 2), -3.5, BR, 3.6); Sfx.bump();
+      soloScore(dove ? 1 : 0.8, dove ? 'DIVING DIG!' : 'DUG IT');
+      S.next = G.time + 1.0;
+    },
+    land(S) { if (!S.rep.scored) { soloScore(0, 'DROPPED'); S.next = G.time + 0.8; } },
+    hint: () => 'RUN IT DOWN · RIGHT CLICK DIVES',
+  },
+  // JMP: their setter sets their hitter at the outside, the right side or a quick. You block, and the score is the
+  // power of your jump at the net plus what your hands did.
+  block: {
+    start(S) {
+      const spots = [['OUTSIDE', -0.72 * HW, 2.6], ['RIGHT SIDE', 0.72 * HW, 2.4], ['QUICK', setterSpot()[0] - 1.1, 1.6]];
+      const [call, ox, apex] = spots[soloPick(S, spots.length)];
+      S.spot = { call, x: -ox, apex: NET_H + apex }; // their own coordinates are mirrored
+      S.ready = G.time + 1.4; G.phase = 'wait';
+    },
+    tick(S, you) {
+      const h = S.hitter, st = S.oppSetter, b = G.ball, [sx, sz] = setterSpot();
+      st.cool = 99; moveToward(st, -sx, -sz, 0.9);
+      if (G.phase === 'wait') {
+        moveToward(h, S.spot.x, 3.8, 0.9);
+        if (S.ready != null) {
+          b.x = st.x; b.z = st.z - 0.1; b.y = st.y + st.rr * 2 + 0.3; b.vx = b.vy = b.vz = 0; // the ball waits in their setter's hands
+          if (G.time >= S.ready && Math.hypot(h.x - S.spot.x, h.z - 3.8) < 0.5) {
+            S.ready = null;
+            launchTo(S.spot.x, 1.0, h.apex + h.rr * 2, S.spot.apex);
+            G.lastSide = 1; G.touches[1] = 2; G.lastToucher = st; G.intended[1] = h; G.phase = 'rally';
+            st.squash = 0.85; floatText(S.spot.call, st.x, st.cy + st.rr + 0.6, st.z, '#ffe9a0', 0.9); Sfx.bump();
+          }
+        }
+      } else if (!S.hit) aiReceive(h, b.x, b.z, TUTOR);
+      else moveToward(h, S.spot.x, 3.8, 0.6);
+      if (!you.onGround && Math.abs(you.z) < you.rr + 1.2 && !you.hitAir) you.blockUp = true; // your hands go up at the net
+    },
+    touch(S, p) {
+      const b = G.ball;
+      if (p === S.hitter) {
+        soloTouch(p); G.touches[1] = 3; S.hit = true;
+        if (p.onGround || b.y < NET_H - 0.1 || !spike(p, null)) over(p);
+      } else if (p.human) {
+        if (canBlock(p) && Math.abs(p.z) < p.rr + 0.9 && G.lastSide === 1 && b.vz < 0 && b.y > NET_H - 0.3) doBlock(p);
+        else { soloTouch(p); launchTo(rand(-2, 2), -3.5, BR, 3.4); Sfx.bump(); }
+      }
+    },
+    land(S) {
+      if (!S.hit) { S.rep.scored = true; S.next = G.time + 0.6; return; } // their hitter never got a swing: that rep goes again
+      const j = S.rep.jump, bl = S.rep.block;
+      const v = (j == null ? 0 : j >= 0.95 ? 0.7 : 0.7 * j) + (bl === 'stuff' ? 0.3 : bl ? 0.2 : 0);
+      soloScore(v, bl === 'stuff' ? 'STUFF BLOCK!' : bl ? 'BLOCK TOUCH' : j == null ? 'NO JUMP' : j >= 0.95 ? 'FULL POWER' : 'MORE POWER');
+      S.next = G.time + 1.0;
+    },
+    hint: () => 'HOLD SPACE FOR FULL POWER',
+  },
+  // PWR: your setter sets you at each spot your position hits from, in turn. The score is your spike's timing.
+  hit: {
+    start(S) {
+      S.spot = S.spots[TUT.drill.reps.length % S.spots.length];
+      S.ready = { at: G.time + 1.0, max: G.time + 4.5 }; G.phase = 'wait';
+    },
+    tick(S, you) {
+      const f = S.feeder, sp = S.spot, b = G.ball, [fx, fz] = sp.feed || setterSpot();
+      f.cool = 99; moveToward(f, fx, fz, 0.9);
+      if (!S.ready) return;
+      b.x = f.x; b.z = f.z + 0.1; b.y = f.y + f.rr * 2 + 0.3; b.vx = b.vy = b.vz = 0; // the ball waits in the setter's hands
+      const near = Math.hypot(you.x - sp.sx, you.z - sp.sz) < 1.3;
+      if (G.time >= S.ready.at && (near || G.time >= S.ready.max) && Math.hypot(f.x - fx, f.z - fz) < 0.4) { // set when you are at your start
+        S.ready = null;
+        launchTo(sp.ox, sp.oz, you.apex + you.rr * 2, sp.apex);
+        G.lastSide = 0; G.touches[0] = 2; G.lastToucher = f; G.intended[0] = you; G.phase = 'rally';
+        f.squash = 0.85; floatText(sp.call, f.x, f.cy + f.rr + 0.6, f.z, '#ffe9a0', 0.9); Sfx.bump();
+      }
+    },
+    touch(S, p) {
+      if (!p.human) return;
+      const tm = soloGrade(p), q = tm ? tm.q : null, air = !p.onGround && G.ball.y > NET_H && !(p.dive > 0);
+      soloTouch(p); G.touches[0] = 3;
+      if (air && tm && !tm.set) { if (!spike(p, q)) over(p); soloScore(repScore(q), tm.q >= 1 ? 'PERFECT HIT!' : tm.label); }
+      else { over(p); soloScore(0, air ? 'NO SWING' : 'JUMP TO HIT'); }
+    },
+    land(S, out) {
+      const b = G.ball;
+      if (!S.rep.scored) soloScore(0, 'MISSED');
+      else floatText(!out && inCourt(b.x, b.z, 1) ? 'IN' : 'OUT', b.x, 0.8, b.z, !out && inCourt(b.x, b.z, 1) ? '#7dffb0' : '#ff8a8a', 0.9);
+      S.next = G.time + 0.9;
+    },
+    hint: S => `${S.spot ? S.spot.call + ' · ' : ''}JUMP, HOLD CLICK, LET GO`,
+  },
+  // DEF: serves straight at you. The score is your pass's timing.
+  pass: {
+    start(S, you, b) {
+      b.x = rand(-HW * 0.6, HW * 0.6); b.y = 2.7; b.z = HL + 0.6;
+      const tx = clamp(you.x + rand(-1.4, 1.4), -HW + 0.8, HW - 0.8), tz = clamp(you.z + rand(-1.2, 1.2), -HL + 0.8, -2.5);
+      soloFire(tx, tz, rand(1.4, 1.65));
+      G.lastSide = 1; G.phase = 'rally'; Sfx.serve();
+    },
+    touch(S, p) {
+      if (!p.human) return;
+      const tm = soloGrade(p), q = tm && !tm.set ? tm.q : null;
+      soloTouch(p); G.touches[0] = 1;
+      const [sx, sz] = setterSpot(), tq = q == null ? 1 : clamp(1 - q * 0.85, 0.15, 1.4), err = (100 - p.r.def) * 0.022 * tq; // as a match pass
+      launchTo(sx + rand(-1, 1) * err, Math.min(-1.4, sz + rand(-1, 1) * err * 0.7), 1.3, NET_H + 2); Sfx.bump();
+      soloScore(repScore(q), q == null ? 'NO WIND-UP' : q >= 1 ? 'PERFECT PASS!' : tm.label);
+      S.next = G.time + 1.4;
+    },
+    land(S) { if (!S.rep.scored) { soloScore(0, 'MISSED'); S.next = G.time + 0.9; } },
+    hint: () => 'HOLD CLICK, LET GO AS IT ARRIVES',
+  },
+  // SKL: serve into a zone marked on their court. Inside it scores full marks, near it less, anywhere in less again.
+  serve: {
+    start(S, you) {
+      const zones = [[-0.6, HL - 2.4], [0.6, HL - 2.4], [0, HL - 2.2], [-0.55, 3.6], [0.55, 3.6], [0, HL * 0.5]];
+      const [zx, zz] = zones[soloPick(S, zones.length)];
+      S.zone = { x: zx * HW, z: zz, r: 1.6 };
+      Object.assign(you, { x: clamp(0.5 * HW, -HW + 0.6, HW - 0.6), z: -(HL + 0.8 + SERVE_RUN), y: 0, vx: 0, vy: 0, vz: 0, onGround: true, dive: 0, rec: 0 });
+      G.server = you; G.serving = 0; G.phase = 'serve'; G.timer = 0;
+    },
+    land(S, out) {
+      const b = G.ball, z = S.zone, d = Math.hypot(b.x - z.x, b.z - z.z), inn = !out && inCourt(b.x, b.z, 1);
+      if (inn && d <= z.r) soloScore(1, 'ON TARGET!');
+      else if (inn && d <= z.r + 1.5) soloScore(0.6, 'CLOSE');
+      else if (inn) soloScore(0.25, 'IN, OFF TARGET');
+      else soloScore(0, b.z < 0 && !out ? 'INTO THE NET' : 'OUT');
+      S.next = G.time + 1.1;
+    },
+  },
+};
+// The drill's marks on the floor, drawn under the players. Returns call-outs for render() to letter on top.
+function soloDrawGround() {
+  const S = G.solo, out = [];
+  const ring = (x, z, r, col, lw, fill) => {
+    if (fill) { ctx.fillStyle = fill; groundEllipse(x, z, r, r); ctx.fill(); }
+    ctx.lineWidth = lw + 3; ctx.strokeStyle = 'rgba(16,20,31,0.55)'; groundEllipse(x, z, r, r); ctx.stroke();
+    ctx.lineWidth = lw; ctx.strokeStyle = col; groundEllipse(x, z, r, r); ctx.stroke();
+  };
+  const label = (text, x, z, col) => { const p = proj(x, 0, z); out.push([text, p.x * US, p.y * US + 6, col]); };
+  if (S.kind === 'serve' && S.zone) {
+    const z = S.zone;
+    ring(z.x, z.z, z.r + 1.5, 'rgba(255,207,51,0.45)', 2);
+    ring(z.x, z.z, z.r, '#ffcf33', 4, 'rgba(255,207,51,0.38)');
+    label('TARGET', z.x, z.z, '#ffe14a');
+  }
+  if (S.kind === 'pass') { const [sx, sz] = setterSpot(); ring(sx, sz, 0.7, '#7dffb0', 3); label('SETTER', sx, sz - 0.9, '#7dffb0'); }
+  if (S.kind === 'hit' && S.spot && S.ready) { ring(S.spot.sx, S.spot.sz, 0.6, '#50e68c', 4); label('START', S.spot.sx, S.spot.sz, '#7dffb0'); }
+  if (S.kind === 'block' && S.spot && !S.hit) { ring(S.spot.x, -0.75, 0.6, '#50e68c', 3); label('BLOCK HERE', S.spot.x, -1.6, '#7dffb0'); }
+  return out;
+}
+// The drill's board, top left, in place of the scoreboard: one pip per rep, coloured by its score. Then a hint at the
+// bottom, and in the blocking drill a power bar over your head while you charge a jump.
+function soloHud() {
+  const D = TUT.drill, info = DRILLS[D.kind], N = info.reps, n = D.reps.length, S = G.solo;
+  const x0 = 4, y0 = 4, pip = N > 8 ? 6 : 9, W = 132, H = 31;
+  pxRect(x0 + 2, y0 + 2, W, H, 'rgba(5,8,16,0.45)');
+  pxRect(x0, y0, W, H, '#f4f6fb'); pxRect(x0, y0, 3, H, '#ffcf33');
+  pxText(info.name.toUpperCase(), x0 + 9, y0 + 5, '#141c33', 8, 'left', null);
+  pxText(`${Math.min(n + 1, N)}/${N}`, x0 + W - 5, y0 + 5, '#6d7891', 8, 'right', null);
+  for (let i = 0; i < N; i++) {
+    const v = D.reps[i];
+    pxRect(x0 + 9 + i * (pip + 2), y0 + 19, pip, 6, v == null ? (i === n ? '#8a94ad' : '#c5ccd9') : v >= 0.7 ? '#e0a800' : v >= 0.35 ? '#2f9e63' : '#d8343a');
+  }
+  const avg = n ? Math.round(D.reps.reduce((a, c) => a + c, 0) / n * 100) : 0; // the average so far, out of 100
+  pxText(String(avg), x0 + W - 5, y0 + 18, '#141c33', 8, 'right', null);
+  const tab = `TRAINING ${info.stat.toUpperCase()}`, tw = tab.length * 8 + 8;
+  pxRect(x0, y0 + H, tw, 12, '#141c33');
+  pxText(tab, x0 + 4, y0 + H + 2, '#c9d4ee', 8, 'left', null);
+  const K = SOLO[D.kind], hint = K.hint && K.hint(S);
+  if (hint && !D.done) pxText(hint, UW / 2, UH - 12, '#c9d4ee', 8);
+  const you = G.me;
+  if (D.kind === 'block' && you && input.jumpT0 != null && you.onGround && you.box) { // the jump charge
+    const L = clamp((performance.now() - input.jumpT0) / 1000 / JUMP_CHARGE, 0, 1), full = L >= 0.95;
+    const w = 26, x = Math.round(you.box.x * US - w / 2), y = Math.round((you.box.y - you.box.h) * US - 10);
+    pxRect(x - 1, y - 1, w + 2, 5, 'rgba(10,14,24,0.85)'); pxRect(x, y, w, 3, 'rgba(255,255,255,0.15)');
+    pxRect(x, y, Math.round(w * L), 3, full ? '#ffcf33' : '#ffffff');
+    if (full) pxText('FULL', x + w / 2, y - 10, '#ffe14a', 8);
+  }
+}
+// Called by game.js on your jumps and blocks (tutEvent): the blocking drill keeps the power of your jump at the net.
 function drillEvent(ev, d) {
-  const D = TUT.drill, k = D.kind; if (D.done) return;
-  const best = v => { D.cur = Math.max(D.cur ?? 0, v); };
-  if (k === 'serve' && ev === 'serve') best(repScore(d.q));
-  else if (k === 'pass' && ev === 'pass' && d.first) best(repScore(d.q));
-  else if (k === 'block') { if (ev === 'block') best(d.stuff ? 1 : 0.75); else if (ev === 'blockup' && d.net) best(0.35); }
-  else if (k === 'set' && ev === 'set') { D.setBy = true; best(0.5); }
-  else if (k === 'dive') { if (ev === 'pass') best(d.dove ? Math.max(0.5, repScore(d.q)) : repScore(d.q) * 0.4); else if (ev === 'dive') best(0.15); }
-}
-function drillRally(w, key) {
-  const D = TUT.drill; if (D.done) return;
-  let count = true;
-  if (D.kind === 'serve') {
-    if (key === 'aces' && w === 0) D.cur = 1;
-    else if (w === 1 && G.lastAttack && G.lastAttack.type === 'serve') D.cur = 0; // a fault: they won it without attacking
-  } else if (D.kind === 'block') count = D.oppSpike;     // only rallies where they attacked
-  else if (D.kind === 'set') { count = D.setBy; if (D.setBy && w === 0 && key === 'kills' && G.lastAttack && G.lastAttack.setter && G.lastAttack.setter.human) D.cur = 1; }
-  else if (D.kind === 'dive' || D.kind === 'pass') count = D.cur != null || D.kind === 'pass'; // passing: a serve you miss counts as 0
-  if (count) D.reps.push(D.cur ?? 0);
-  D.cur = null; D.oppSpike = false; D.setBy = false;
-  if (D.reps.length >= DRILL_REPS) drillFinish(); else renderCoach();
+  const D = TUT.drill, S = G && G.solo;
+  if (D.done || !S || !S.rep || S.rep.scored || D.kind !== 'block') return;
+  const you = G.me;
+  if (ev === 'jump' && G.phase === 'rally' && Math.abs(you.z) < you.rr + 1.4) {
+    S.rep.jump = Math.max(S.rep.jump ?? 0, d.c);
+    const full = d.c >= 0.95;
+    floatText(full ? 'FULL POWER' : `POWER ${Math.round(d.c * 100)}`, you.x, you.cy + you.rr + 1.1, you.z, full ? '#ffe14a' : '#ffffff', 0.8);
+  }
+  if (ev === 'block') S.rep.block = d.stuff ? 'stuff' : S.rep.block || 'touch';
 }
 function drillFinish() {
-  const D = TUT.drill, c = careers[D.slot], st = DRILLS[D.kind].stat;
+  const D = TUT.drill, c = careers[D.slot], info = DRILLS[D.kind], st = info.stat;
   const score = Math.round(D.reps.reduce((a, b) => a + b, 0) / D.reps.length * 100);
   const want = score >= 70 ? 2 : score >= 35 ? 1 : 0, room = c.cap[st] - c.r[st], gain = Math.min(want, room);
   const xp = (want - gain) * 8 + (want ? 0 : 5); // at the cap, the points come as XP instead; a poor drill still gives 5
   c.r[st] += gain; c.xp += xp; c.xpEarned += xp;
   const tr = drillTrust(score); c.trust = clamp(trustOf(c) + tr, 0, 100);
-  c.drill = { key: drillKey(c), kind: D.kind, score, gain, xp, trust: tr };
+  c.drill = { key: drillKey(c), kind: D.kind, name: info.name, stat: st, score, gain, xp, trust: tr };
   promote(c); saveCareers();
   D.done = true; D.result = c.drill;
   TUT.wait = true; G.paused = true;
@@ -1032,17 +1344,18 @@ function drillQuit() { // back to the hub; an unfinished drill gives nothing and
   $('#coach').hidden = true;
   saveSettings(); renderHub(); show('scr-rtg-hub');
 }
-const drillResultText = r => `${DRILLS[r.kind].name}: ${r.score}/100, ${r.gain ? `+${r.gain} ${DRILLS[r.kind].stat.toUpperCase()}` : 'no stat gain'}${r.xp ? `, +${r.xp} XP` : ''}${r.trust ? `, +${r.trust}% team trust` : ''}`;
+const drillInfo = r => (r.stat ? [r.name, r.stat] : OLD_DRILLS[r.kind] || ['Training', '']);
+const drillResultText = r => { const [name, stat] = drillInfo(r); return `${name}: ${r.score}/100, ${r.gain ? `+${r.gain} ${stat.toUpperCase()}` : 'no stat gain'}${r.xp ? `, +${r.xp} XP` : ''}${r.trust ? `, +${r.trust}% team trust` : ''}`; };
 function renderDrillCoach(box) {
-  const D = TUT.drill, info = DRILLS[D.kind];
-  const reps = Array.from({ length: DRILL_REPS }, (_, i) => {
+  const D = TUT.drill, info = DRILLS[D.kind], N = info.reps;
+  const reps = Array.from({ length: N }, (_, i) => {
     const v = D.reps[i], now = i === D.reps.length && !D.done;
-    return `<li class="${v != null ? (v >= 0.4 ? 'done' : 'low') : ''}${now ? ' now' : ''}"><i aria-hidden="true">${i + 1}</i><span>Rep ${i + 1}${v != null ? `: ${Math.round(v * 100)}` : now ? ' (now)' : ''}</span></li>`;
+    return `<li class="${v != null ? (v >= 0.35 ? 'done' : 'low') : ''}${now ? ' now' : ''}"><i aria-hidden="true">${i + 1}</i><span>Rep ${i + 1}${v != null ? `: ${Math.round(v * 100)}` : now ? ' (now)' : ''}</span></li>`;
   }).join('');
   const body = D.done
     ? `<p class="coach-done">Drill done</p><p>${drillResultText(D.result)}.</p><div class="coach-actions"><button type="button" class="cta small" data-tut="menu">Back to career</button></div>`
-    : `<p class="coach-now">${info.text}</p><div class="coach-actions"><button type="button" class="ghost small" data-tut="quit">End drill</button></div><p class="coach-kicker">Ending early gives nothing, and you can try again.</p>`;
-  box.innerHTML = `<p class="coach-kicker">Training · trains ${info.stat.toUpperCase()} · rep ${Math.min(D.reps.length + 1, DRILL_REPS)} of ${DRILL_REPS}</p>
+    : `<p class="coach-now">${info.text(D)}</p><div class="coach-actions"><button type="button" class="ghost small" data-tut="quit">End drill</button></div><p class="coach-kicker">Ending early gives nothing, and you can try again.</p>`;
+  box.innerHTML = `<p class="coach-kicker">Training · trains ${info.stat.toUpperCase()} · rep ${Math.min(D.reps.length + 1, N)} of ${N}</p>
     <h2>${info.name}</h2><ol class="coach-steps">${reps}</ol>${body}`;
 }
 function renderTraining(c) {
@@ -1056,8 +1369,8 @@ function renderTraining(c) {
   }
   if (c.pending) { box.appendChild(el('p', 'rtg-goal', '<b>This week\'s match is played.</b> The next drill opens when you advance to the next week.')); return; }
   for (const [kind, d] of Object.entries(DRILLS)) {
-    const b = el('button', 'rtg-build rtg-drill', `<i class="drill-stat" aria-hidden="true">${d.stat.toUpperCase()}</i><b>${d.name}</b><span>${c.r[d.stat]} / ${c.cap[d.stat]}<span class="dr-role"> · as ${ROLES[d.role].name.toLowerCase()}</span></span>`);
-    b.setAttribute('aria-label', `${d.name} drill: trains ${d.stat.toUpperCase()}, now ${c.r[d.stat]} of ${c.cap[d.stat]}, plays as ${ROLES[d.role].name.toLowerCase()}`);
+    const b = el('button', 'rtg-build rtg-drill', `<i class="drill-stat" aria-hidden="true">${d.stat.toUpperCase()}</i><b>${d.name}</b><span>${c.r[d.stat]} / ${c.cap[d.stat]}</span>`);
+    b.setAttribute('aria-label', `${d.name} drill: trains ${d.stat.toUpperCase()}, now ${c.r[d.stat]} of ${c.cap[d.stat]}`);
     b.type = 'button'; b.addEventListener('click', () => startDrill(kind));
     box.appendChild(b);
   }

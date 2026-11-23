@@ -1254,7 +1254,6 @@ function spike(p, q = null) {
     if ((!mayOut && !inCourt(lx, lz, 1 - s)) || lz * t < 0.5) continue;
     b.vx = vx; b.vy = vy; b.vz = vz; b.gs = g / GB;
     G.lastAttack = { p, type: 'spike' };
-    if (TUT && TUT.drill && s === 1) TUT.drill.oppSpike = true; // the block drill only counts rallies where they attack
     if (special || (human && q != null && q >= 0.65)) G.shake = Math.max(G.shake, 0.18);
     if (special) {
       const ty = p.mon.types[0];
@@ -1284,7 +1283,6 @@ function spikeError(p, tx) {
     if (!clearsNet(b.x, b.y, b.z, b.vx, b.vy, b.vz, g)) return false;
   }
   G.lastAttack = { p, type: 'spike' };
-  if (TUT && TUT.drill && p.side === 1) TUT.drill.oppSpike = true;
   Sfx.spike(); hitstop(0.05, '#ffffff');
   return true;
 }
@@ -1394,10 +1392,12 @@ function stepBall(h) {
       const dx = b.x - p.x, dy = b.y - contactY(p), dz = b.z - p.z;
       if (!sweetSpot(dx, dy, dz, b.vx, b.vy - p.vy, b.vz, b.y, (p.rr + BR) * 0.85) && b.z * toward(p.side) < 0.4) continue;
     }
-    contact(p); if (G.phase !== 'rally') return true; break;
+    if (G.solo) soloContact(p); else contact(p);
+    if (G.phase !== 'rally') return true; break;
   }
-  if (b.y <= BR) { b.y = BR; ballDown(); return true; }
+  if (b.y <= BR) { b.y = BR; if (G.solo) soloLand(false); else ballDown(); return true; }
   if (Math.abs(b.x) > HW + 9 || Math.abs(b.z) > HL + 12) {
+    if (G.solo) { soloLand(true); return true; }
     if (aceFor(1 - G.lastSide)) awardAce(); else awardPoint(1 - G.lastSide, 'OUT', 'Hit out of bounds', null, null);
     return true;
   }
@@ -1471,7 +1471,6 @@ function awardPoint(w, label, sub, credit, key) {
   G.longestRally = Math.max(G.longestRally, G.rally);
   if (TUT) {
     G.texts.push({ big: true, text: label, sub, color: TEAM_COLORS[w], t: 0, life: 1.6 }); Sfx.whistle(); G.phase = 'point'; G.timer = 1.6;
-    if (TUT.drill) drillRally(w, key); // Road to Glory training: one rally is one rep
     return;
   }
   if (w !== G.serving) { // side out: the team that won the serve back rotates one zone clockwise
@@ -1642,7 +1641,7 @@ function update(dt) {
   for (const tx of G.texts) tx.t += dt;
   G.texts = G.texts.filter(tx => tx.t < tx.life);
 
-  updateFormation();
+  if (!G.solo) updateFormation();
   const you = G.sides[0].find(p => p.human);
   if (G.phase === 'rally' && you && !AUTO) { // the wind-up: press starts it, letting go freezes it
     if (input.hitQ && !(G.hold && G.hold.kind === 'set' && keys.set)) G.hold = { t0: evTime(input.downAt), tr: null, C: CHARGE, kind: 'hit' };
@@ -1658,7 +1657,8 @@ function update(dt) {
     Sfx.tone(settings.serve === 'topspin' ? 660 : 440, 0.05, 'square', 0.03);
   }
   if (G.phase !== 'rally') input.setQ = false;
-  if (G.phase === 'serve') {
+  if (G.solo && G.phase !== 'serve') soloUpdate(dt, you); // Road to Glory training: the drill runs the court (career.js)
+  else if (G.phase === 'serve') {
     const sv = G.server, b = G.ball;
     G.timer += dt;
     for (const p of G.players) {
@@ -2455,7 +2455,7 @@ function drawCoach(c, s) {
     case 'long': R(hx, hy, hd, hd * 0.3, c.hair); break;
     case 'bald': R(hx + hd * 0.1, hy + hd * 0.3, hd * 0.8, hd * 0.18, '#1a1a1a'); R(hx + hd * 0.15, hy + hd * 0.62, hd * 0.7, hd * 0.14, c.hair); break;
   }
-  if (!G.demo && G.score[0] + G.score[1] === 0 && G.phase === 'serve') pxText(`COACH ${c.name.toUpperCase()}`, f.x * US, (hy - 4) * US - 10, '#ffffff', 8);
+  if (!G.demo && !G.solo && G.score[0] + G.score[1] === 0 && G.phase === 'serve') pxText(`COACH ${c.name.toUpperCase()}`, f.x * US, (hy - 4) * US - 10, '#ffffff', 8);
 }
 function drawStands() {
   const C = crowdCache || (crowdCache = buildCrowd()), V = C.V, ex = V.extras || [];
@@ -3083,6 +3083,7 @@ function render() {
 
   const you = G.sides[0].find(p => p.human);
   const labels = [];
+  if (G.solo) labels.push(...soloDrawGround()); // the drill's marks on the floor: a target zone, a start spot
   if (you && !AUTO && !G.demo && settings.guide === 'on' && guideOn(you)) { // where you should be standing right now (Settings: Position guide)
     const serve = G.phase === 'serve', bad = serve && overlaps(0).includes(you);
     const far = Math.hypot(you.x - you.homeX, you.z - you.homeZ) > 0.7;
@@ -3186,10 +3187,10 @@ function render() {
 function drawHud() {
   ctx.setTransform(U, 0, 0, U, 0, 0);
   const cx = UW / 2;
-  drawScoreboard();
+  if (G.solo) soloHud(); else drawScoreboard();
   if (G.toast && G.time - G.toast.t < G.toast.dur) pxText(G.toast.text, cx, UH - 84, '#ffffff', 8);
   const me = G.sides[0].find(p => p.human);
-  if (me && !AUTO) {
+  if (me && !AUTO && !G.solo) {
     const where = settings.mode === 6 ? `  ZONE ${zoneOf(me)} ${isFront(me) ? 'FRONT' : 'BACK'} ROW` : '';
     pxText(ROLES[me.role].name.toUpperCase() + where, cx, UH - 12, '#c9d4ee', 8);
     if (G.phase === 'serve' && !TUT && me !== G.server && overlaps(0).includes(me) && Math.floor(G.time * 4) % 2 === 0) pxText('OVERLAP! GET TO YOUR SPOT', cx, 76, '#ff8a8a', 8);
