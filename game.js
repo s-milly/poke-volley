@@ -2094,8 +2094,18 @@ const PX_FONT = '"Press Start 2P", monospace';
 const SPR = { front: [], back: [], 'shiny/front': [], 'shiny/back': [] };
 function spriteImg(id, back, shiny = false) {
   const dir = (shiny ? 'shiny/' : '') + (back ? 'back' : 'front'), set = SPR[dir];
-  if (!set[id]) { const img = new Image(); img.src = `sprites/${dir}/${id}.png`; set[id] = img; }
-  return set[id];
+  let img = set[id];
+  // A load that failed (a network blip, a bad cached copy) is tried again a few seconds later with a fresh URL,
+  // instead of leaving the stand-in shape on court for the rest of the session.
+  if (img && img.failed && performance.now() - img.failed > 3000 && (img.tries || 0) < 5) img = null;
+  if (!img) {
+    const tries = set[id] ? (set[id].tries || 0) + 1 : 0;
+    img = new Image(); img.tries = tries;
+    img.onerror = () => { img.failed = performance.now(); };
+    img.src = `sprites/${dir}/${id}.png${tries ? `?r=${tries}` : ''}`;
+    set[id] = img;
+  }
+  return img;
 }
 
 function pxText(text, x, y, color, size = 8, align = 'center', outline = '#10141f') {
