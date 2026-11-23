@@ -1156,11 +1156,16 @@ const SOLO = {
       const spots = [['OUTSIDE', -0.72 * HW, 2.6], ['RIGHT SIDE', 0.72 * HW, 2.4], ['QUICK', setterSpot()[0] - 1.1, 1.6]];
       const [call, ox, apex] = spots[soloPick(S, spots.length)];
       S.spot = { call, x: -ox, apex: NET_H + apex }; // their own coordinates are mirrored
-      S.ready = G.time + 1.4; G.phase = 'wait';
+      S.ready = G.time + 1.4; S.endAt = null; G.phase = 'wait';
     },
     tick(S, you) {
       const h = S.hitter, st = S.oppSetter, b = G.ball, [sx, sz] = setterSpot();
       st.cool = 99; moveToward(st, -sx, -sz, 0.9);
+      if (S.endAt != null && G.time >= S.endAt && G.phase === 'rally') { // the block has played out: the rep ends here
+        burst(b.x, b.y, b.z, '#ffffff', 5);
+        Object.assign(b, { y: BR, vx: 0, vy: 0, vz: 0 }); b.trail.length = 0;
+        G.phase = 'wait'; SOLO.block.land(S);
+      }
       if (G.phase === 'wait') {
         moveToward(h, S.spot.x, 3.8, 0.9);
         if (S.ready != null) {
@@ -1182,8 +1187,9 @@ const SOLO = {
         soloTouch(p); G.touches[1] = 3; S.hit = true;
         if (p.onGround || b.y < NET_H - 0.1 || !spike(p, null)) over(p);
       } else if (p.human) {
+        if (S.endAt != null) { p.cool = 1; return; } // the rep is ending: no more touches
         if (canBlock(p) && Math.abs(p.z) < p.rr + 0.9 && G.lastSide === 1 && b.vz < 0 && b.y > NET_H - 0.3) doBlock(p);
-        else { soloTouch(p); launchTo(rand(-2, 2), -3.5, BR, 3.4); Sfx.bump(); }
+        else { soloTouch(p); launchTo(rand(-2, 2), -3.5, BR, 3.4); Sfx.bump(); S.endAt = G.time + 0.6; }
       }
     },
     land(S) {
@@ -1327,7 +1333,7 @@ function drillEvent(ev, d) {
     const full = d.c >= 0.95;
     floatText(full ? 'FULL POWER' : `POWER ${Math.round(d.c * 100)}`, you.x, you.cy + you.rr + 1.1, you.z, full ? '#ffe14a' : '#ffffff', 0.8);
   }
-  if (ev === 'block') S.rep.block = d.stuff ? 'stuff' : S.rep.block || 'touch';
+  if (ev === 'block') { S.rep.block = d.stuff ? 'stuff' : S.rep.block || 'touch'; if (S.endAt == null) S.endAt = G.time + 0.7; } // the rep ends just after the block
 }
 function drillFinish() {
   const D = TUT.drill, c = careers[D.slot], info = DRILLS[D.kind], st = info.stat;
