@@ -1118,6 +1118,19 @@ function aimedOption(opts) {
   const sx = proj(input.aim.x, 0, input.aim.z).x;
   return opts.reduce((a, o) => (Math.abs(proj(o.q.x, 0, o.q.z).x - sx) < Math.abs(proj(a.q.x, 0, a.q.z).x - sx) ? o : a));
 }
+// Hot hand: while you hit over .500 this match ((kills - errors) / attacks, from 4 attacks on), the setter gives you
+// 5 more sets in 100 than they otherwise would. Returns the extra weight to add to your option to get there.
+const HOT_MIN_ATT = 4, HOT_PCT = 0.5, HOT_BOOST = 0.05;
+function hotHandBonus(opts, wt, all) {
+  const me = opts.find(o => o.q.human && !AUTO);
+  if (!me) return 0;
+  const st = me.q.stats;
+  if (st.att < HOT_MIN_ATT || (st.kills - st.herr) / st.att <= HOT_PCT) return 0;
+  const mine = wt(me), rest = all - mine;
+  if (rest <= 0) return 0;
+  const share = Math.min(0.95, mine / all + HOT_BOOST);
+  return share * rest / (1 - share) - mine;
+}
 function choosePlay(s, setter, tm = null) {
   const m = toward(s), opts = playOptions(s, setter);
   let pick = null;
@@ -1128,8 +1141,9 @@ function choosePlay(s, setter, tm = null) {
     const callMe = (G.chat && G.chat.k === 1 && G.time - G.chat.t < 4) || !!(tutStep() && tutStep().callMe); // you called for the ball
     const youW = careerMatch ? trustSetWeight(callMe) : callMe ? 12 : 3; // Road to Glory: how much your team trusts you
     const wt = o => o.w * (o.q.r.pwr + o.q.r.jmp) * (o.q.human && !AUTO ? youW : 1);
-    let x = Math.random() * opts.reduce((a, o) => a + wt(o), 0);
-    pick = opts.find(o => (x -= wt(o)) <= 0) || opts[0];
+    const all = opts.reduce((a, o) => a + wt(o), 0), hot = hotHandBonus(opts, wt, all);
+    let x = Math.random() * (all + hot);
+    pick = opts.find(o => (x -= wt(o) + (o.q.human && !AUTO ? hot : 0)) <= 0) || opts[0];
     const you = s === 1 && tutBlockDrill() && tutYou();
     if (you && opts.length) pick = opts.reduce((a, o) => (Math.abs(o.ox * m - you.x) < Math.abs(a.ox * m - you.x) ? o : a)); // tutorial: their setter sets the hitter you are facing
   }
