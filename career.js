@@ -511,11 +511,12 @@ function seedPlayoffs(c) {
   const t = standings(c), [a, b] = [divTable(c, 0, t), divTable(c, 1, t)];
   c.league.po = { semis: [[a[0].id, b[1].id], [b[0].id, a[1].id]], semiRes: [null, null], final: null, finalRes: null };
 }
-// Where the season stands: 'regular', 'semi', 'final' or 'done'.
+// Where the season stands: 'regular', 'semi', 'final' or 'done'. The final counts as played only once the round is
+// finished and the champion is named: your result goes in as soon as your match ends, before you press Advance.
 function phaseOf(L) {
   if (L.week < WEEKS) return 'regular';
   if (!L.po || L.po.semiRes.some(r => !r)) return 'semi';
-  return L.po.finalRes ? 'done' : 'final';
+  return L.po.finalRes && L.champion ? 'done' : 'final';
 }
 // This round's matches: [{ h, a, set(sets) }].
 function roundGames(L) {
