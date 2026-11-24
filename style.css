@@ -1229,12 +1229,6 @@ body:has(#scr-rtg-hub:not([hidden])) #menu { max-width: 1480px; }
 .hub-pane { display: flex; flex-direction: column; }
 .hub-pane > .panel { flex: none; }
 .hub-pane > .panel:last-child { flex: 1 0 auto; align-content: start; }
-/* the leader boards grow with the panel, their three rows spread down each board */
-@media (min-width: 1240px) {
-  #leaders-wrap { grid-template-rows: auto minmax(0, 1fr); align-content: stretch; }
-  .leader { grid-template-rows: auto minmax(0, 1fr); }
-  .leader ol { grid-auto-rows: minmax(0, 1fr); }
-}
 #hub-league, #hub-sched-wrap { display: flex; flex-direction: column; }
 #hub-league .rtg-tables, #hub-sched { flex: 1; }
 .rtg-tables { align-items: stretch; grid-auto-rows: minmax(0, 1fr); --cap: 26px; }
@@ -1254,6 +1248,119 @@ body:has(#scr-rtg-hub:not([hidden])) #menu { max-width: 1480px; }
   .leader h4 { font-size: 11px; }
   .leader li { font-size: 23px; }
 }
+/* Filling the panel with content, not gaps: where a tab has room to spare its pieces grow as solid tiles (drills,
+   stat rows, leader cards, trophy slots) instead of spreading loose text down an empty panel. Each tile keeps its
+   natural height as a minimum, so a short window still fits and only scrolls as a last resort. */
+.drill-track, .rtg-up .track { position: relative; }
+.drill-track .cap, .rtg-up .cap { position: absolute; top: -5px; bottom: -5px; width: 2px; margin-left: -1px; background: var(--text); }
+#hub-train .drill-track { grid-column: 1 / -1; flex: none; height: 12px; }
+.up-name { display: grid; grid-template-columns: 48px minmax(0, 1fr); align-items: center; gap: 4px 12px; min-width: 0; }
+.up-name .rtg-stat { grid-row: span 2; justify-self: start; padding: 5px 6px 4px; font-size: 8px; color: var(--accent); background: var(--ink); }
+.rtg-up .up-name b { font: 11px/1.2 var(--px); text-align: left; color: var(--text); }
+.up-name small { font-size: 18px; line-height: 1; color: var(--muted); }
+.rtg-up { grid-template-columns: minmax(170px, 260px) minmax(80px, 1fr) 3ch 4ch auto; }
+.ml-rank { font-size: 16px; line-height: 1; color: var(--muted); text-align: center; }
+.leader li { background: var(--panel2); box-shadow: inset 3px 0 0 var(--line); padding: 6px 8px; }
+.leader li:nth-child(1) { box-shadow: inset 3px 0 0 var(--accent); }
+.leader li:nth-child(2) { box-shadow: inset 3px 0 0 #c3cad8; }
+.leader li:nth-child(3) { box-shadow: inset 3px 0 0 #c98a4f; }
+.leader li.you { background: rgba(255, 207, 51, 0.12); }
+.leader ol { gap: 6px; }
+.rtg-trophies { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.rtg-trophies li { display: grid; align-content: center; gap: 6px; padding: 10px 12px; border-left: 3px solid var(--accent); }
+.rtg-trophies li.locked { background: transparent; border: 2px dashed var(--line); border-left-width: 2px; }
+.rtg-trophies li.locked b { color: var(--muted); }
+.rtg-trophies li.won { background: rgba(255, 207, 51, 0.1); }
+.rtg-trophies li.won b { color: var(--accent); }
+@media all {
+  /* Home: both tasks run the full height; the drills share it and the matchup sits in the middle of its card */
+  .rtg-week { display: flex; flex-direction: column; }
+  .rtg-week > .tasks { flex: 1 0 auto; }
+  .rtg-week > .tasks:not(:has(#task-train[hidden])) { align-items: stretch; }
+  .task, .task-body { display: flex; flex-direction: column; }
+  .task-body { flex: 1 0 auto; }
+  #hub-train:has(.rtg-drill) { flex: 1 0 auto; grid-auto-rows: 1fr; }
+  #hub-train .rtg-drill { align-content: center; row-gap: 8px; }
+  #hub-next-info { flex: 1 0 auto; display: flex; flex-direction: column; }
+  #hub-next-info .rtg-vs { flex: 1 0 auto; }
+  /* Upgrades: each stat is a tile, and the five share the panel */
+  #pane-up > .rtg-step { display: flex; flex-direction: column; }
+  #hub-ups { flex: 1 0 auto; grid-auto-rows: 1fr; }
+  .rtg-up { padding: 10px 14px; background: rgba(14, 20, 36, 0.7); border: 2px solid var(--ink); box-shadow: inset 0 0 0 2px var(--line); }
+  /* Stats: the boards share the panel's height and their three rows are cards */
+  #leaders-wrap { grid-template-rows: auto minmax(0, 1fr); align-content: stretch; }
+  .leader { grid-template-rows: auto minmax(0, 1fr) auto; }
+  .leader ol { grid-auto-rows: minmax(min-content, 1fr); }
+  .leader li { align-content: center; }
+  /* Career: the trophy case takes the room the season table does not need yet */
+  #pane-career > .panel:last-child { flex: none; }
+  #pane-career > .panel:has(#stats-trophies) { flex: 1 0 auto; display: flex; flex-direction: column; }
+  #stats-trophies { flex: 1 0 auto; grid-auto-rows: 1fr; }
+}
+@media (min-width: 1240px) and (min-height: 821px) {
+  #hub-train .rtg-drill b { font-size: 13px; }
+  #hub-train .rtg-drill span { font-size: 22px; }
+  #hub-train .rtg-drill .drill-stat { font-size: 9px; }
+  #hub-next-info .rtg-vs .crest { width: 88px; }
+  #hub-next-info .rtg-vs b { font-size: 28px; }
+  #hub-next-info .rtg-vs span { font-size: 30px; }
+  .rtg-up .up-name b { font-size: 13px; }
+  .up-name small { font-size: 21px; }
+  .rtg-up .track { height: 18px; }
+  .rtg-up > b { font-size: 16px; }
+  .rtg-up .cap-n { font-size: 21px; }
+  .my-line b { font-size: 30px; }
+  .my-line small { font-size: 9px; }
+  .ml-rank { font-size: 19px; }
+  .rtg-trophies b { font-size: 11px; }
+  .rtg-trophies span { font-size: 21px; }
+}
+/* tall wide windows: each leader is a stacked card with a big number */
+@media (min-width: 1240px) and (min-height: 860px) {
+  .leader li { grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "r crest val" "name name name"; gap: 6px 8px; padding: 10px 12px; }
+  .leader li i { grid-area: r; font-size: 11px; }
+  .leader li .crest { grid-area: crest; display: block; width: 30px; justify-self: start; }
+  .leader li span { grid-area: name; }
+  .leader li b { grid-area: val; font-size: 22px; }
+}
+/* the matchup: each club stacked as crest, short name and its team OVR */
+.vs-team { display: grid; justify-items: center; gap: 8px; min-width: 0; }
+.vs-team small { display: flex; align-items: baseline; gap: 6px; padding: 5px 8px 4px; font: 8px/1 var(--px); color: var(--muted); background: var(--ink); }
+.vs-team em { font: 14px/1 var(--px); font-style: normal; color: var(--accent); font-variant-numeric: tabular-nums; }
+.rtg-vs { gap: 20px; }
+@media (min-width: 1240px) and (min-height: 821px) {
+  .vs-team { gap: 12px; }
+  .vs-team small { padding: 7px 10px 6px; font-size: 10px; }
+  .vs-team em { font-size: 22px; }
+  .rtg-vs { gap: 36px; }
+}
+/* short windows: the tiles drop their extras so every tab still fits */
+@media (min-width: 761px) and (max-height: 820px) {
+  #hub-train .drill-track { display: none; }
+  .up-name small { display: none; }
+  .rtg-up { padding: 4px 12px; }
+  .ml-rank { font-size: 14px; }
+  .my-line li { gap: 4px; padding-block: 6px; }
+  .rtg-trophies li { gap: 2px; padding: 5px 10px; }
+  .rtg-trophies span { font-size: 16px; }
+  .rtg-trophies { gap: 5px; }
+  .leader ol { gap: 3px; }
+  .leader li { padding-block: 4px; }
+}
+@media (max-width: 760px) {
+  /* phones: the drills stay one compact row and the match card takes the rest */
+  #hub-train:has(.rtg-drill) { flex: none; }
+  .rtg-week > .tasks:not(:has(#task-train[hidden])) { grid-template-rows: auto minmax(min-content, 1fr); }
+  #hub-train .drill-track { display: none; }
+  .rtg-up { padding: 4px 10px; }
+  #hub-next-info .vs-team .crest { width: 52px; }
+  #hub-next-info .vs-team b { font-size: 18px; }
+  .up-name { grid-template-columns: 38px; }
+  .up-name b, .up-name small { display: none; }
+  .ml-rank { font-size: 13px; }
+  .rtg-trophies { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
 /* phones: the schedule keeps its natural row height (stretched rows read as gaps on a narrow screen) */
 @media (max-width: 760px) { #hub-sched { grid-template-rows: repeat(var(--rows, 8), auto); align-content: start; } }
 
@@ -1328,7 +1435,7 @@ body:has(#scr-rtg-hub:not([hidden])) #menu { max-width: 1480px; }
   .rtg-hub .rtg-up-head { flex-wrap: nowrap; }
   .rtg-hub .rtg-up-head .rtg-week-n { font-size: 7px; white-space: nowrap; }
   .leader h4 { font-size: 8px; }
-  .leader li { grid-template-columns: 7px minmax(0, 1fr) auto; gap: 4px; padding: 2px 0; font-size: 15px; }
+  .leader li { grid-template-columns: 7px minmax(0, 1fr) auto; gap: 4px; padding: 2px 4px 2px 8px; font-size: 15px; }
   .leader li .crest { display: none; }
   .leader li b { font-size: 9px; }
   .leader-you { font-size: 15px; }

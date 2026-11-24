@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>VolleyDex: Gen 1 Draft Volleyball</title>
 <meta name="description" content="Pick a Gen 1 Pokémon, draft teammates by their stats, and play arcade volleyball in the browser.">
-<link rel="stylesheet" href="style.css?v=99">
+<link rel="stylesheet" href="style.css?v=101">
 </head>
 <body class="on-title">
 <div id="menu-bg" class="menu-bg" aria-hidden="true"></div>
@@ -394,7 +394,7 @@
               <li class="task" id="task-train">
                 <div class="task-head"><i class="task-box" aria-hidden="true"></i><p><b>Train</b><span id="task-train-state"></span></p></div>
                 <div class="task-body" id="hub-train-wrap">
-                  <p class="settings-note">One drill between matches. Score 70 or more for +2 to its stat, 35 or more for +1. Team trust comes from matches, not training.</p>
+                  <p class="settings-note">One drill a week. Score 70+ for +2, 35+ for +1.</p>
                   <div class="rtg-builds" id="hub-train"></div>
                 </div>
               </li>
@@ -412,7 +412,7 @@
         <section class="hub-pane" role="tabpanel" id="pane-up" aria-labelledby="tab-up" hidden>
           <section class="panel rtg-step" aria-labelledby="hub-up-h">
             <div class="rtg-up-head"><h3 id="hub-up-h">Upgrade your player</h3><p class="rtg-xp" id="hub-xp" aria-live="polite"></p></div>
-            <p class="settings-note">Earn XP in matches and training, then spend it here. A point costs more the higher your OVR is, and the cost climbs faster as you go. No stat can pass its cap (the white notch).</p>
+            <p class="settings-note">Spend XP to raise a stat. Costs rise with your OVR. The white notch is the cap.</p>
             <div class="rtg-ups" id="hub-ups"></div>
             <p class="rtg-perk hub-perk" id="hub-perk"></p>
           </section>
@@ -421,7 +421,7 @@
         <section class="hub-pane" role="tabpanel" id="pane-stand" aria-labelledby="tab-stand" hidden>
           <section class="panel rtg-step" id="hub-league" aria-labelledby="hub-stand-h">
             <h3 id="hub-stand-h">League standings</h3>
-            <p class="settings-note">The top 2 in each division make the playoffs. Ties go to set difference, then point difference.</p>
+            <p class="settings-note">Top 2 in each division make the playoffs.</p>
             <div class="rtg-tables" id="hub-tables"></div>
           </section>
         </section>
@@ -447,7 +447,7 @@
         <section class="hub-pane" role="tabpanel" id="pane-awards" aria-labelledby="tab-awards" hidden>
           <section class="panel rtg-step" aria-labelledby="hub-aw-h">
             <div class="rtg-up-head"><h3 id="hub-aw-h">Season awards</h3><p class="rtg-week-n" id="aw-season"></p></div>
-            <p class="settings-note">From the regular season. A player needs 6 matches to qualify.</p>
+            <p class="settings-note">Regular season. 6 matches to qualify.</p>
             <ul class="rtg-awards" id="hub-awards"></ul>
           </section>
         </section>
@@ -469,7 +469,7 @@
           <section class="panel rtg-step rtg-stats-wrap" aria-labelledby="stats-tbl-h">
             <div class="rtg-up-head"><h3 id="stats-tbl-h">Season by season</h3><div class="hist-pager" id="hist-pager" hidden><button type="button" class="ghost small" id="hist-old">Older</button><span id="hist-range"></span><button type="button" class="ghost small" id="hist-new">Newer</button></div></div>
             <table class="box rtg-stats" id="stats-table"></table>
-            <p class="settings-note hist-note">Every match you played, playoffs included. Awards and leaders count the regular season only.</p>
+            <p class="settings-note hist-note">Includes the playoffs.</p>
           </section>
         </section>
       </div>
@@ -550,9 +550,9 @@
   </div>
 </div>
 
-<script src="data.js?v=99"></script>
-<script src="sprites.js?v=99"></script>
-<script src="game.js?v=99"></script>
-<script src="career.js?v=99"></script>
+<script src="data.js?v=101"></script>
+<script src="sprites.js?v=101"></script>
+<script src="game.js?v=101"></script>
+<script src="career.js?v=101"></script>
 </body>
 </html>

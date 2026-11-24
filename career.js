@@ -316,7 +316,7 @@ function renderTasks(c) {
   const trained = !!(L && c.drill && c.drill.key === drillKey(c));
   $('#task-train').hidden = $('#hub-train-wrap').hidden;
   $('#task-train').classList.toggle('done', trained);
-  $('#task-train-state').textContent = trained ? 'Done' : c.pending ? 'Missed this week' : 'To do · before the match';
+  $('#task-train-state').textContent = trained ? 'Done' : c.pending ? 'Missed' : 'To do';
   $('#task-play-t').textContent = !L ? 'Join the draft' : ph === 'done' ? `Start season ${c.season + 1}`
     : !g ? 'Follow the playoffs' : ph === 'regular' ? `Play your week ${L.week + 1} match` : `Play the ${ROUND_NAMES[ph].toLowerCase()}`;
   $('#task-play').classList.toggle('done', !!c.pending);
@@ -343,7 +343,8 @@ function renderHub(focusStat) {
   for (const [k, label, tip] of STAT_KEYS) {
     const v = c.r[k], full = v >= c.cap[k], cost = upCost(c);
     const row = el('div', 'rtg-up');
-    row.innerHTML = `<span class="rtg-stat" title="${tip}">${label}</span><span class="track" aria-hidden="true"><span class="fill ${barClass(v)}" style="width:${v}%"></span><i class="cap" style="left:${c.cap[k]}%"></i></span><b>${v}</b><span class="cap-n">/ ${c.cap[k]}</span>`;
+    const [name, what] = tip.split(': ');
+    row.innerHTML = `<span class="up-name"><span class="rtg-stat">${label}</span><b>${name}</b><small>${what[0].toUpperCase() + what.slice(1)}</small></span><span class="track" aria-hidden="true"><span class="fill ${barClass(v)}" style="width:${v}%"></span><i class="cap" style="left:${c.cap[k]}%"></i></span><b>${v}</b><span class="cap-n">/ ${c.cap[k]}</span>`;
     const b = el('button', 'ghost small', full ? 'At cap' : `+1 · ${cost} XP`); b.type = 'button';
     b.disabled = full || c.xp < cost;
     b.setAttribute('aria-label', full ? `${label} is at its cap` : `Raise ${label} to ${v + 1} for ${cost} XP`);
@@ -695,7 +696,7 @@ function renderNext(c) {
   const info = $('#hub-next-info'), btn = $('#hub-next'), L = c.league;
   btn.disabled = false;
   if (!L) {
-    info.innerHTML = '<p class="settings-note">Rookies join through the draft. Ten clubs pick, the lowest rated first, and each takes the best prospect left. Where you go depends on your stats.</p>';
+    info.innerHTML = '<p class="settings-note">Ten clubs pick, worst first. Better stats mean an earlier pick.</p>';
     btn.innerHTML = '<span aria-hidden="true">▶</span> Go to the draft'; btn.onclick = () => { joinLeague(c); saveCareers(); openDraft(); };
     return;
   }
@@ -706,7 +707,7 @@ function renderNext(c) {
     $('#aw-season').textContent = `Season ${c.season}`;
     $('#hub-awards').innerHTML = aw.map(a => `<li class="${a.key === 'you' ? 'you' : ''}"><b>${a.name}</b><span>${a.key === 'you' ? escHtml(careerName(c)) : lineName(L, a.key)} · ${CLUBS[a.club].abbr} · ${a.what}</span></li>`).join('');
     info.innerHTML = `<div class="rtg-champ">${crestImg(L.champion, 48)}<p><b>${won ? 'Champions!' : `${champ.name} win the title`}</b><span>Final: ${CLUBS[L.po.final[0]].name} ${setLine(L.po.finalRes)} ${CLUBS[L.po.final[1]].name}</span></p></div>
-      ${aw.length ? `<p class="settings-note">${mine.length ? `You won ${mine.map(a => a.name.toLowerCase()).join(' and ')}! ` : ''}The season awards are on the Awards tab.</p>` : ''}`;
+      ${aw.length ? `<p class="settings-note">${mine.length ? `You won ${mine.map(a => a.name.toLowerCase()).join(' and ')}! ` : ''}See the Awards tab.</p>` : ''}`;
     const offers = L.offers || [];
     if (offers.length) {
       const box = el('div', 'rtg-offers', `<h4 class="rtg-aw-h">Offers from other clubs</h4>`);
@@ -724,20 +725,20 @@ function renderNext(c) {
   const label = ph === 'regular' ? `Week ${L.week + 1} of ${WEEKS}` : ROUND_NAMES[ph];
   if (g && c.pending) { // played: show the result and wait for you to move the season on
     const home = g.h === L.myClub, opp = home ? g.a : g.h, sets = c.pending.sets, won = homeWon(sets) === home;
-    info.innerHTML = `<p class="rtg-round">${label} · played</p><div class="rtg-vs">${crestImg(L.myClub, 40)}<b>${CLUBS[L.myClub].abbr}</b><span>${home ? 'vs' : 'at'}</span><b>${CLUBS[opp].abbr}</b>${crestImg(opp, 40)}</div>
-      <p class="settings-note"><b>${won ? 'Win' : 'Loss'}</b> ${setLine(sets, !home)} ${home ? 'against' : 'at'} ${CLUBS[opp].name}. Spend XP or check the standings, then move on when you are ready.</p>`;
+    info.innerHTML = `<p class="rtg-round">${label} · played</p>${vsBlock(c, home, opp)}
+      <p class="settings-note"><b>${won ? 'Win' : 'Loss'}</b> ${setLine(sets, !home)}</p>`;
     const next = ph === 'regular' ? (L.week + 1 < WEEKS ? 'Advance to next week' : 'Advance to the playoffs') : ph === 'semi' ? 'Advance to the final' : 'Finish the season';
     btn.innerHTML = `<span aria-hidden="true">▶</span> ${next}`;
     btn.onclick = () => { const st = c.pending.sets; c.pending = null; finishRound(c, st); saveCareers(); hubTab = 'home'; renderHub(); };
   } else if (g) {
     const home = g.h === L.myClub, opp = home ? g.a : g.h;
-    info.innerHTML = `<p class="rtg-round">${label}</p><div class="rtg-vs">${crestImg(L.myClub, 40)}<b>${CLUBS[L.myClub].abbr}</b><span>${home ? 'vs' : 'at'}</span><b>${CLUBS[opp].abbr}</b>${crestImg(opp, 40)}</div>
-      <p class="settings-note">${home ? 'Home' : 'Away'} against ${CLUBS[opp].name} (team rating ${clubOvr(c, opp)}). ${ph === 'regular' ? 'Best of 3 sets to 15.' : 'Best of 3 sets to 25.'}</p>
-      <p class="rtg-goal"><b>Coach's goal:</b> ${goalText(coachGoal(c))} (+${Math.round(GOAL_XP * (ph === 'regular' ? 1 : 1.5))} XP, +${GOAL_TRUST}% trust)</p>
-      ${c.starter ? '' : `<p class="settings-note rtg-bench-line">On the bench behind ${rivalStarter(c).mon.name} (OVR ${rivalStarter(c).ovr}); the coach calls you in mid-match. You start at ${TRUST_START}% team trust, or at ${TRUST_OVR}% once your OVR reaches ${rivalStarter(c).ovr}.</p>`}`;
+    info.innerHTML = `<p class="rtg-round">${label}</p>${vsBlock(c, home, opp)}
+      <p class="settings-note">${home ? 'Home' : 'Away'} vs ${CLUBS[opp].name} · best of 3 to ${ph === 'regular' ? 15 : 25}</p>
+      <p class="rtg-goal"><b>Goal:</b> ${goalText(coachGoal(c))} (+${Math.round(GOAL_XP * (ph === 'regular' ? 1 : 1.5))} XP, +${GOAL_TRUST}% trust)</p>
+      ${c.starter ? '' : `<p class="settings-note rtg-bench-line">Bench behind ${rivalStarter(c).mon.name} (OVR ${rivalStarter(c).ovr}). Start at ${TRUST_START}% trust, or ${TRUST_OVR}% with OVR ${rivalStarter(c).ovr}.</p>`}`;
     btn.innerHTML = '<span aria-hidden="true">▶</span> Play match'; btn.onclick = setupCareerMatch;
   } else { // your club is out: the rest of the playoffs are simulated
-    info.innerHTML = `<p class="rtg-round">${label}</p><p class="settings-note">${CLUBS[L.myClub].name} did not make it this far. Watch the other results come in.</p>`;
+    info.innerHTML = `<p class="rtg-round">${label}</p><p class="settings-note">${CLUBS[L.myClub].name} are out.</p>`;
     btn.innerHTML = `<span aria-hidden="true">▶</span> Simulate the ${ph === 'semi' ? 'semi-finals' : 'final'}`;
     btn.onclick = () => { finishRound(c, null); saveCareers(); renderHub(); };
   }
@@ -916,32 +917,44 @@ $('#draft-skip').addEventListener('click', draftDone);
 $('#draft-go').addEventListener('click', () => { clearTimeout(draftTimer); hubTab = 'home'; renderHub(); show('scr-rtg-hub'); });
 
 // ---------- the career stats page ----------
+// The matchup on Home: each club's crest, short name and team rating
+function vsBlock(c, home, opp) {
+  const side = id => `<div class="vs-team">${crestImg(id, 40)}<b>${CLUBS[id].abbr}</b><small>OVR <em>${clubOvr(c, id)}</em></small></div>`;
+  return `<div class="rtg-vs">${side(c.league.myClub)}<span>${home ? 'vs' : 'at'}</span>${side(opp)}</div>`;
+}
+const ordinal = n => `${n}${['th', 'st', 'nd', 'rd'][n % 10 < 4 && Math.floor(n / 10) % 10 !== 1 ? n % 10 : 0]}`;
 const LEADS = [['kills', 'Kills'], ['aces', 'Aces'], ['blocks', 'Blocks'], ['digs', 'Digs'], ['ast', 'Assists']];
 function renderStats(c) { // the Stats tab: your season, the league leaders, trophy case and a line per season
   const L = c.league, mine = (c.log || {})[c.season] || blankLine(null);
   $('#stats-season').textContent = `Season ${c.season}`;
   const SHORT = { gp: 'GP', kills: 'K', aces: 'ACE', blocks: 'BLK', digs: 'DIG', ast: 'AST' };
-  $('#my-line').innerHTML = [['Matches', 'gp'], ...LEADS.map(([k, n]) => [n, k])].map(([n, k]) => `<li><small><span class="ml-full">${n}</span><span class="ml-abbr" aria-hidden="true">${SHORT[k]}</span></small><b>${mine[k]}</b></li>`).join('');
+  const lines = L ? Object.entries(L.ps || {}) : [], you = L && L.ps && L.ps.you;
+  const rankOf = k => { // short form for phones
+    if (!you || !(you[k] > 0)) return '<span class="ml-full">Not ranked yet</span><span class="ml-abbr">-</span>';
+    const n = ordinal(lines.filter(([, l]) => l[k] > you[k]).length + 1);
+    return `<span class="ml-full">${n} in the league</span><span class="ml-abbr">${n}</span>`; };
+  $('#my-line').innerHTML = [['Matches', 'gp'], ...LEADS.map(([k, n]) => [n, k])].map(([n, k]) => `<li><small><span class="ml-full">${n}</span><span class="ml-abbr" aria-hidden="true">${SHORT[k]}</span></small><b>${mine[k]}</b><span class="ml-rank">${k === 'gp' ? 'Played' : rankOf(k)}</span></li>`).join('');
   $('#leaders-wrap').hidden = !L;
   if (L) {
-    const lines = Object.entries(L.ps || {});
     $('#leaders').innerHTML = LEADS.map(([k, name]) => {
       const ranked = lines.filter(([, l]) => l[k] > 0).sort((a, b) => b[1][k] - a[1][k]);
-      const you = ranked.findIndex(([key]) => key === 'you');
+      const me = ranked.findIndex(([key]) => key === 'you');
       const rows = ranked.slice(0, 3).map(([key, l], i) => `<li class="${key === 'you' ? 'you' : ''}"><i>${i + 1}</i>${crestImg(l.club, 20)}<span>${key === 'you' ? escHtml(careerName(c)) : lineName(L, key)}</span><b>${l[k]}</b></li>`).join('');
-      const yours = you >= 3 ? `<p class="leader-you">You: ${ranked[you][1][k]}, ${you + 1}${['th', 'st', 'nd', 'rd'][(you + 1) % 10 < 4 && Math.floor((you + 1) / 10) % 10 !== 1 ? (you + 1) % 10 : 0]} in the league</p>` : '';
+      const yours = me >= 3 ? `<p class="leader-you">You: ${ranked[me][1][k]}, ${ordinal(me + 1)} in the league</p>` : '';
       return `<div class="leader"><h4>${name}</h4>${rows ? `<ol>${rows}</ol>${yours}` : '<p class="settings-note">No matches played yet.</p>'}</div>`;
     }).join('');
   }
   const dp = c.draftPick;
-  $('#stats-sub').textContent = `${dp ? `Drafted with pick ${dp.n} by the ${CLUBS[dp.club].name} in season ${dp.season}.`
-    : c.league ? `Plays for the ${CLUBS[c.league.myClub].name}.` : 'Not drafted yet.'} ${c.xpEarned} XP earned so far.`;
+  $('#stats-sub').textContent = `${dp ? `Pick ${dp.n}, ${CLUBS[dp.club].name}, season ${dp.season}.`
+    : c.league ? `${CLUBS[c.league.myClub].name}.` : 'Not drafted yet.'} ${c.xpEarned} XP earned.`;
   // one entry per kind of trophy, with the seasons it was won, so the case stays one row however long the career runs
   const tro = c.trophies || [], titles = tro.filter(t => t.title === 'Champion').length, kinds = [];
   for (const t of tro) { let k = kinds.find(x => x.title === t.title); if (!k) kinds.push(k = { title: t.title, won: [] }); k.won.push(`S${t.season} ${CLUBS[t.club].abbr}`); }
-  $('#stats-trophies').innerHTML = kinds.length
-    ? kinds.map(k => `<li class="${k.title === 'Champion' ? 'champ' : ''}"><b>${k.title}${k.won.length > 1 ? ` ×${k.won.length}` : ''}</b><span>${k.won.join(', ')}</span></li>`).join('')
-    : '<li class="none">Nothing yet. Titles and season awards will show here.</li>';
+  const slots = ['Champion', ...AWARDS.map(a => a.name), 'Rookie of the Year'];
+  for (const k of kinds) if (!slots.includes(k.title)) slots.push(k.title); // titles from older saves
+  $('#stats-trophies').innerHTML = slots.map(t => { const k = kinds.find(x => x.title === t);
+    return k ? `<li class="won${t === 'Champion' ? ' champ' : ''}"><b>${t}${k.won.length > 1 ? ` ×${k.won.length}` : ''}</b><span>${k.won.join(', ')}</span></li>`
+      : `<li class="locked"><b>${t}</b><span>${t === 'Rookie of the Year' ? 'Start as a rookie' : t === 'Champion' ? 'Win the final' : 'Lead the league'}</span></li>`; }).join('');
   const seasons = Object.keys(c.log || {}).map(Number).sort((a, b) => a - b), tot = { gp: 0, kills: 0, aces: 0, blocks: 0, digs: 0, ast: 0 };
   for (const n of seasons) for (const k in tot) tot[k] += c.log[n][k];
   // the table shows a page of seasons that fits the tab (fitHistory sets histRows); the totals count every season
@@ -1386,12 +1399,12 @@ function renderTraining(c) {
   if (wrap.hidden) return;
   box.innerHTML = '';
   if (c.drill && c.drill.key === drillKey(c)) {
-    box.appendChild(el('p', 'rtg-goal', `<b>Done for now.</b> ${drillResultText(c.drill)}. The next drill opens ${c.pending ? 'when you advance to the next week' : 'after your next match'}.`));
+    box.appendChild(el('p', 'rtg-goal', `<b>Done.</b> ${drillResultText(c.drill)}. Next drill ${c.pending ? 'next week' : 'after your match'}.`));
     return;
   }
-  if (c.pending) { box.appendChild(el('p', 'rtg-goal', '<b>This week\'s match is played.</b> The next drill opens when you advance to the next week.')); return; }
+  if (c.pending) { box.appendChild(el('p', 'rtg-goal', '<b>Match played.</b> Next drill next week.')); return; }
   for (const [kind, d] of Object.entries(DRILLS)) {
-    const b = el('button', 'rtg-build rtg-drill', `<i class="drill-stat" aria-hidden="true">${d.stat.toUpperCase()}</i><b>${d.name}</b><span>${c.r[d.stat]} / ${c.cap[d.stat]}</span>`);
+    const b = el('button', 'rtg-build rtg-drill', `<i class="drill-stat" aria-hidden="true">${d.stat.toUpperCase()}</i><b>${d.name}</b><span>${c.r[d.stat]} / ${c.cap[d.stat]}</span><span class="track drill-track" aria-hidden="true"><span class="fill ${barClass(c.r[d.stat])}" style="width:${c.r[d.stat]}%"></span><i class="cap" style="left:${c.cap[d.stat]}%"></i></span>`);
     b.setAttribute('aria-label', `${d.name} drill: trains ${d.stat.toUpperCase()}, now ${c.r[d.stat]} of ${c.cap[d.stat]}`);
     b.type = 'button'; b.addEventListener('click', () => startDrill(kind));
     box.appendChild(b);
