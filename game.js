@@ -2635,12 +2635,33 @@ function drawPalm(x, z, h, v = 0, flip = false) {
   ctx.restore();
 }
 const TIME_DARK = () => venue().mode === 2 && settings.time === 'night';
-function drawRefStand() { // the up referee's tall chair at the right-hand net post
-  const x = HW + 2.2, z = 0;
+function drawRefStand() { // the up referee's stand, clamped to the right-hand net post, padded on its sides
+  const post = HW + 0.6, x0 = post + 0.12, x1 = post + 0.92, z0 = -0.4, z1 = 0.4, y = 1.25, x = (x0 + x1) / 2;
+  const hc = homeColor(), pad = hc ? shade(hc, -0.35) : '#2a4c9a', seam = shade(pad, -0.18), lit = shade(pad, 0.18);
+  // frame: back legs, then the clamp bars from the post to the stand
   ctx.strokeStyle = '#d9dde6'; ctx.lineWidth = 4;
-  for (const [dx, dz] of [[-0.4, -0.4], [0.4, -0.4], [-0.4, 0.4], [0.4, 0.4]]) { const a = proj(x + dx, 0, z + dz), b = proj(x + dx * 0.6, 1.8, z + dz * 0.6); ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke(); }
-  quad([[x - 0.5, 1.8, z - 0.5], [x + 0.5, 1.8, z - 0.5], [x + 0.5, 1.8, z + 0.5], [x - 0.5, 1.8, z + 0.5]], '#9aa3b5');
-  drawFan({ x, y: 1.8, z, shirt: '#1b1f2a', skin: '#e0b48a', ph: 1, rate: 1, standing: true });
+  const bar = (ax, ay, az, bx, by, bz) => { const a = proj(ax, ay, az), b = proj(bx, by, bz); ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke(); };
+  bar(x1, 0, z1, x1, y, z1); bar(x0, 0, z1, x0, y, z1);
+  for (const h of [0.55, y - 0.05]) bar(post, h, 0, x0, h, 0);
+  quad([[post - 0.06, 0.5, -0.08], [x0, 0.5, -0.08], [x0, 0.62, -0.08], [post - 0.06, 0.62, -0.08]], '#9aa3b5'); // clamps round the post
+  quad([[post - 0.06, y - 0.12, -0.08], [x0, y - 0.12, -0.08], [x0, y, -0.08], [post - 0.06, y, -0.08]], '#9aa3b5');
+  // padded side panels: outer, inner (facing the court) and front, each with a lit top roll and seams
+  const panel = (P, Q) => { // P, Q: the panel's two bottom corners [x, z]
+    quad([[P[0], 0.05, P[1]], [Q[0], 0.05, Q[1]], [Q[0], y - 0.05, Q[1]], [P[0], y - 0.05, P[1]]], pad);
+    quad([[P[0], y - 0.2, P[1]], [Q[0], y - 0.2, Q[1]], [Q[0], y - 0.05, Q[1]], [P[0], y - 0.05, P[1]]], lit);
+    for (const u of [1 / 3, 2 / 3]) { const sx = P[0] + (Q[0] - P[0]) * u, sz = P[1] + (Q[1] - P[1]) * u;
+      const a = proj(sx, 0.08, sz), b = proj(sx, y - 0.22, sz); ctx.strokeStyle = seam; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke(); }
+  };
+  panel([x1, z1], [x1, z0]); panel([x0, z1], [x0, z0]); panel([x0, z0], [x1, z0]);
+  // platform with a rail, and the referee standing on it
+  quad([[x0 - 0.04, y, z0 - 0.04], [x1 + 0.04, y, z0 - 0.04], [x1 + 0.04, y, z1 + 0.04], [x0 - 0.04, y, z1 + 0.04]], '#9aa3b5');
+  ctx.strokeStyle = '#d9dde6'; ctx.lineWidth = 3;
+  // a rail on the front (the court side) and both sides: the far side drawn behind the referee, the rest in front
+  const r = y + 0.55, post2 = (px, pz) => bar(px, y, pz, px, r, pz);
+  post2(x1, z1); post2(x0, z1); bar(x1, r, z1, x0, r, z1);
+  drawFan({ x, y, z: 0, shirt: '#1b1f2a', skin: '#e0b48a', ph: 1, rate: 1, standing: true });
+  ctx.strokeStyle = '#d9dde6'; ctx.lineWidth = 3;
+  post2(x0, z0); post2(x1, z0); bar(x0, r, z1, x0, r, z0); bar(x0, r, z0, x1, r, z0);
 }
 function drawProps() {
   const V = venue(), C = crowdCache;
