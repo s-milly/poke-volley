@@ -471,8 +471,9 @@ function overlaps(s) {
 // 6 v 6: the bench's first two seats (nearest the net) are kept for players coming on and off: seat 0 for the libero
 // or the middle sitting for it, seat 1 for you before you come on and the starter you replace. The rest of the bench
 // is teammates who never play. Smaller games have no bench, so players wait standing by the sideline.
-const seatSpot = (s, i) => [-(HW + 2.45), -toward(s) * (3.6 + i * 1.05)];
-const benchSpot = (s, i = 0) => settings.mode === 6 ? seatSpot(s, i) : [-(HW + 1.6), -0.3 * HL * toward(s) - i * 1.2];
+const BENCH_X = 4.5; // the scorer's table and team benches stand this far outside the left sideline (6 v 6)
+const seatSpot = (s, i) => [-(HW + BENCH_X + 0.55), -toward(s) * (3.6 + i * 1.05)];
+const benchSpot = (s, i = 0) => settings.mode === 6 ? seatSpot(s, i) : [-(HW + 2.6), -0.3 * HL * toward(s) - i * 1.2];
 const subZone = s => [-(HW + 0.5), -attackLine() * 0.5 * toward(s)]; // the sub zone: on the sideline between the 10 foot (attack) line and the net, on that team's half
 
 // The libero plays in place of the middle blocker who is in the back row (zones 1, 5 and 6), as in real volleyball.
@@ -2288,7 +2289,7 @@ function drawArenaShell() {
   let Xw = 0, Zw = 0, top = 0;
   for (const d of V.decks) {
     Xw = Math.max(Xw, HW + d.gap + d.depth * d.tiers + 0.4);
-    Zw = Math.max(Zw, (d.zMax || HL + d.gap) + d.depth * d.endTiers + 0.4);
+    Zw = Math.max(Zw, (d.zMax || HL + endGap(d)) + d.depth * d.endTiers + 0.4);
     top = Math.max(top, d.base + d.rise * Math.max(d.tiers, d.endTiers));
   }
   const roof = top + 9, b0 = top + 0.4, b1 = top + 3.2, L = 3;
@@ -2348,25 +2349,28 @@ function buildSunset() { // sunset over the water, palms in silhouette, orange s
 // The venues you can pick on the title screen. Stands are built in world coordinates from these settings:
 // tiers along each sideline and behind the far end; a deck with `base` > 0 is an upper deck.
 const HL6 = 14; // court half length in 6 v 6
+// gap: run-off from the sideline to the first row; endGap: from the end line (defaults to gap). Real courts keep a
+// wide free zone, with the benches, table and ad boards inside it and the stands well back.
+const endGap = d => d.endGap ?? d.gap;
 const ARENA_SEATS = { riser: ['#20283f', '#262f4a'], seat: ['#33406a', '#2b365a'] };
 const VENUES = {
   beach: { mode: 2, name: 'Bleachers', backdrop: 'beach', court: 'sand', shirts: 'beach',
-    decks: [{ tiers: 4, endTiers: 3, rise: 0.45, depth: 0.85, gap: 5.5, base: 0, fill: 0.72, riser: ['#7a5232', '#8a5e3a'], seat: ['#c98d55', '#b97f4a'] }] },
+    decks: [{ tiers: 4, endTiers: 3, rise: 0.45, depth: 0.85, gap: 8, endGap: 9, base: 0, fill: 0.72, riser: ['#7a5232', '#8a5e3a'], seat: ['#c98d55', '#b97f4a'] }] },
   pro: { mode: 2, name: 'Pro tour stadium', backdrop: 'beach', court: 'sand', shirts: 'beach', extras: ['sponsors', 'flags'],
-    decks: [{ tiers: 10, endTiers: 3, rise: 0.62, depth: 0.9, gap: 6.1, base: 0, fill: 0.88, riser: ['#8f98ab', '#7f889b'], seat: ['#3a7bd5', '#2f6bc0'] }] },
+    decks: [{ tiers: 10, endTiers: 3, rise: 0.62, depth: 0.9, gap: 8.5, endGap: 9.5, base: 0, fill: 0.88, riser: ['#8f98ab', '#7f889b'], seat: ['#3a7bd5', '#2f6bc0'] }] },
   boardwalk: { mode: 2, name: 'Boardwalk', backdrop: 'beach', court: 'sand', shirts: 'beach', extras: ['rope', 'umbrellas', 'tower', 'lights'],
-    decks: [], standing: { rows: 3, gap: 5.3 } },
+    decks: [], standing: { rows: 3, gap: 7.5 } },
   arena: { mode: 6, name: 'Classic arena', backdrop: buildArena, court: '#e0904c', shirts: 'arena', extras: ['led'],
-    decks: [{ tiers: 7, endTiers: 6, rise: 0.55, depth: 0.95, gap: 5.9, base: 0, fill: 0.92, ...ARENA_SEATS },
+    decks: [{ tiers: 7, endTiers: 6, rise: 0.55, depth: 0.95, gap: 12, endGap: 15, base: 0, fill: 0.92, ...ARENA_SEATS },
       // an upper deck along each side only, running up to the end wall with the scoreboard (zMax)
-      { tiers: 8, endTiers: 0, rise: 0.85, depth: 1.0, gap: 13, base: 5, zMax: HL6 + 5.9 + 0.95 * 6, fill: 0.9, riser: ['#1a2036', '#20273f'], seat: ['#3a2f6a', '#32285c'], ribbon: true }] },
+      { tiers: 8, endTiers: 0, rise: 0.85, depth: 1.0, gap: 19, base: 5, zMax: HL6 + 15 + 0.95 * 6, fill: 0.9, riser: ['#1a2036', '#20273f'], seat: ['#3a2f6a', '#32285c'], ribbon: true }] },
   bowl: { mode: 6, name: 'Mega bowl', backdrop: buildArenaBig, court: '#e0904c', shirts: 'arena', extras: ['led'],
     decks: [
-      { tiers: 10, endTiers: 10, rise: 0.6, depth: 0.9, gap: 5.9, base: 0, fill: 0.93, ...ARENA_SEATS },
-      { tiers: 12, endTiers: 12, rise: 0.85, depth: 1.0, gap: 5.9 + 9 + 2.2, base: 6 + 2.0, fill: 0.9, riser: ['#1a2036', '#20273f'], seat: ['#3a2f6a', '#32285c'], ribbon: true },
+      { tiers: 10, endTiers: 10, rise: 0.6, depth: 0.9, gap: 12, endGap: 15, base: 0, fill: 0.93, ...ARENA_SEATS },
+      { tiers: 12, endTiers: 12, rise: 0.85, depth: 1.0, gap: 12 + 9 + 2.2, endGap: 15 + 9 + 2.2, base: 6 + 2.0, fill: 0.9, riser: ['#1a2036', '#20273f'], seat: ['#3a2f6a', '#32285c'], ribbon: true },
     ] },
   night: { mode: 6, name: 'Championship night', backdrop: buildNight, court: '#d9874a', shirts: 'arena', extras: ['led', 'phones', 'lasers', 'dark'], teamSides: true,
-    decks: [{ tiers: 14, endTiers: 13, rise: 0.72, depth: 0.95, gap: 5.9, base: 0, fill: 0.95, riser: ['#141a2c', '#181f34'], seat: ['#222a44', '#1d243b'] }] },
+    decks: [{ tiers: 14, endTiers: 13, rise: 0.72, depth: 0.95, gap: 12, endGap: 15, base: 0, fill: 0.95, riser: ['#141a2c', '#181f34'], seat: ['#222a44', '#1d243b'] }] },
 };
 const VENUE_DESC = {
   beach: 'Wooden bleachers along the sand, with palms, the sea and an island lighthouse behind.',
@@ -2403,7 +2407,7 @@ function buildCrowd() {
   });
   const people = [], tiers = [];
   V.decks.forEach((d, di) => {
-    const zEnd = d.zMax || HL + d.gap, X = HW + d.gap;
+    const zEnd = d.zMax || HL + endGap(d), X = HW + d.gap;
     // each row wraps the far corners in an L: a side row runs on to meet the end row of the same height, and the
     // end row runs out to the side row's outer edge, so the corner seats join both
     for (let t = 0; t < d.endTiers; t++) {
@@ -2439,7 +2443,7 @@ function buildCrowd() {
   const palms = [];
   if (V.mode === 2) {
     const d = V.decks[0], back = d ? HW + d.gap + d.depth * d.tiers + 2 : HW + (V.standing ? V.standing.gap : 3) + 5.5;
-    const endZ = d ? HL + d.gap + d.depth * d.endTiers + 2.5 : HL + 9;
+    const endZ = d ? HL + endGap(d) + d.depth * d.endTiers + 2.5 : HL + 9;
     for (let i = 0; i < 4; i++) for (const sd of [-1, 1]) palms.push({ x: sd * (back + rnd() * 2), z: -HL + i * (2 * HL / 3) + rnd() * 2, h: 7 + rnd() * 3, v: Math.floor(rnd() * 3), flip: sd > 0 });
     for (let i = 0; i < 5; i++) palms.push({ x: -HW - 4 + i * (2 * HW + 8) / 4 + rnd(), z: endZ + rnd() * 2, h: 8 + rnd() * 3, v: Math.floor(rnd() * 3), flip: rnd() < 0.5 });
     palms.sort((a, b) => b.z - a.z);
@@ -2476,7 +2480,7 @@ function drawFan(q) {
 
 // A coach on the sideline in front of their bench, blocky like the crowd but in their own look; arms up when the team scores.
 function drawCoach(c, s) {
-  const x = -(HW + 1.35), z = -toward(s) * 2.9, f = proj(x, 0, z), k = f.k * 1.2;
+  const x = -(HW + BENCH_X - 0.9), z = -toward(s) * 2.9, f = proj(x, 0, z), k = f.k * 1.2;
   if (f.x < -40 || f.x > W + 40 || f.y < -40 || f.y > H + 80) return;
   const w = Math.max(3, 0.42 * k), h = Math.max(4, 0.85 * k), hd = Math.max(2, 0.27 * k), X = Math.round(f.x - w / 2), top = f.y - h, R = (x0, y0, ww, hh, col) => { ctx.fillStyle = col; ctx.fillRect(Math.round(x0), Math.round(y0), Math.max(1, Math.round(ww)), Math.max(1, Math.round(hh))); };
   const cheer = G.lastW === s && G.cheer > 0.25, aw = Math.max(2, hd * 0.35);
@@ -2522,12 +2526,12 @@ function drawStands() {
   for (let r = 2; r >= 0; r--) for (const q of C.byKey.get(`st${r}`) || []) drawFan(q);
   const z0 = -HL - 2;
   if (ex.includes('led')) { // LED ad boards around the court
-    const lg = V.decks[0].gap - 0.5, bx = HW + lg, zEnd = HL + lg, h = 0.8, hc = homeColor(), cols = hc ? [hc, '#ffffff', shade(hc, -0.35), '#1b2236'] : ['#ff5d5d', '#3fa7ff', '#ffcf33', '#1b2236'];
+    const d0 = V.decks[0], bx = HW + d0.gap - 0.3, zEnd = HL + endGap(d0) - 0.3, h = 0.8, hc = homeColor(), cols = hc ? [hc, '#ffffff', shade(hc, -0.35), '#1b2236'] : ['#ff5d5d', '#3fa7ff', '#ffcf33', '#1b2236'];
     for (let i = 0, z = z0; z < zEnd; z += 2.4, i++) for (const sd of [-1, 1]) quad([[sd * bx, 0, z], [sd * bx, 0, z + 2.4], [sd * bx, h, z + 2.4], [sd * bx, h, z]], cols[(i + (sd > 0 ? 2 : 0)) % cols.length]);
     for (let i = 0, x = -bx; x < bx; x += 2.4, i++) quad([[x, 0, zEnd], [x + 2.4, 0, zEnd], [x + 2.4, h, zEnd], [x, h, zEnd]], cols[(i + 1) % cols.length]);
   }
   if (ex.includes('sponsors')) { // painted sponsor boards on the sand
-    const sg = V.decks[0].gap - 0.6, bx = HW + sg, zEnd = HL + sg, h = 0.9, logos = ['#ff5d5d', '#3fa7ff', '#ffcf33', '#6bd88a'];
+    const d0 = V.decks[0], bx = HW + d0.gap - 0.6, zEnd = HL + endGap(d0) - 0.6, h = 0.9, logos = ['#ff5d5d', '#3fa7ff', '#ffcf33', '#6bd88a'];
     const board = (a, b, i, side) => {
       quad([[a[0], 0, a[1]], [b[0], 0, b[1]], [b[0], h, b[1]], [a[0], h, a[1]]], '#f4f6fb');
       const m = (u, v) => [a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u, v];
@@ -2552,7 +2556,7 @@ function drawStands() {
     ctx.fillStyle = u.col; ctx.beginPath(); ctx.moveTo(b.x - r, b.y + r * 0.3); ctx.lineTo(b.x, b.y - r * 0.35); ctx.lineTo(b.x + r, b.y + r * 0.3); ctx.closePath(); ctx.fill();
   }
   if (ex.includes('tower')) { // lifeguard tower
-    const x = HW + 10.5, z = HL - 2, legs = [[-0.8, -0.8], [0.8, -0.8], [-0.8, 0.8], [0.8, 0.8]];
+    const x = HW + V.standing.gap + 5.8, z = HL - 2, legs = [[-0.8, -0.8], [0.8, -0.8], [-0.8, 0.8], [0.8, 0.8]];
     ctx.strokeStyle = '#f4f6fb'; ctx.lineWidth = 4;
     for (const [dx, dz] of legs) { const a = proj(x + dx, 0, z + dz), b = proj(x + dx, 2.4, z + dz); ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke(); }
     quad([[x - 1, 2.4, z - 1], [x + 1, 2.4, z - 1], [x + 1, 3.6, z - 1], [x - 1, 3.6, z - 1]], '#f4f6fb');
@@ -2568,7 +2572,7 @@ function drawStands() {
     }
   }
   if (ex.includes('flags')) { // corner flags
-    for (const [x, z] of [[-HW - 1.4, -HL - 1.4], [HW + 1.4, -HL - 1.4], [-HW - 1.4, HL + 1.4], [HW + 1.4, HL + 1.4]]) {
+    for (const [x, z] of [[-HW - 3, -HL - 3], [HW + 3, -HL - 3], [-HW - 3, HL + 3], [HW + 3, HL + 3]]) {
       const a = proj(x, 0, z), b = proj(x, 4.5, z), wv = Math.sin(G.time * 5 + x) * 0.25;
       ctx.strokeStyle = '#d9dde6'; ctx.lineWidth = Math.max(2, 0.08 * a.k); ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
       quad([[x, 4.5, z], [x + 1.4, 4.2 + wv, z], [x, 3.7, z], [x, 3.7, z]], homeColor() || (x < 0 ? TEAM_COLORS[0] : TEAM_COLORS[1]));
@@ -2632,7 +2636,7 @@ function drawPalm(x, z, h, v = 0, flip = false) {
 }
 const TIME_DARK = () => venue().mode === 2 && settings.time === 'night';
 function drawRefStand() { // the up referee's tall chair at the right-hand net post
-  const x = HW + 1.4, z = 0;
+  const x = HW + 2.2, z = 0;
   ctx.strokeStyle = '#d9dde6'; ctx.lineWidth = 4;
   for (const [dx, dz] of [[-0.4, -0.4], [0.4, -0.4], [-0.4, 0.4], [0.4, 0.4]]) { const a = proj(x + dx, 0, z + dz), b = proj(x + dx * 0.6, 1.8, z + dz * 0.6); ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke(); }
   quad([[x - 0.5, 1.8, z - 0.5], [x + 0.5, 1.8, z - 0.5], [x + 0.5, 1.8, z + 0.5], [x - 0.5, 1.8, z + 0.5]], '#9aa3b5');
@@ -2642,7 +2646,7 @@ function drawProps() {
   const V = venue(), C = crowdCache;
   drawRefStand();
   if (V.mode === 6) {
-    const x = -(HW + 1.9); // scorer's table at the net and team benches along the left sideline
+    const x = -(HW + BENCH_X); // scorer's table at the net and team benches along the left sideline
     quad([[x, 0, -1.6], [x, 0, 1.6], [x, 0.8, 1.6], [x, 0.8, -1.6]], '#1b2236');
     quad([[x, 0.62, -1.6], [x, 0.62, 1.6], [x, 0.8, 1.6], [x, 0.8, -1.6]], '#ffcf33');
     seatedPerson(x - 0.5, 0.45, -0.7, '#ffffff'); seatedPerson(x - 0.5, 0.45, 0.7, '#ffffff');
@@ -2657,10 +2661,10 @@ function drawProps() {
   for (const p of C.palms) drawPalm(p.x, p.z, p.h, p.v, p.flip);
   if (settings.time === 'night') drawLightPoles();
   for (const sd of [-1, 1]) {
-    const x = sd * (HW + 1.6), z = -HL - 0.8;
+    const x = sd * (HW + 2.6), z = -HL - 1.2;
     quad([[x - 0.35, 0, z], [x + 0.35, 0, z], [x + 0.35, 0.45, z], [x - 0.35, 0.45, z]], sd < 0 ? '#3fa7ff' : '#ff5d5d'); // cooler
     quad([[x - 0.35, 0.45, z], [x + 0.35, 0.45, z], [x + 0.35, 0.5, z + 0.45], [x - 0.35, 0.5, z + 0.45]], '#ffffff');
-    const bx = sd * (HW + 2.3), bz = -HL + 1.2; // surfboard stuck in the sand
+    const bx = sd * (HW + 3.4), bz = -HL + 1.2; // surfboard stuck in the sand
     quad([[bx - 0.22, 0, bz], [bx + 0.22, 0, bz], [bx + 0.15, 2.0, bz], [bx - 0.15, 2.0, bz]], sd < 0 ? '#ffcf33' : '#6bd88a');
     quad([[bx - 0.04, 0, bz], [bx + 0.04, 0, bz], [bx + 0.04, 2.0, bz], [bx - 0.04, 2.0, bz]], '#ffffff');
   }
@@ -2669,7 +2673,7 @@ function drawProps() {
 // Indoors: the far wall behind the end stand, with lit suites, exit signs, banners and a video board showing the score.
 function drawArenaWall() {
   const V = venue(); if (V.mode !== 6 || V.decks.some(d => d.endTiers && d.base > 0)) return; // not in the mega bowl, whose upper deck wraps the end
-  const d = V.decks[0], z = HL + d.gap + d.depth * d.endTiers + 0.2, top = d.base + d.rise * d.endTiers, X = HW + d.gap + d.depth * d.tiers + 4;
+  const d = V.decks[0], z = HL + endGap(d) + d.depth * d.endTiers + 0.2, top = d.base + d.rise * d.endTiers, X = HW + d.gap + d.depth * d.tiers + 4;
   const night = (V.extras || []).includes('dark');
   quad([[-X, 0, z], [X, 0, z], [X, top + 9, z], [-X, top + 9, z]], night ? '#0b0f1c' : '#1a2140');
   quad([[-X, top + 0.6, z - 0.01], [X, top + 0.6, z - 0.01], [X, top + 2.4, z - 0.01], [-X, top + 2.4, z - 0.01]], night ? '#141a2c' : '#262f52');
@@ -2709,7 +2713,7 @@ function ribbonColor() { const hc = homeColor(), c = hc ? [hc, '#ffffff', shade(
 
 // Light poles at the night beach (drawn with the scene, no beams).
 function drawLightPoles() {
-  for (const [x, z] of [[-HW - 2.4, -HL - 2.4], [HW + 2.4, -HL - 2.4], [-HW - 2.4, HL + 2.4], [HW + 2.4, HL + 2.4]]) {
+  for (const [x, z] of [[-HW - 4, -HL - 4], [HW + 4, -HL - 4], [-HW - 4, HL + 4], [HW + 4, HL + 4]]) {
     const a = proj(x, 0, z), b = proj(x, 9, z);
     ctx.strokeStyle = '#7d8598'; ctx.lineWidth = Math.max(3, 0.18 * a.k); ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
     ctx.fillStyle = '#3a4152'; ctx.fillRect(b.x - 0.9 * b.k, b.y - 0.45 * b.k, 1.8 * b.k, 0.9 * b.k);
@@ -2739,7 +2743,7 @@ function drawVenueLights() {
 // Indoors: the hall floor out to the stands, so the wider run-off around the court reads as floor, not the painted backdrop.
 function drawArenaFloor() {
   const V = venue(); if (V.mode !== 6) return;
-  const d = V.decks[0], X = HW + d.gap + d.depth * d.tiers, Z = HL + d.gap + d.depth * d.endTiers;
+  const d = V.decks[0], X = HW + d.gap + d.depth * d.tiers, Z = HL + endGap(d) + d.depth * d.endTiers;
   const hc = homeColor(), dark = (V.extras || []).includes('dark');
   ctx.fillStyle = hc ? shade(hc, dark ? -0.72 : -0.5) : dark ? '#16203a' : '#24407a'; // the home colours, darkened
   groundPoly([[-X, -HL - 4], [X, -HL - 4], [X, Z], [-X, Z]]); ctx.fill();
@@ -3059,6 +3063,7 @@ function drawPlayer(p) {
   const img = spriteImg(p.mon.id, back, p.role === 'L'), box = SPRITE_BOX[p.mon.id];
   if (p.strafe && input.aim) p.flip = back ? input.aim.x < p.x : input.aim.x > p.x; // strafing: face the cursor
   else if (Math.abs(p.vx) > 0.6) p.flip = back ? p.vx < 0 : p.vx > 0;
+  else if (Math.abs(p.x) > HW + 0.5 && Math.abs(p.vz) < 0.6) p.flip = back ? p.x > 0 : p.x < 0; // off court and still (the bench, the sideline): watch the game
   if (img.complete && img.naturalWidth) {
     const [sx, sy, sw, sh] = back ? box.slice(4) : box.slice(0, 4);
     const k = p.rr * 3.3 * (back ? 1 : 1.3) * f.k / sh; // the far team is drawn a bit larger so it reads at a distance
@@ -3166,7 +3171,7 @@ function render() {
   // far side, the net, then the near side
   const items = G.players.map(p => ({ z: p.z, d: () => drawPlayer(p) }));
   for (const p of [...G.bench[0], ...G.bench[1], ...G.sideline[0]]) items.push({ z: p.z, d: () => { // sit while waiting on a bench seat
-    const y0 = p.y, sit = settings.mode === 6 && !p.subbing && p.x < -(HW + 2.2);
+    const y0 = p.y, sit = settings.mode === 6 && !p.subbing && p.x < -(HW + BENCH_X);
     if (sit) p.y = 0.3; drawPlayer(p); p.y = y0; } });
   items.push({ z: b.z, d: () => drawBall(b) });
   for (const p of (G.benchMons || []).flat()) items.push({ z: p.z, d: () => { // a hop when their team scores
