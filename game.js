@@ -373,18 +373,24 @@ function spots6(s, ph) {
     // the libero (or a middle) to 5, outsides to 6. The server is free behind the end line.
     rot.forEach((p, i) => spots.set(p, i === 0 ? [ZONE_X[0] * HW, bz] : isFront(p) ? [wing(p) * 0.6 * HW, fz] : backSpot(p).slice()));
     legalize(spots, rot, true);
-  } else if (ph === 'receive') {
-    // three passers in a W; the setter hides near the net, ready to run to the target
-    const passers = rot.filter(isPasser).sort((a, b) => ZONE_X[zoneOf(a) - 1] - ZONE_X[zoneOf(b) - 1] || zoneOf(b) - zoneOf(a));
+  } else if (ph === 'receive' || (ph === 'dig' && G.serveLive)) {
+    // three passers in a W; the setter hides near the net, ready to run to the target.
+    // Once the serve is struck (dig phase) the passers hold the W, the setter runs to the target
+    // and the front row slides to the spots they hit from: nobody drops back to dig a serve.
+    const served = ph === 'dig';
+    // left to right; on a tie (zones 3 and 6) the front-row passer takes the shallower spot on the left
+    const passers = rot.filter(isPasser).sort((a, b) => ZONE_X[zoneOf(a) - 1] - ZONE_X[zoneOf(b) - 1] || zoneOf(a) - zoneOf(b));
     const W = [[-0.55 * HW, -0.6 * HL], [0, -0.7 * HL], [0.55 * HW, -0.6 * HL]];
     passers.forEach((p, i) => spots.set(p, W[i] || W[1]));
     for (const p of rot) {
       if (spots.has(p)) continue;
-      if (p.role === 'S') spots.set(p, isFront(p) ? [0.35 * HW, -1.3] : [0.5 * HW, -0.28 * HL]);
-      else if (isFront(p)) spots.set(p, [wing(p) * 0.6 * HW, -1.6]); // stacked toward the spot they switch to
+      // a back-row setter hides on their own side of the court (zone 1 right, 6 middle, 5 left), so the
+      // passers keep the whole width covered
+      if (p.role === 'S') spots.set(p, served ? setterSpot() : isFront(p) ? [0.35 * HW, -1.3] : [{ 1: 0.5, 6: 0.15, 5: -0.45 }[zoneOf(p)] * HW, -0.28 * HL]);
+      else if (isFront(p)) spots.set(p, [(served ? wing(p) * 0.6 : ZONE_X[zoneOf(p) - 1] * 1.25) * HW, -1.6]); // at the net in their own zone, clear of the passers
       else spots.set(p, [ZONE_X[zoneOf(p) - 1] * HW, -0.86 * HL]);
     }
-    legalize(spots, rot, false);
+    if (!served) legalize(spots, rot, false);
   } else if (ph === 'offense') {
     const setter = G.setterNow[s] || rot.find(p => p.role === 'S');
     for (const p of rot) {
@@ -1515,7 +1521,8 @@ function awardPoint(w, label, sub, credit, key) {
 }
 
 // ===================== AI =====================
-function chooseReceiver(s, lx, lz) {
+// tc: seconds until the ball comes down. On serve receive in 6 v 6 the setter is left out whenever a teammate can get there in time.
+function chooseReceiver(s, lx, lz, tc = 0) {
   if (G.serveLive && G.lastSide === s) return null; // your own serve: leave it
   if (G.lastSide === s && G.touches[s] > 0 && G.intended[s]) return G.intended[s];
   const cands = G.sides[s].filter(p => !(G.lastSide === s && G.lastToucher === p && G.touches[s] > 0));
@@ -1523,7 +1530,9 @@ function chooseReceiver(s, lx, lz) {
   const cost = p => Math.hypot(p.x - lx, p.z - lz) / p.speed + (p.onGround ? 0 : 0.15)
     + (first && settings.mode === 6 && p.role === 'S' ? 0.35 : 0) + (first && serve && !isPasser(p) ? 0.4 : 0);
   let best = null;
-  for (const p of cands) if (!best || cost(p) < cost(best)) best = p;
+  const reach = p => Math.hypot(p.x - lx, p.z - lz) / p.speed <= tc + 0.3;
+  const noSetter = first && serve && settings.mode === 6 && cands.some(p => p.role !== 'S' && reach(p));
+  for (const p of cands) if (!(noSetter && p.role === 'S') && (!best || cost(p) < cost(best))) best = p;
   // you called it: teammates leave this ball to you
   const you = cands.find(p => p.human);
   if (you && !AUTO && s === 0 && G.chat && G.chat.k === 0 && G.time - G.chat.t < 3 && G.chat.tid >= G.tid - 1) return you;
@@ -1547,7 +1556,7 @@ function aiThink(dt) {
     if (ownSide(s, lz)) {
       const out = Math.abs(lx) > HW + 0.2 || Math.abs(lz) > HL + 0.2;
       const leave = out && G.lastSide !== s && G.leave[s];
-      if (!leave) receiver = chooseReceiver(s, lx, lz);
+      if (!leave) receiver = chooseReceiver(s, lx, lz, tc);
     }
     const blockers = new Map(G.blockers[s]);
     for (const p of G.sides[s]) {
