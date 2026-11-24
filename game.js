@@ -336,10 +336,16 @@ const setterSpot = () => (settings.mode === 6 ? [HW * 0.18, -0.9] : [HW * 0.1, -
 
 // The position guide marks your spot at the start of each point only: before the serve (your legal spot),
 // then while the serve is in the air (where to go once it is served: your base spot, or your receive spot).
-// After the first touch it goes away and you play on your own. It also hides when the serve is coming to you.
+// After the first touch it goes away and you play on your own; on your own serve it stays until they set, so the server
+// (who is behind the end line, maybe still landing from a jump serve) sees where to run in to. It also hides when the serve is coming to you.
 function guideOn(you) {
-  if (G.phase === 'serve') return you !== G.server;
-  if (G.phase !== 'rally' || !G.serveLive || !you.onGround || you.dive > 0) return false;
+  if (G.phase === 'serve') { G.guideLeft = true; return you !== G.server; }
+  if (G.phase !== 'rally' || you.dive > 0) return false;
+  if (!G.serveLive) { // after the serve is played: on your own serve, keep showing your base spot until they set
+    if (G.serving !== 0 || G.lastSide !== 1 || G.touches[1] >= 2) G.guideLeft = false;
+    return !!G.guideLeft && you.onGround && G.intended[0] !== you;
+  }
+  if (!you.onGround && !ownServe(you)) return false;
   if (G.intended[0] === you) return false; // your teammate is putting the ball to you
   const b = G.ball, tl = timeToY(b, BR);
   if (tl == null || ownServe(you)) return true;
@@ -423,9 +429,10 @@ function spots6(s, ph) {
         let x = cx - out * sh.gap;
         // when you are the outside blocker at the net, the middle closes to your inside shoulder and never runs past you
         const you = AUTO ? null : front.find(q => q.human && q !== mb);
-        if (you && Math.abs(you.z) < 2.2 && Math.abs(you.x * m - hx) < 2.5) {
+        if (you && Math.abs(you.z) < 2.2) {
           const ux = you.x * m, sp = Math.max(0.9, you.rr + mb.rr + 0.15);
-          x = ux - out * sp;
+          if (Math.abs(ux - hx) < 2.5) x = ux - out * sp; // you are on their hitter: close the block beside you
+          else if ((ux - mb.x * m) * out > -0.3 && (x - ux) * out > -sp) x = ux - out * sp; // you are further out: stop at your inside shoulder
         }
         spots.set(mb, [x, -0.7]); blockers.push([mb, x]); mb.ai.late = sh.late === 1;
       }
@@ -737,6 +744,7 @@ function stepPlayer(p, h) {
     if (!p.onGround) { p.squash = 0.78; p.blockUp = false; p.hitAir = false; p.noTouch = false; dust(p.x, p.z, 4, '#e8d3a2'); }
     p.y = 0; p.vy = 0; p.onGround = true;
   }
+  keepOffYou(p);
   clampPlayer(p);
   const sp = Math.hypot(p.vx, p.vz);
   if (p.onGround && p.dive <= 0) { // running: a stride to bob on, and little puffs kicked up behind
@@ -845,11 +853,39 @@ function jump(p, c = null) {
   p.vy = p.jumpV * (c == null ? 1 : Math.sqrt(0.62 + 0.48 * c)); p.onGround = false; p.squash = 1.2; p.blockUp = false;
 }
 function moveToward(p, tx, tz, mult) {
-  const dx = tx - p.x, dz = tz - p.z, d = Math.hypot(dx, dz);
+  let dx = tx - p.x, dz = tz - p.z, d = Math.hypot(dx, dz);
   const sp = p.speed * mult * (p.onGround ? 1 : 0.7);
   if (d < 0.08) { p.vx = p.vz = 0; return; }
   const v = Math.min(sp, d * 8);
+  const u = youInWay(p, dx / d, dz / d, d);
+  if (u) { // you are in the way: go round your nearer shoulder, on the side the target is
+    const rx = u.x - p.x, rz = u.z - p.z, r = Math.hypot(rx, rz) || 1, R = p.rr + u.rr + 0.3;
+    const side = Math.sign(rx * dz - rz * dx) || 1; // which side of you the path runs
+    const wx = u.x + (rz / r) * side * R - p.x, wz = u.z - (rx / r) * side * R - p.z, w = Math.hypot(wx, wz) || 1;
+    dx = wx; dz = wz; d = w;
+  }
   p.vx = dx / d * v; p.vz = dz / d * v;
+}
+// Your teammates run round you, not through you. Returns you if you stand on this player's path, else null.
+function youInWay(p, ux, uz, d) {
+  if (p.human || !G || !G.players) return null;
+  const u = G.sides[p.side].find(q => q.human);
+  if (!u || u === p || AUTO) return null;
+  const rx = u.x - p.x, rz = u.z - p.z, R = p.rr + u.rr + 0.15;
+  const along = rx * ux + rz * uz; // how far down the path you are
+  if (along <= 0 || along > d + R * 0.5) return null; // behind them, or past where they are going
+  return Math.abs(rx * uz - rz * ux) < R ? u : null;
+}
+// Hard stop: an AI teammate never ends up inside you (you are never the one pushed).
+function keepOffYou(p) {
+  if (p.human || !G || !G.players || AUTO || !G.players.includes(p)) return;
+  const u = G.sides[p.side].find(q => q.human);
+  if (!u || u === p) return;
+  const rx = p.x - u.x, rz = p.z - u.z, r = Math.hypot(rx, rz), R = p.rr + u.rr + 0.05;
+  if (r >= R || Math.abs(p.y - u.y) > 1.2) return;
+  const nx = r > 1e-3 ? rx / r : 1, nz = r > 1e-3 ? rz / r : 0;
+  p.x = u.x + nx * R; p.z = u.z + nz * R;
+  const vn = p.vx * nx + p.vz * nz; if (vn < 0) { p.vx -= vn * nx; p.vz -= vn * nz; } // slide along you, not into you
 }
 
 // Launch the ball so it peaks at apexY and comes down through (tx, ty, tz).
