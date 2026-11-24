@@ -109,14 +109,14 @@ const STAT_KEYS = [['spd', 'SPD', 'Speed: how fast it runs'], ['jmp', 'JMP', 'Ju
 
 // Opponent AI by difficulty. Your teammates always use MATE.
 const DIFF = {
-  easy:   { err: 1.6, react: 0.30, spd: 0.84, jump: 0.25, serveFault: 0.10, leaveOut: 0.40, teamOffset: -7, block: 0.22, perfect: 0.06 },
-  normal: { err: 0.8, react: 0.18, spd: 0.94, jump: 0.12, serveFault: 0.06, leaveOut: 0.75, teamOffset: -1, block: 0.30, perfect: 0.12 },
-  hard:   { err: 0.3, react: 0.09, spd: 1.03, jump: 0.05, serveFault: 0.03, leaveOut: 0.95, teamOffset: 4,  block: 0.38, perfect: 0.2 },
+  easy:   { err: 1.6, react: 0.30, spd: 0.84, jump: 0.25, serveFault: 0.10, leaveOut: 0.40, teamOffset: -7, block: 0.22, perfect: 0.06, dive: 0.2 },
+  normal: { err: 0.8, react: 0.18, spd: 0.94, jump: 0.12, serveFault: 0.06, leaveOut: 0.75, teamOffset: -1, block: 0.30, perfect: 0.12, dive: 0.5 },
+  hard:   { err: 0.3, react: 0.09, spd: 1.03, jump: 0.05, serveFault: 0.03, leaveOut: 0.95, teamOffset: 4,  block: 0.38, perfect: 0.2, dive: 0.85 },
 };
-const MATE = { err: 0.4, react: 0.11, spd: 1, jump: 0.07, leaveOut: 0.85, block: 0.32, perfect: 0.12 };
+const MATE = { err: 0.4, react: 0.11, spd: 1, jump: 0.07, leaveOut: 0.85, block: 0.32, perfect: 0.12, dive: 0.6 };
 // In the tutorial the other team is a sparring partner, not a rival: it serves in, passes and sets cleanly and
 // attacks at a pace you can read, so every drill gets the ball it needs.
-const TUTOR = { err: 0.15, react: 0.12, spd: 1.05, jump: 0.03, serveFault: 0, leaveOut: 1, teamOffset: 0, block: 0.08, perfect: 0 };
+const TUTOR = { err: 0.15, react: 0.12, spd: 1.05, jump: 0.03, serveFault: 0, leaveOut: 1, teamOffset: 0, block: 0.08, perfect: 0, dive: 0.3 };
 const parsOf = s => (s === 0 ? MATE : TUT ? TUTOR : DIFF[settings.diff]);
 const tutYou = () => (TUT && G ? G.sides[0].find(q => q.human) || null : null);
 const tutBlockDrill = () => { const st = tutStep(); return !!st && (st.ev === 'block' || st.ev === 'blockup'); };
@@ -417,9 +417,9 @@ function spots6(s, ph) {
       // double block: the middle slides over next to the wing on the hitter's side; the other wing drops back for tips
       const mb = front.find(p => p.role === 'MB');
       const wings = front.filter(p => p !== mb).sort((a, b) => Math.abs(wing(a) * 0.6 * HW - hx) - Math.abs(wing(b) * 0.6 * HW - hx));
-      const out = Math.sign(hx) || 1;
-      if (wings[0]) { const x = hx + out * 0.45; spots.set(wings[0], [x, -0.7]); blockers.push([wings[0], x]); }
-      if (mb) { const x = hx - out * 0.45; spots.set(mb, [x, -0.7]); blockers.push([mb, x]); }
+      const out = Math.sign(hx) || 1, sh = blockShade(s), cx = hx + out * sh.off;
+      if (wings[0]) { const x = cx + out * sh.gap; spots.set(wings[0], [x, -0.7]); blockers.push([wings[0], x]); wings[0].ai.late = sh.late === 0; }
+      if (mb) { const x = cx - out * sh.gap; spots.set(mb, [x, -0.7]); blockers.push([mb, x]); mb.ai.late = sh.late === 1; }
       if (wings[1]) spots.set(wings[1], [wing(wings[1]) * 0.62 * HW, -0.33 * HL]);
     }
   }
@@ -605,9 +605,10 @@ function spots2(s, ph) {
     spots.set(other, [clamp(other.x * m, -0.6 * HW, 0.6 * HW), -0.3 * HL]);
   } else {
     const h = oppHitter(s), hx = h ? clamp(h.x * m, -HW + 0.5, HW - 0.5) : 0;
-    spots.set(B, [hx, -0.7]);
-    spots.set(D, [clamp(hx * 0.3, -0.5 * HW, 0.5 * HW), -0.6 * HL]);
-    if (h && ph === 'defense') blockers.push([B, hx]);
+    const sh = h && ph === 'defense' ? blockShade(s) : null, bx = sh ? hx + (Math.sign(hx) || 1) * sh.off : hx;
+    spots.set(B, [bx, -0.7]);
+    spots.set(D, [clamp(hx * 0.3 - (bx - hx) * 0.8, -0.6 * HW, 0.6 * HW), -0.6 * HL]); // the defender covers the side the block gives up
+    if (sh) { blockers.push([B, bx]); B.ai.late = false; }
   }
   return { spots, blockers };
 }
@@ -746,8 +747,11 @@ function startDive(p, ix, iz) {
     if (tl != null) { dx = G.ball.x + G.ball.vx * tl - p.x; dz = G.ball.z + G.ball.vz * tl - p.z; }
     if (Math.hypot(dx, dz) < 0.3) { dx = 0; dz = toward(p.side); }
   }
-  const d = Math.hypot(dx, dz), v = p.speed * 1.75;
-  p.diveSide = keys.strafe && Math.abs(dx) > Math.abs(dz) * 1.2; // strafing side dives get up faster
+  launchDive(p, dx, dz, keys.strafe && Math.abs(dx) > Math.abs(dz) * 1.2); // strafing side dives get up faster
+}
+function launchDive(p, dx, dz, side) {
+  const d = Math.hypot(dx, dz) || 1, v = p.speed * 1.75;
+  p.diveSide = side;
   p.diveDir = [dx / d, dz / d]; p.vx = dx / d * v; p.vz = dz / d * v;
   p.dive = 0.36; p.squash = 0.8;
   dust(p.x, p.z, 5, '#e8d3a2');
@@ -1564,8 +1568,8 @@ function aiThink(dt) {
     }
     const blockers = new Map(G.blockers[s]);
     for (const p of G.sides[s]) {
-      if (!aiControlled(p)) continue;
-      if (p === receiver) aiReceive(p, lx, lz, pars);
+      if (!aiControlled(p) || p.dive > 0 || p.rec > 0) continue; // a diving player slides, then gets up
+      if (p === receiver) { aiReceive(p, lx, lz, pars); aiDive(p, pars); }
       else if (blockers.has(p)) aiBlock(p, pars, dt, blockers.get(p) * toward(s));
       else { moveToward(p, p.homeX, p.homeZ, 0.85 * pars.spd); p.ai.blockWait = -1; }
     }
@@ -1601,6 +1605,36 @@ function aiReceive(p, lx, lz, pars) {
   moveToward(p, lx, lz - t * 0.1, pars.spd);
 }
 
+// How far a dive carries a player, and how much further it lets them reach (see startDive and the slide in stepPlayer).
+const diveReach = p => p.speed * 1.75 * 0.21 + 0.55;
+// A ball dropping just out of running reach: the computer may lay out for it, once per ball.
+// The harder the opponent, the more often they go for it; your teammates dive about as often as a normal opponent.
+function aiDive(p, pars) {
+  const b = G.ball, s = p.side;
+  if (!p.onGround || b.vy > 0 || (G.lastSide === s && G.touches[s] >= 2) || p.ai.diveTid === G.tid) return;
+  const tl = timeToY(b, BR);
+  if (tl == null || tl > 0.38 || tl < 0.1) return;
+  const gx = b.x + b.vx * tl, gz = b.z + b.vz * tl;
+  if (!ownSide(s, gz)) return;
+  const d = Math.hypot(gx - p.x, gz - p.z), run = p.speed * pars.spd * tl + reachOf(p);
+  if (d <= run || d > run + diveReach(p)) return; // they get there on foot, or it is too far even for a dive
+  p.ai.diveTid = G.tid;
+  if (Math.random() < pars.dive) launchDive(p, gx - p.x, gz - p.z, false);
+}
+
+// Where the block sets up on each attack, so it is not in the same spot every time: shaded to take away the line,
+// shaded to take away the angle, or square on the hitter, and now and then with a seam opened between the blockers
+// or one blocker a beat late. Rolled once per touch, so it holds still while a set is in the air.
+function blockShade(s) {
+  const c = G.shade || (G.shade = [null, null]);
+  if (!c[s] || (c[s].tid !== G.tid && !G.sides[1 - s].some(q => !q.onGround))) { // hold it once their hitter is up
+    const r = Math.random();
+    c[s] = { tid: G.tid, off: r < 0.3 ? rand(-0.2, 0.2) : (r < 0.65 ? 1 : -1) * rand(0.35, 0.85),
+      gap: Math.random() < 0.25 ? rand(0.6, 0.8) : 0.45, late: Math.random() < 0.2 ? Math.floor(rand(0, 2)) : -1 };
+  }
+  return c[s];
+}
+
 function aiBlock(p, pars, dt, bxWorld) {
   const b = G.ball, s = p.side, t = toward(s);
   const attacker = G.sides[1 - s].find(q => !q.onGround && Math.abs(q.z) < 3.5);
@@ -1609,7 +1643,7 @@ function aiBlock(p, pars, dt, bxWorld) {
   if (!p.onGround) return;
   const ballNear = Math.abs(b.z) < 4 && b.y > NET_H - 0.5;
   if (attacker && ballNear && Math.hypot(p.x - bx, p.z - bz) < 0.8) {
-    if (p.ai.blockWait < 0) p.ai.blockWait = pars.react * 0.8 + 0.04;
+    if (p.ai.blockWait < 0) p.ai.blockWait = pars.react * 0.8 + 0.04 + rand(-0.03, 0.05) + (p.ai.late ? 0.1 : 0);
     else { p.ai.blockWait -= dt; if (p.ai.blockWait <= 0) { jump(p); p.ai.blockWait = -1; } }
   } else p.ai.blockWait = -1;
 }
