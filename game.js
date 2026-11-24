@@ -419,7 +419,16 @@ function spots6(s, ph) {
       const wings = front.filter(p => p !== mb).sort((a, b) => Math.abs(wing(a) * 0.6 * HW - hx) - Math.abs(wing(b) * 0.6 * HW - hx));
       const out = Math.sign(hx) || 1, sh = blockShade(s), cx = hx + out * sh.off;
       if (wings[0]) { const x = cx + out * sh.gap; spots.set(wings[0], [x, -0.7]); blockers.push([wings[0], x]); wings[0].ai.late = sh.late === 0; }
-      if (mb) { const x = cx - out * sh.gap; spots.set(mb, [x, -0.7]); blockers.push([mb, x]); mb.ai.late = sh.late === 1; }
+      if (mb) {
+        let x = cx - out * sh.gap;
+        // when you are the outside blocker at the net, the middle closes to your inside shoulder and never runs past you
+        const you = AUTO ? null : front.find(q => q.human && q !== mb);
+        if (you && Math.abs(you.z) < 2.2 && Math.abs(you.x * m - hx) < 2.5) {
+          const ux = you.x * m, sp = Math.max(0.9, you.rr + mb.rr + 0.15);
+          x = ux - out * sp;
+        }
+        spots.set(mb, [x, -0.7]); blockers.push([mb, x]); mb.ai.late = sh.late === 1;
+      }
       if (wings[1]) spots.set(wings[1], [wing(wings[1]) * 0.62 * HW, -0.33 * HL]);
     }
   }
