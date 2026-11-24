@@ -469,13 +469,17 @@ function overlaps(s) {
 // Swaps happen between rallies. The benched player waits at the sideline.
 // Both teams' benches are on the same sideline as the scorer's table (world x < 0), each on its own half.
 // 6 v 6: the bench's first two seats (nearest the net) are kept for players coming on and off: seat 0 for the libero
-// or the middle sitting for it, seat 1 for you before you come on and the starter you replace. The rest of the bench
-// is teammates who never play. Smaller games have no bench, so players wait standing by the sideline.
+// or the middle sitting for it, seat 1 for you before you come on and the starter you replace (Road to Glory). The
+// teammates who never play fill the next seats, so nobody sits with an empty seat beside them. Smaller games have no bench, so players wait standing by the sideline.
 const BENCH_X = 4.5; // the scorer's table and team benches stand this far outside the left sideline (6 v 6)
 const SEAT_GAP = 3.2; // room between bench seats, so the subs sit apart rather than in a pile
 const BENCH_Z = 6.5;   // each team's bench starts this far from the net, leaving open floor between the two benches
-const COACH_Z = BENCH_Z - 0.7; // the coach stands at the net end of their bench
-const seatSpot = (s, i) => [-(HW + BENCH_X + 0.55), -toward(s) * (BENCH_Z + 0.6 + i * SEAT_GAP)];
+// Your bench runs toward the camera, so it starts nearer the net with its seats closer together, evenly spaced,
+// to keep the whole bench in view. The far bench keeps the wide spacing.
+const benchZ = s => (s === 0 ? 4.8 : BENCH_Z);
+const seatGap = s => (s === 0 ? 1.2 : SEAT_GAP);
+const coachZ = s => benchZ(s) - 0.7; // the coach stands at the net end of their bench
+const seatSpot = (s, i) => [-(HW + BENCH_X + 0.55), -toward(s) * (benchZ(s) + 0.6 + i * seatGap(s))];
 const benchSpot = (s, i = 0) => settings.mode === 6 ? seatSpot(s, i) : [-(HW + 2.6), -0.3 * HL * toward(s) - i * 1.2];
 const subZone = s => [-(HW + 0.5), -attackLine() * 0.5 * toward(s)]; // the sub zone: on the sideline between the 10 foot (attack) line and the net, on that team's half
 
@@ -648,7 +652,7 @@ function newMatch(demo = false) { // demo: the title screen's background match, 
       for (let i = 0; i < order.length; i++) {
         const m = order[i]; used.add(m.id);
         const p = new Player(makeEntry(m, false), s, false, size * 0.85);
-        [p.x, p.z] = seatSpot(s, i + 2); p.y = 0.3; p.seat = 0.3;
+        [p.x, p.z] = seatSpot(s, i + (s === 0 && !demo && benchEntry() ? 2 : 1)); p.y = 0.3; p.seat = 0.3; // next to whoever sits nearest the net, no empty seat between
         G.benchMons[s].push(p);
       }
     }
@@ -2518,7 +2522,7 @@ function drawFan(q) {
 
 // A coach on the sideline in front of their bench, blocky like the crowd but in their own look; arms up when the team scores.
 function drawCoach(c, s) {
-  const x = -(HW + BENCH_X - 0.9), z = -toward(s) * COACH_Z, f = proj(x, 0, z), k = f.k * 1.4;
+  const x = -(HW + BENCH_X - 0.9), z = -toward(s) * coachZ(s), f = proj(x, 0, z), k = f.k * 1.4;
   if (f.x < -40 || f.x > W + 40 || f.y < -40 || f.y > H + 80) return;
   const w = Math.max(3, 0.42 * k), h = Math.max(4, 0.85 * k), hd = Math.max(2, 0.27 * k), X = Math.round(f.x - w / 2), top = f.y - h, R = (x0, y0, ww, hh, col) => { ctx.fillStyle = col; ctx.fillRect(Math.round(x0), Math.round(y0), Math.max(1, Math.round(ww)), Math.max(1, Math.round(hh))); };
   const cheer = G.lastW === s && G.cheer > 0.25, aw = Math.max(2, hd * 0.35), arm = c.sleeve || c.shirt, hand = c.glove || c.skin;
@@ -2723,8 +2727,8 @@ function drawProps() {
     quad([[x, 0, -1.6], [x, 0, 1.6], [x, 0.8, 1.6], [x, 0.8, -1.6]], '#1b2236');
     quad([[x, 0.62, -1.6], [x, 0.62, 1.6], [x, 0.8, 1.6], [x, 0.8, -1.6]], '#ffcf33');
     seatedPerson(x - 0.5, 0.45, -0.7, '#ffffff'); seatedPerson(x - 0.5, 0.45, 0.7, '#ffffff');
-    const bl = BENCH_Z + 0.6 + 4 * SEAT_GAP + 0.8; // long enough for every seat
-    for (const [z0, z1, col] of [[-bl, -BENCH_Z, clubColor(0)], [BENCH_Z, bl, clubColor(1)]]) {
+    const bl = s => benchZ(s) + 0.6 + 4 * seatGap(s) + 0.8; // long enough for every seat
+    for (const [z0, z1, col] of [[-bl(0), -benchZ(0), clubColor(0)], [benchZ(1), bl(1), clubColor(1)]]) {
       quad([[x - 0.3, 0, z0], [x - 0.3, 0, z1], [x - 0.3, 0.45, z1], [x - 0.3, 0.45, z0]], '#3a4466');
       quad([[x - 0.3, 0.45, z0], [x - 0.3, 0.45, z1], [x - 0.8, 0.45, z1], [x - 0.8, 0.45, z0]], col);
     }
@@ -3249,7 +3253,7 @@ function render() {
   items.push({ z: b.z, d: () => drawBall(b) });
   for (const p of (G.benchMons || []).flat()) items.push({ z: p.z, d: () => { // a hop when their team scores
     p.y = p.seat + (G.lastW === p.side ? Math.abs(Math.sin(G.time * 9 + p.z)) * G.cheer * 0.35 : 0); drawPlayer(p); } });
-  if (settings.mode === 6 && clubs) for (let s = 0; s < 2; s++) { const id = clubId(clubs[s]); if (COACHES[id]) items.push({ z: -toward(s) * COACH_Z, d: () => drawCoach(COACHES[id], s) }); }
+  if (settings.mode === 6 && clubs) for (let s = 0; s < 2; s++) { const id = clubId(clubs[s]); if (COACHES[id]) items.push({ z: -toward(s) * coachZ(s), d: () => drawCoach(COACHES[id], s) }); }
   for (const q of G.particles) items.push({ z: q.z, d: () => drawParticle(q) });
   items.sort((a, c) => c.z - a.z);
   let netDrawn = false;
