@@ -477,7 +477,7 @@ const BENCH_Z = 6.5;   // each team's bench starts this far from the net, leavin
 // Your bench runs toward the camera, so it starts nearer the net with its seats closer together, evenly spaced,
 // to keep the whole bench in view. The far bench keeps the wide spacing.
 const benchZ = s => (s === 0 ? 4.8 : BENCH_Z);
-const seatGap = s => (s === 0 ? 1.2 : SEAT_GAP);
+const seatGap = s => (s === 0 ? 1.5 : SEAT_GAP);
 const coachZ = s => benchZ(s) - 0.7; // the coach stands at the net end of their bench
 const seatSpot = (s, i) => [-(HW + BENCH_X + 0.55), -toward(s) * (benchZ(s) + 0.6 + i * seatGap(s))];
 const benchSpot = (s, i = 0) => settings.mode === 6 ? seatSpot(s, i) : [-(HW + 2.6), -0.3 * HL * toward(s) - i * 1.2];
