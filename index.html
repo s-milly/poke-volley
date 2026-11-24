@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>VolleyDex: Gen 1 Draft Volleyball</title>
 <meta name="description" content="Pick a Gen 1 Pokémon, draft teammates by their stats, and play arcade volleyball in the browser.">
-<link rel="stylesheet" href="style.css?v=101">
+<link rel="stylesheet" href="style.css?v=103">
 </head>
 <body class="on-title">
 <div id="menu-bg" class="menu-bg" aria-hidden="true"></div>
@@ -535,12 +535,7 @@
     </div>
   </div>
   <div id="touch" class="touch" hidden>
-    <div class="dpad">
-      <button type="button" data-act="up" aria-label="Move toward the net">▲</button>
-      <button type="button" data-act="left" aria-label="Move left">◀</button>
-      <button type="button" data-act="right" aria-label="Move right">▶</button>
-      <button type="button" data-act="down" aria-label="Move back">▼</button>
-    </div>
+    <div class="stick" id="stick" role="img" aria-label="Movement stick: drag in any direction"><i class="stick-knob" id="stick-knob"></i></div>
     <div class="pad">
       <button type="button" data-act="dive" class="small" aria-label="Dive">Dive</button>
       <button type="button" data-act="set" class="small" aria-label="Set">Set</button>
@@ -550,9 +545,9 @@
   </div>
 </div>
 
-<script src="data.js?v=101"></script>
-<script src="sprites.js?v=101"></script>
-<script src="game.js?v=101"></script>
-<script src="career.js?v=101"></script>
+<script src="data.js?v=103"></script>
+<script src="sprites.js?v=103"></script>
+<script src="game.js?v=103"></script>
+<script src="career.js?v=103"></script>
 </body>
 </html>

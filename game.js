@@ -1611,7 +1611,8 @@ function aiBlock(p, pars, dt, bxWorld) {
 }
 
 function humanControl(p, dt) {
-  const ix = (keys.right ? 1 : 0) - (keys.left ? 1 : 0), iz = (keys.up ? 1 : 0) - (keys.down ? 1 : 0);
+  let ix = (keys.right ? 1 : 0) - (keys.left ? 1 : 0), iz = (keys.up ? 1 : 0) - (keys.down ? 1 : 0);
+  if (input.stick) ({ x: ix, z: iz } = input.stick); // the touch stick steers in any direction
   p.strafe = keys.strafe && !!input.aim;
   if (input.diveQ) { // right click: a dive on the ground, a block in the air
     input.diveQ = false;
@@ -4473,6 +4474,28 @@ for (const b of document.querySelectorAll('#touch [data-act]')) {
   const on = e => { e.preventDefault(); b.setPointerCapture && b.setPointerCapture(e.pointerId); press(act, true); b.classList.add('down'); };
   const off = e => { e.preventDefault(); press(act, false); b.classList.remove('down'); };
   b.addEventListener('pointerdown', on); b.addEventListener('pointerup', off); b.addEventListener('pointercancel', off); b.addEventListener('pointerleave', off);
+}
+
+// The movement stick: the direction from its centre steers you at full speed in any direction (input.stick),
+// past a small dead zone. It also holds the nearest of the 8 arrow directions in keys, for code that reads those.
+{
+  const stick = $('#stick'), knob = $('#stick-knob');
+  let id = null;
+  const set = (x, z) => { keys.left = x < -0.38; keys.right = x > 0.38; keys.up = z > 0.38; keys.down = z < -0.38; };
+  const move = e => {
+    const r = stick.getBoundingClientRect(), R = r.width / 2;
+    let dx = e.clientX - r.left - R, dy = e.clientY - r.top - R;
+    const d = Math.hypot(dx, dy), max = R - knob.offsetWidth / 2;
+    if (d > max) { dx *= max / d; dy *= max / d; }
+    knob.style.translate = `${dx}px ${dy}px`;
+    if (d < R * 0.22) { input.stick = null; set(0, 0); return; }
+    const x = dx / Math.hypot(dx, dy), z = -dy / Math.hypot(dx, dy);
+    input.stick = { x, z }; set(x, z);
+  };
+  const end = e => { if (e.pointerId !== id) return; e.preventDefault(); id = null; input.stick = null; set(0, 0); knob.style.translate = ''; stick.classList.remove('on'); };
+  stick.addEventListener('pointerdown', e => { e.preventDefault(); Sfx.init(); id = e.pointerId; stick.setPointerCapture(id); stick.classList.add('on'); move(e); });
+  stick.addEventListener('pointermove', e => { if (e.pointerId === id) { e.preventDefault(); move(e); } });
+  stick.addEventListener('pointerup', end); stick.addEventListener('pointercancel', end);
 }
 
 // ===================== boot =====================
