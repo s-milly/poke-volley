@@ -713,8 +713,9 @@ function inCourt(x, z, s) { // inside the court of side s
 }
 function clampPlayer(p) {
   const t = toward(p.side);
-  p.x = clamp(p.x, -HW - 3, HW + 3);
-  p.z = clamp(p.z * t, -(HL + 4), -(p.rr + 0.08)) * t;
+  const off = p.subbing || (G && G.players && !G.players.includes(p)); // walking to or from the bench, which is further out
+  p.x = clamp(p.x, off ? -(HW + BENCH_X + 1) : -HW - 3, HW + 3);
+  p.z = clamp(p.z * t, off ? -(BENCH_Z + 4 * SEAT_GAP + 2) : -(HL + 4), -(p.rr + 0.08)) * t;
 }
 function stepPlayer(p, h) {
   if (!p.onGround) p.vy -= pGrav(p.vy) * h;
