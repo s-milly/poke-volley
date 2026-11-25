@@ -20,7 +20,7 @@ New to it? Open **How to play** on the title screen and start the **Tutorial**: 
 | C / V | Camera mode (follow or fixed) / zoom. The mouse wheel zooms too |
 | 1 2 3 4 | Quick chat: Mine!, Set me!, Nice!, My bad |
 | P or Esc | Pause |
-| M | Sound and music on or off |
+| M | Sound, music and crowd on or off |
 
 Phones get an on-screen pad.
 
@@ -97,7 +97,7 @@ The overall rating (OVR) is a weighted average of the five. Body size comes from
 
 - `index.html`, `style.css`: menus, draft and result screens.
 - `game.js`: ratings, draft, 3D physics, computer players and the canvas renderer.
-- `music.js`: original chiptune themes played with Web Audio: one for each town club's arena (the home club's plays), plus the mega bowl, championship night and each beach.
+- `music.js`: original chiptune themes played with Web Audio: a title theme for the menus, a Road to Glory hub theme, one for each town club's arena (the home club's plays), plus the mega bowl, championship night and each beach. Also the crowd: a murmur that builds through the rally, claps for the home side's serve, oohs for big plays, and roars, whistles, applause and groans after each point.
 - `sprites/`, `sprites.js`: front and back sprites and their visible areas.
 - `fonts/`: the two pixel fonts and their licenses.
 - `data.js`: the 151 Pokémon (stats, types, height, weight, Pokédex color), generated from the PokeAPI data files.

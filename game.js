@@ -233,7 +233,7 @@ addEventListener('keyup', e => { if (e.code === 'Tab') showTabStats(false); cons
 addEventListener('blur', () => { for (const k in keys) keys[k] = false; input.jumpT0 = null; showTabStats(false); });
 
 // ===================== match state =====================
-const settings = { mode: 2, diff: 'normal', target: 15, sets: 1, role: { 2: 'B', 6: 'OH' }, venue: { 2: 'beach', 6: 'arena' }, time: 'day', club: ['cerulean', 'random'], camMode: 'follow', zoom: 1, guide: 'on', serve: 'float', music: 'on' };
+const settings = { mode: 2, diff: 'normal', target: 15, sets: 1, role: { 2: 'B', 6: 'OH' }, venue: { 2: 'beach', 6: 'arena' }, time: 'day', club: ['cerulean', 'random'], camMode: 'follow', zoom: 1, guide: 'on', serve: 'float', music: 'on', crowd: 'on' };
 let clubs = null;   // [club, club] for this match, the rival resolved from 'random'
 let draft = null;   // { starter, picks: [mon], offers: [mon], rerolls }
 let capPick = null; // { role, offers: [mon], rerolls }: your own Pokémon, offered for your position
@@ -1104,7 +1104,7 @@ function contact(p) {
     return;
   }
   const la = G.lastAttack;
-  if (fromOpp && la && la.type === 'spike') p.stats.digs++;
+  if (fromOpp && la && la.type === 'spike') { p.stats.digs++; Crowd.ooh(p.dive > 0 ? 1 : 0.6); }
   const setter = !fromOpp && G.setBy && G.lastToucher === G.setBy && G.setBy !== p ? G.setBy : null; // who set you, if this is the touch after their set
   G.setBy = null;
   G.lastToucher = p; G.lastSide = s; G.intended[s] = null;
@@ -1353,7 +1353,7 @@ function spike(p, q = null) {
     if (special || (human && q != null && q >= 0.65)) G.shake = Math.max(G.shake, 0.18);
     if (special) {
       const ty = p.mon.types[0];
-      b.special = ty;
+      b.special = ty; Crowd.ooh(0.8);
       for (let i = 0; i < 16; i++) specialFx(b, true); // the hit throws out a burst of the move's particles
       G.shake = 0.35;
     }
@@ -1442,7 +1442,7 @@ function doBlock(p) {
     }
   }
   rerollAI();
-  Sfx.block();
+  Sfx.block(); Crowd.ooh(0.7);
 }
 
 // ===================== rally flow =====================
@@ -1588,6 +1588,7 @@ function awardPoint(w, label, sub, credit, key) {
   G.texts.push({ big: true, text: label, sub, color: TEAM_COLORS[w], t: 0, life: 1.6 });
   Sfx.whistle(); Sfx.point(w === 0);
   const setWon = G.score[w] >= setTarget() && G.score[w] - G.score[1 - w] >= 2;
+  Crowd.point(w, setWon, setWon && G.sets[w] + 1 >= setsToWin());
   if (setWon) {
     G.sets[w]++; G.setLog.push([...G.score]);
     if (G.sets[w] >= setsToWin()) { G.phase = 'over'; G.timer = 2.0; G.winner = w; return; }
@@ -3611,6 +3612,7 @@ function loadSettings() {
   if (['follow', 'fixed'].includes(o.camMode)) settings.camMode = o.camMode;
   if (['on', 'off'].includes(o.guide)) settings.guide = o.guide;
   if (['on', 'off'].includes(o.music)) settings.music = o.music;
+  if (['on', 'off'].includes(o.crowd)) settings.crowd = o.crowd;
   if (SERVES[o.serve]) settings.serve = o.serve;
   if (typeof o.zoom === 'number' && o.zoom >= 0.84 && o.zoom <= 1.14) settings.zoom = o.zoom;
   for (const n of [2, 6]) {
@@ -4173,7 +4175,7 @@ for (const d of document.querySelectorAll('#scr-title dialog')) {
 }
 $('#mm-howto').addEventListener('click', () => $('#howto-dlg').showModal());
 $('#mm-settings').addEventListener('click', () => { markSettings(); $('#settings-dlg').showModal(); });
-const SET_ROWS = [['#set-diff', 'diff', String], ['#set-target', 'target', Number], ['#set-sets', 'sets', Number], ['#set-cam', 'camMode', String], ['#set-guide', 'guide', String], ['#set-music', 'music', String]];
+const SET_ROWS = [['#set-diff', 'diff', String], ['#set-target', 'target', Number], ['#set-sets', 'sets', Number], ['#set-cam', 'camMode', String], ['#set-guide', 'guide', String], ['#set-music', 'music', String], ['#set-crowd', 'crowd', String]];
 function markSettings() {
   const r = realSettings();
   for (const [box, key] of SET_ROWS) for (const b of document.querySelectorAll(`${box} button`)) b.setAttribute('aria-pressed', String(b.dataset.v === String(r[key])));
