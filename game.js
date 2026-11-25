@@ -855,22 +855,35 @@ function jump(p, c = null) {
 function moveToward(p, tx, tz, mult) {
   let dx = tx - p.x, dz = tz - p.z, d = Math.hypot(dx, dz);
   const sp = p.speed * mult * (p.onGround ? 1 : 0.7);
+  const you = yourMate(p);
+  if (you) { // a spot on top of you, or right beside you: stop a step short instead of pressing into you
+    const ox = tx - you.x, oz = tz - you.z, o = Math.hypot(ox, oz), K = p.rr + you.rr + 0.35;
+    if (o < K) {
+      const nx = o > 0.05 ? ox / o : (p.x - you.x) / (Math.hypot(p.x - you.x, p.z - you.z) || 1);
+      const nz = o > 0.05 ? oz / o : (p.z - you.z) / (Math.hypot(p.x - you.x, p.z - you.z) || 1);
+      tx = you.x + nx * K; tz = you.z + nz * K; dx = tx - p.x; dz = tz - p.z; d = Math.hypot(dx, dz);
+    }
+  }
   if (d < 0.08) { p.vx = p.vz = 0; return; }
   const v = Math.min(sp, d * 8);
   const u = youInWay(p, dx / d, dz / d, d);
-  if (u) { // you are in the way: go round your nearer shoulder, on the side the target is
+  if (u) { // you are in the way: go round you on the side the target is, so the way on stays clear
     const rx = u.x - p.x, rz = u.z - p.z, r = Math.hypot(rx, rz) || 1, R = p.rr + u.rr + 0.3;
-    const side = Math.sign(rx * dz - rz * dx) || 1; // which side of you the path runs
+    const side = Math.sign(rz * dx - rx * dz) || 1; // +1: the target is to the right of the line from them to you
     const wx = u.x + (rz / r) * side * R - p.x, wz = u.z - (rx / r) * side * R - p.z, w = Math.hypot(wx, wz) || 1;
     dx = wx; dz = wz; d = w;
   }
   p.vx = dx / d * v; p.vz = dz / d * v;
 }
+// You, if p is one of your computer teammates; else null.
+function yourMate(p) {
+  if (p.human || AUTO || !G || !G.players || !G.sides) return null;
+  return G.sides[p.side].find(q => q.human) || null;
+}
 // Your teammates run round you, not through you. Returns you if you stand on this player's path, else null.
 function youInWay(p, ux, uz, d) {
-  if (p.human || !G || !G.players) return null;
-  const u = G.sides[p.side].find(q => q.human);
-  if (!u || u === p || AUTO) return null;
+  const u = yourMate(p);
+  if (!u) return null;
   const rx = u.x - p.x, rz = u.z - p.z, R = p.rr + u.rr + 0.15;
   const along = rx * ux + rz * uz; // how far down the path you are
   if (along <= 0 || along > d + R * 0.5) return null; // behind them, or past where they are going
