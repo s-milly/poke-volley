@@ -434,9 +434,10 @@ function spots6(s, ph) {
         // when you are the outside blocker at the net, the middle closes to your inside shoulder and never runs past you
         const you = AUTO ? null : front.find(q => q.human && q !== mb);
         if (you && Math.abs(you.z) < 2.2) {
-          const ux = you.x * m, sp = Math.max(0.9, you.rr + mb.rr + 0.15);
-          if (Math.abs(ux - hx) < 2.5) x = ux - out * sp; // you are on their hitter: close the block beside you
-          else if ((ux - mb.x * m) * out > -0.3 && (x - ux) * out > -sp) x = ux - out * sp; // you are further out: stop at your inside shoulder
+          // inside is toward the middle of the court from you; only when you stand in the middle yourself does it go by the hitter
+          const ux = you.x * m, sp = Math.max(0.9, you.rr + mb.rr + 0.15), io = Math.abs(ux) > 0.5 ? -Math.sign(ux) : -out;
+          if (Math.abs(ux - hx) < 2.5) x = ux + io * sp; // you are on their hitter (a pipe or a quick too): close the block on your inside
+          else if ((mb.x * m - ux) * io > -0.3 && (x - ux) * io < sp) x = ux + io * sp; // you are further out: stop at your inside shoulder
         }
         spots.set(mb, [x, -0.7]); blockers.push([mb, x]); mb.ai.late = sh.late === 1;
       }
