@@ -233,7 +233,7 @@ addEventListener('keyup', e => { if (e.code === 'Tab') showTabStats(false); cons
 addEventListener('blur', () => { for (const k in keys) keys[k] = false; input.jumpT0 = null; showTabStats(false); });
 
 // ===================== match state =====================
-const settings = { mode: 2, diff: 'normal', target: 15, sets: 1, role: { 2: 'B', 6: 'OH' }, venue: { 2: 'beach', 6: 'arena' }, time: 'day', club: ['cerulean', 'random'], camMode: 'follow', zoom: 1, guide: 'on', serve: 'float' };
+const settings = { mode: 2, diff: 'normal', target: 15, sets: 1, role: { 2: 'B', 6: 'OH' }, venue: { 2: 'beach', 6: 'arena' }, time: 'day', club: ['cerulean', 'random'], camMode: 'follow', zoom: 1, guide: 'on', serve: 'float', music: 'on' };
 let clubs = null;   // [club, club] for this match, the rival resolved from 'random'
 let draft = null;   // { starter, picks: [mon], offers: [mon], rerolls }
 let capPick = null; // { role, offers: [mon], rerolls }: your own Pokémon, offered for your position
@@ -3610,6 +3610,7 @@ function loadSettings() {
   if (TIMES[o.time]) settings.time = o.time;
   if (['follow', 'fixed'].includes(o.camMode)) settings.camMode = o.camMode;
   if (['on', 'off'].includes(o.guide)) settings.guide = o.guide;
+  if (['on', 'off'].includes(o.music)) settings.music = o.music;
   if (SERVES[o.serve]) settings.serve = o.serve;
   if (typeof o.zoom === 'number' && o.zoom >= 0.84 && o.zoom <= 1.14) settings.zoom = o.zoom;
   for (const n of [2, 6]) {
@@ -4172,7 +4173,7 @@ for (const d of document.querySelectorAll('#scr-title dialog')) {
 }
 $('#mm-howto').addEventListener('click', () => $('#howto-dlg').showModal());
 $('#mm-settings').addEventListener('click', () => { markSettings(); $('#settings-dlg').showModal(); });
-const SET_ROWS = [['#set-diff', 'diff', String], ['#set-target', 'target', Number], ['#set-sets', 'sets', Number], ['#set-cam', 'camMode', String], ['#set-guide', 'guide', String]];
+const SET_ROWS = [['#set-diff', 'diff', String], ['#set-target', 'target', Number], ['#set-sets', 'sets', Number], ['#set-cam', 'camMode', String], ['#set-guide', 'guide', String], ['#set-music', 'music', String]];
 function markSettings() {
   const r = realSettings();
   for (const [box, key] of SET_ROWS) for (const b of document.querySelectorAll(`${box} button`)) b.setAttribute('aria-pressed', String(b.dataset.v === String(r[key])));
