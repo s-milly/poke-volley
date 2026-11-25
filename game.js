@@ -336,13 +336,17 @@ const setterSpot = () => (settings.mode === 6 ? [HW * 0.18, -0.9] : [HW * 0.1, -
 
 // The position guide marks your spot at the start of each point only: before the serve (your legal spot),
 // then while the serve is in the air (where to go once it is served: your base spot, or your receive spot).
-// After the first touch it goes away and you play on your own; on your own serve it stays until they set, so the server
-// (who is behind the end line, maybe still landing from a jump serve) sees where to run in to. It also hides when the serve is coming to you.
+// After that it stays until the next set is up, then goes away and you play on your own: on your own serve until they set,
+// so the server (behind the end line, maybe still landing from a jump serve) sees where to run in to; on theirs until your
+// setter plays your pass, so you see where to go from your passing spot to hit. It also hides when the serve is coming to you.
 function guideOn(you) {
   if (G.phase === 'serve') { G.guideLeft = true; return you !== G.server; }
   if (G.phase !== 'rally' || you.dive > 0) return false;
-  if (!G.serveLive) { // after the serve is played: on your own serve, keep showing your base spot until they set
-    if (G.serving !== 0 || G.lastSide !== 1 || G.touches[1] >= 2) G.guideLeft = false;
+  if (!G.serveLive) { // after the serve is played, keep showing your spot until the next set is up:
+    // on your own serve your base spot until they set; on theirs, once your team has passed, the spot you attack
+    // or cover from (a passer on the right who hits from 4 runs across), until your setter has played it
+    const k = G.serving === 0 ? 1 : 0;
+    if (G.lastSide !== k || G.touches[k] >= 2) G.guideLeft = false;
     return !!G.guideLeft && you.onGround && G.intended[0] !== you;
   }
   if (!you.onGround && !ownServe(you)) return false;
