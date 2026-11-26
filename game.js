@@ -1104,7 +1104,7 @@ function contact(p) {
     return;
   }
   const la = G.lastAttack;
-  if (fromOpp && la && la.type === 'spike') { p.stats.digs++; Crowd.ooh(p.dive > 0 ? 1 : 0.6); }
+  if (fromOpp && la && la.type === 'spike') p.stats.digs++;
   const setter = !fromOpp && G.setBy && G.lastToucher === G.setBy && G.setBy !== p ? G.setBy : null; // who set you, if this is the touch after their set
   G.setBy = null;
   G.lastToucher = p; G.lastSide = s; G.intended[s] = null;
@@ -1353,7 +1353,7 @@ function spike(p, q = null) {
     if (special || (human && q != null && q >= 0.65)) G.shake = Math.max(G.shake, 0.18);
     if (special) {
       const ty = p.mon.types[0];
-      b.special = ty; Crowd.ooh(0.8);
+      b.special = ty;
       for (let i = 0; i < 16; i++) specialFx(b, true); // the hit throws out a burst of the move's particles
       G.shake = 0.35;
     }
@@ -1442,7 +1442,7 @@ function doBlock(p) {
     }
   }
   rerollAI();
-  Sfx.block(); Crowd.ooh(0.7);
+  Sfx.block();
 }
 
 // ===================== rally flow =====================

@@ -207,30 +207,29 @@ const Music = {
 };
 
 // ===================== crowd =====================
-// Real crowd recordings (audio/, credits in the README): a murmur under the play, a stadium roar that builds
-// through a long rally, an "ohhh" for a big swing, block or dig, cheers and applause when the home side scores,
-// a groan when it doesn't, and air horns when a playoff match is won. The arenas are loud, the playoff bowls
-// louder, the beaches lighter, and the boardwalk is a small crowd.
+// Real crowd recordings (audio/, credits in the README): a steady murmur under the play, quieter for the serve,
+// and a cheer when the home side scores (bigger after a long rally, a set or the match). In championship night
+// the arena is split, so the away half cheers its own side's points too. The arenas are louder than the beaches.
 const CROWD_SIZE = { arena: 1, bowl: 1.2, night: 1.35, beach: 0.55, pro: 0.8, boardwalk: 0.45 };
-const CROWD_FILES = ['murmur', 'stadium', 'cheer1', 'cheer2', 'cheer3', 'ooh', 'ahh', 'applause1', 'applause2', 'horns'];
-const CROWD_VOL = 0.5; // the whole crowd, against the hit sounds
+const CROWD_FILES = ['murmur', 'cheer1', 'cheer2', 'cheer3'];
+const CROWD_VOL = 0.3; // the whole crowd, against the hit sounds
 const rnd = (a, b) => a + Math.random() * (b - a);
 const pick = a => a[Math.floor(Math.random() * a.length)];
 const Crowd = {
-  bus: null, buf: {}, mur: null, std: null, shots: [], lastOoh: 0, phase: null,
+  bus: null, buf: {}, mur: null, shots: [], phase: null,
   init() {
     if (this.bus) return true;
     const c = Sfx.ctx; if (!c) return false;
     this.bus = c.createGain(); this.bus.gain.value = CROWD_VOL; this.bus.connect(c.destination);
     for (const n of CROWD_FILES) // loaded once, in the background; a sound that isn't in yet is skipped
-      fetch(`audio/crowd-${n}.mp3`).then(r => r.arrayBuffer()).then(a => c.decodeAudioData(a)).then(b => { this.buf[n] = b; if (n === 'murmur' || n === 'stadium') this.loop(n); }).catch(() => {});
+      fetch(`audio/crowd-${n}.mp3`).then(r => r.arrayBuffer()).then(a => c.decodeAudioData(a)).then(b => { this.buf[n] = b; if (n === 'murmur') this.loop(n); }).catch(() => {});
     return true;
   },
-  loop(n) { // the two beds run all the time; their gains do the work
+  loop(n) { // the murmur runs all the time; its gain does the work
     const c = Sfx.ctx, b = this.buf[n], src = c.createBufferSource(), g = c.createGain();
     src.buffer = b; src.loop = true; src.loopStart = 0.06; src.loopEnd = b.duration - 0.06; // past the mp3 padding at each end
     g.gain.value = 0; src.connect(g).connect(this.bus); src.start(0, Math.random() * b.duration * 0.8);
-    if (n === 'murmur') this.mur = g; else this.std = g;
+    this.mur = g;
   },
   on() {
     return !!Sfx.ctx && !Sfx.muted && realSettings().crowd !== 'off' && typeof G !== 'undefined' && !!G && !G.demo && !G.simFast
@@ -247,31 +246,13 @@ const Crowd = {
     const s = { g, end: t + b.duration / rate }; this.shots.push(s);
     src.onended = () => { this.shots = this.shots.filter(x => x !== s); };
   },
-  ooh(big = 1) {
-    if (!this.on() || !this.init()) return;
-    const now = Sfx.ctx.currentTime; if (now - this.lastOoh < 2.5) return; // not on every touch of a scramble
-    this.lastOoh = now;
-    this.shot(pick(['ooh', 'ahh']), 0.55 * this.size() * big, 0, rnd(0.94, 1.06));
-  },
-  // a point: the home crowd cheers for its own side and groans at the other's. In championship night the arena
-  // is split, so the away half has its say too.
+  // a point: the home crowd cheers its own side; in championship night the away half cheers theirs
   point(w, setWon, matchWon) {
     if (!this.on() || !this.init()) return;
-    const z = this.size(), home = w === homeSide(), split = !!venue().teamSides, beach = settings.mode === 2;
+    const z = this.size(), home = w === homeSide(), beach = settings.mode === 2;
+    if (!home && !venue().teamSides) return;
     const x = Math.min(1.6, 0.7 + Math.min(G.rally, 10) * 0.05 + (setWon ? 0.3 : 0) + (matchWon ? 0.3 : 0));
-    if (home) {
-      this.shot(pick(['cheer1', 'cheer2', 'cheer3']), (beach ? 0.45 : 0.75) * z * x, 0, rnd(0.95, 1.05));
-      this.shot(pick(['applause1', 'applause2']), 0.5 * z * x, 0.3);
-    } else {
-      this.shot('ooh', 0.45 * z, 0, rnd(0.78, 0.84), 1400); // a low, muffled "ohh" of disappointment
-      if (split) this.shot(pick(['cheer1', 'cheer2', 'cheer3']), 0.4 * z * x, 0.1, rnd(0.95, 1.05));
-      else if (G.rally >= 8) this.shot(pick(['applause1', 'applause2']), 0.45 * z, 0.5); // a long rally gets a hand from everyone
-      else this.shot(pick(['applause1', 'applause2']), 0.15 * z, 0.4);
-    }
-    if (matchWon) {
-      this.shot(pick(['applause1', 'applause2']), 0.6 * z, 1.5);
-      if (home && !beach) this.shot('horns', 0.6 * z, 0.4);
-    }
+    this.shot(pick(['cheer1', 'cheer2', 'cheer3']), (beach ? 0.45 : 0.75) * z * x * (home ? 1 : 0.55), 0, rnd(0.95, 1.05));
   },
   tick() {
     const on = this.on();
@@ -280,14 +261,8 @@ const Crowd = {
     if (ph === 'rally' && this.phase !== 'rally') // the serve is in the air: whatever cheer is left dies down
       for (const s of this.shots) if (s.end > now + 0.3) { s.g.gain.cancelScheduledValues(now); s.g.gain.setTargetAtTime(0, now, 0.35); }
     this.phase = ph;
-    let mur = 0, std = 0;
-    if (on) {
-      const r = Math.min(G.rally, 10) / 10;
-      mur = z * (ph === 'serve' ? 0.22 : 0.32);                   // the crowd hushes a little for the serve
-      std = settings.mode === 2 ? 0 : ph === 'rally' ? z * (0.05 + 0.4 * r) : 0; // and gets louder the longer the rally goes
-    }
+    const mur = on ? z * (ph === 'serve' ? 0.22 : 0.32) : 0; // the crowd hushes a little for the serve
     if (this.mur) this.mur.gain.setTargetAtTime(mur, now, 0.5);
-    if (this.std) this.std.gain.setTargetAtTime(std, now, 0.6);
     if (!on) for (const s of this.shots) { s.g.gain.cancelScheduledValues(now); s.g.gain.setTargetAtTime(0, now, 0.1); }
   },
 };

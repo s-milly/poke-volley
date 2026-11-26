@@ -98,7 +98,7 @@ The overall rating (OVR) is a weighted average of the five. Body size comes from
 - `index.html`, `style.css`: menus, draft and result screens.
 - `game.js`: ratings, draft, 3D physics, computer players and the canvas renderer.
 - `audio/`: the crowd recordings (credits below).
-- `music.js`: original chiptune themes played with Web Audio: a title theme for the menus, a Road to Glory hub theme, one for each town club's arena (the home club's plays), plus the mega bowl, championship night and each beach. Also the crowd, from the recordings in `audio/`: a murmur that hushes for the serve and builds through the rally, an "ohhh" for big plays, and cheers, applause and groans after each point.
+- `music.js`: original chiptune themes played with Web Audio: a title theme for the menus, a Road to Glory hub theme, one for each town club's arena (the home club's plays), plus the mega bowl, championship night and each beach. Also the crowd, from the recordings in `audio/`: a murmur that hushes for the serve, and a cheer when the home side scores.
 - `sprites/`, `sprites.js`: front and back sprites and their visible areas.
 - `fonts/`: the two pixel fonts and their licenses.
 - `data.js`: the 151 Pokémon (stats, types, height, weight, Pokédex color), generated from the PokeAPI data files.
