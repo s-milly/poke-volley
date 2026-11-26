@@ -291,5 +291,16 @@ const Crowd = {
     if (!on) for (const s of this.shots) { s.g.gain.cancelScheduledValues(now); s.g.gain.setTargetAtTime(0, now, 0.1); }
   },
 };
-for (const ev of ['pointerdown', 'keydown']) addEventListener(ev, () => { Sfx.init(); if (Sfx.ctx && Sfx.ctx.state === 'suspended') Sfx.ctx.resume(); }); // the menu music can start on the first click or key
+// Browsers keep a page silent until you click, tap or press a key, so the menu music starts on the first one.
+// Safari only counts some of these (a tap's touchend, a click), so listen for all of them and wake the audio each time.
+function wakeAudio() {
+  Sfx.init();
+  if (Sfx.ctx && Sfx.ctx.state !== 'running') Sfx.ctx.resume().catch(() => {});
+}
+for (const ev of ['pointerdown', 'pointerup', 'mousedown', 'click', 'touchstart', 'touchend', 'keydown']) addEventListener(ev, wakeAudio, { capture: true, passive: true });
+// a hint on the title screen until the sound is on
+setInterval(() => {
+  const h = $('#sound-hint'); if (!h) return;
+  h.hidden = !document.body.classList.contains('on-title') || Sfx.muted || realSettings().music === 'off' || (!!Sfx.ctx && Sfx.ctx.state === 'running');
+}, 250);
 setInterval(() => { Music.tick(); Crowd.tick(); }, 40);
