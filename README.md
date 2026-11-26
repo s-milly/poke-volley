@@ -97,7 +97,8 @@ The overall rating (OVR) is a weighted average of the five. Body size comes from
 
 - `index.html`, `style.css`: menus, draft and result screens.
 - `game.js`: ratings, draft, 3D physics, computer players and the canvas renderer.
-- `music.js`: original chiptune themes played with Web Audio: a title theme for the menus, a Road to Glory hub theme, one for each town club's arena (the home club's plays), plus the mega bowl, championship night and each beach. Also the crowd: a murmur that builds through the rally, claps for the home side's serve, oohs for big plays, and roars, whistles, applause and groans after each point.
+- `audio/`: the crowd recordings (credits below).
+- `music.js`: original chiptune themes played with Web Audio: a title theme for the menus, a Road to Glory hub theme, one for each town club's arena (the home club's plays), plus the mega bowl, championship night and each beach. Also the crowd, from the recordings in `audio/`: a murmur that hushes for the serve and builds through the rally, an "ohhh" for big plays, and cheers, applause and groans after each point.
 - `sprites/`, `sprites.js`: front and back sprites and their visible areas.
 - `fonts/`: the two pixel fonts and their licenses.
 - `data.js`: the 151 Pokémon (stats, types, height, weight, Pokédex color), generated from the PokeAPI data files.
@@ -109,5 +110,14 @@ The overall rating (OVR) is a weighted average of the five. Body size comes from
 ## Art
 
 The game is drawn at 960 x 540 and scaled up with hard pixel edges, with the HUD and pixel font on a 480 x 270 grid. The Pokémon are the Black/White sprites from the [PokeAPI sprites collection](https://github.com/PokeAPI/sprites): front sprites for the other team, full-body back sprites for yours (`sprites/`, with each sprite's visible area in `sprites.js`). Fonts are Press Start 2P and VT323, both under the SIL Open Font License (`fonts/`).
+
+The crowd sounds in `audio/` are cut, mixed to mono and level-matched from these Wikimedia Commons recordings:
+
+- `crowd-murmur.mp3`: [large crowd, medium distance](https://commons.wikimedia.org/wiki/File:360703_eguobyte_large-crowd-medium-distance-stereo.wav) by eguobyte, CC0.
+- `crowd-stadium.mp3`: [Arrowhead Stadium crowd noise](https://commons.wikimedia.org/wiki/File:Arrowhead_Stadium_crowd_noise.wav) by Kj1595, [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/). The cut file is shared under the same license.
+- `crowd-cheer1.mp3` to `crowd-cheer3.mp3`: [Football Austria vs. Sweden](https://commons.wikimedia.org/wiki/File:WWS_FootballAustriavs.Sweden.ogg) by Work With Sounds / Torsten Nilsson, [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+- `crowd-horns.mp3`: [F1 race crowd applause and air horns](https://commons.wikimedia.org/wiki/File:F1-Race-Crowd-Applause-Air-Horns.wav) by WebbFilmsUK, [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+- `crowd-ooh.mp3`, `crowd-ahh.mp3`: [Ohhh ahhh](https://commons.wikimedia.org/wiki/File:Ohhh_ahhh.ogg) by starlite, public domain.
+- `crowd-applause1.mp3`, `crowd-applause2.mp3`: [Applause i](https://commons.wikimedia.org/wiki/File:Applause_i.ogg) and [Applause ii](https://commons.wikimedia.org/wiki/File:Applause_ii.ogg) by thore, public domain.
 
 Fan project. Not affiliated with Nintendo, Game Freak or The Pokémon Company. Pokémon and its sprites belong to them.
