@@ -266,16 +266,36 @@ const Crowd = {
     if (!on) for (const s of this.shots) { s.g.gain.cancelScheduledValues(now); s.g.gain.setTargetAtTime(0, now, 0.1); }
   },
 };
-// Browsers keep a page silent until you click, tap or press a key, so the menu music starts on the first one.
+// Most browsers keep a page silent until you click, tap or press a key, so the menu music starts on the first one.
 // Safari only counts some of these (a tap's touchend, a click), so listen for all of them and wake the audio each time.
 function wakeAudio() {
   Sfx.init();
   if (Sfx.ctx && Sfx.ctx.state !== 'running') Sfx.ctx.resume().catch(() => {});
 }
 for (const ev of ['pointerdown', 'pointerup', 'mousedown', 'click', 'touchstart', 'touchend', 'keydown']) addEventListener(ev, wakeAudio, { capture: true, passive: true });
+// Try straight away too: browsers that allow it (Chrome for a site you play often, or any browser where you
+// have allowed sound for the site) start the title music the moment the page opens.
+wakeAudio();
+// The press start screen: once per page load, over the title. Whatever you press opens the menu, wakes the audio
+// and is swallowed, so a key or click on it doesn't also pick a menu item underneath.
+(function pressStart() {
+  const ps = $('#press-start');
+  if (!ps || (typeof AUTO !== 'undefined' && AUTO) || QS.has('nostart')) return;
+  ps.hidden = false; document.body.classList.add('pressing'); ps.focus({ preventScroll: true });
+  const go = e => {
+    if (ps.hidden || ps.classList.contains('go')) return;
+    if (e.type === 'keydown' && ['Tab', 'Shift', 'Control', 'Alt', 'Meta'].includes(e.key)) return;
+    e.preventDefault(); e.stopPropagation(); wakeAudio();
+    ps.classList.add('go'); document.body.classList.remove('pressing');
+    const done = () => { ps.hidden = true; document.body.classList.remove('pressing'); const f = document.querySelector('#scr-title [data-autofocus]'); if (f) f.focus({ preventScroll: true }); };
+    if (matchMedia('(prefers-reduced-motion: no-preference)').matches) setTimeout(done, 220); else done();
+  };
+  addEventListener('keydown', go, true);
+  ps.addEventListener('click', go);
+})();
 // a hint on the title screen until the sound is on
 setInterval(() => {
   const h = $('#sound-hint'); if (!h) return;
-  h.hidden = !document.body.classList.contains('on-title') || Sfx.muted || realSettings().music === 'off' || (!!Sfx.ctx && Sfx.ctx.state === 'running');
+  h.hidden = !document.body.classList.contains('on-title') || !$('#press-start').hidden || Sfx.muted || realSettings().music === 'off' || (!!Sfx.ctx && Sfx.ctx.state === 'running');
 }, 250);
 setInterval(() => { Music.tick(); Crowd.tick(); }, 40);
