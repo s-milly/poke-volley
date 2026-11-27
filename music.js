@@ -281,9 +281,16 @@ wakeAudio();
 (function pressStart() {
   const ps = $('#press-start');
   if (!ps || (typeof AUTO !== 'undefined' && AUTO) || QS.has('nostart')) return;
-  // a team of six, one of them shiny: the libero, who wears a different colour like on court
-  const team = $('#ps-team'), pool = DEX.filter(m => !m.leg).sort(() => Math.random() - 0.5).slice(0, 6), lib = Math.floor(Math.random() * 6);
-  team.innerHTML = pool.map((m, i) => { const b = SPRITE_BOX[m.id]; return `<img src="sprites/${i === lib ? 'shiny/' : ''}front/${m.id}.png" width="96" height="96" alt="" decoding="async" style="--g:${b ? 96 - b[1] - b[3] : 0}">`; }).join('');
+  // a team of six, each in the position it fits best, with the libero shiny (it wears a different colour on court)
+  const team = $('#ps-team'), pool = DEX.filter(m => !m.leg).sort(() => Math.random() - 0.5).slice(0, 6).map(m => ({ m, r: makeEntry(m, false).r }));
+  const line = ['OH', 'MB', 'S', 'OPP', 'OH', 'L'].map(role => {
+    const e = pool.reduce((a, b) => (ROLES[role].fit(b.r) > ROLES[role].fit(a.r) ? b : a));
+    pool.splice(pool.indexOf(e), 1); return { ...e, role };
+  });
+  team.innerHTML = line.map(({ m, role }) => {
+    const b = SPRITE_BOX[m.id], g = b ? 96 - b[1] - b[3] : 0;
+    return `<span class="ps-mon"><span class="ps-spot"><img src="sprites/${role === 'L' ? 'shiny/' : ''}front/${m.id}.png" width="96" height="96" alt="" decoding="async" style="--g:${g}"></span><b class="role-tag">${ROLES[role].short}</b></span>`;
+  }).join('');
   ps.hidden = false; document.body.classList.add('pressing'); ps.focus({ preventScroll: true });
   const go = e => {
     if (ps.hidden || ps.classList.contains('go')) return;
