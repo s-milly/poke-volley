@@ -281,6 +281,9 @@ wakeAudio();
 (function pressStart() {
   const ps = $('#press-start');
   if (!ps || (typeof AUTO !== 'undefined' && AUTO) || QS.has('nostart')) return;
+  // a team of six, one of them shiny: the libero, who wears a different colour like on court
+  const team = $('#ps-team'), pool = DEX.filter(m => !m.leg).sort(() => Math.random() - 0.5).slice(0, 6), lib = Math.floor(Math.random() * 6);
+  team.innerHTML = pool.map((m, i) => { const b = SPRITE_BOX[m.id]; return `<img src="sprites/${i === lib ? 'shiny/' : ''}front/${m.id}.png" width="96" height="96" alt="" decoding="async" style="--g:${b ? 96 - b[1] - b[3] : 0}">`; }).join('');
   ps.hidden = false; document.body.classList.add('pressing'); ps.focus({ preventScroll: true });
   const go = e => {
     if (ps.hidden || ps.classList.contains('go')) return;
@@ -288,7 +291,7 @@ wakeAudio();
     e.preventDefault(); e.stopPropagation(); wakeAudio();
     ps.classList.add('go'); document.body.classList.remove('pressing');
     const done = () => { ps.hidden = true; document.body.classList.remove('pressing'); const f = document.querySelector('#scr-title [data-autofocus]'); if (f) f.focus({ preventScroll: true }); };
-    if (matchMedia('(prefers-reduced-motion: no-preference)').matches) setTimeout(done, 220); else done();
+    setTimeout(done, 150); // both motion settings fade out over 150 ms
   };
   addEventListener('keydown', go, true);
   ps.addEventListener('click', go);
