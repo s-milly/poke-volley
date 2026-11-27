@@ -1133,6 +1133,7 @@ function soloContact(p) {
 }
 function soloLand(out) {
   const b = G.ball, S = G.solo, K = SOLO[S.kind];
+  Sfx.floor(0.4);
   if (!out) {
     dust(b.x, b.z, 14, '#f3e2b5');
     G.rings.push({ x: b.x, z: b.z, t: 0, c: inCourt(b.x, b.z, 0) || inCourt(b.x, b.z, 1) ? '#ffffff' : '#ff6b6b' });

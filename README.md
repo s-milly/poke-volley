@@ -98,7 +98,7 @@ The overall rating (OVR) is a weighted average of the five. Body size comes from
 - `index.html`, `style.css`: menus, draft and result screens.
 - `game.js`: ratings, draft, 3D physics, computer players and the canvas renderer.
 - `audio/`: the crowd recordings (credits below).
-- `music.js`: the music and the crowd. The title screen and quick play menus play `audio/title-theme.mp3`, "Tram to Match Point", an original theme for this game that loops after its intro. The rest are original chiptune themes played with Web Audio: a Road to Glory hub theme, one for each town club's arena (the home club's plays), plus the mega bowl, championship night and each beach. Also the crowd, from the recordings in `audio/`: a murmur that hushes for the serve, and a cheer when the home side scores.
+- `music.js`: the music and the crowd. The title screen and quick play menus play `audio/title-theme.mp3`, "Tram to Match Point", an original theme for this game that loops after its intro. The Road to Glory screens play an original chiptune theme made with Web Audio. Matches have no music. Also the crowd, from the recordings in `audio/`: a murmur that hushes for the serve, and a cheer when the home side scores.
 - `music-src/title/`: the score of the title theme (`compose.py` writes it note by note with the music-skill plugin; its instruments are MuseScore's MS Basic General MIDI bank, MIT licensed, which asks no credit for music made with it).
 - `sprites/`, `sprites.js`: front and back sprites and their visible areas.
 - `fonts/`: the two pixel fonts and their licenses.
@@ -120,5 +120,10 @@ The crowd sounds in `audio/` are cut, mixed to mono and level-matched from these
 - `crowd-horns.mp3`: [F1 race crowd applause and air horns](https://commons.wikimedia.org/wiki/File:F1-Race-Crowd-Applause-Air-Horns.wav) by WebbFilmsUK, [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
 - `crowd-ooh.mp3`, `crowd-ahh.mp3`: [Ohhh ahhh](https://commons.wikimedia.org/wiki/File:Ohhh_ahhh.ogg) by starlite, public domain.
 - `crowd-applause1.mp3`, `crowd-applause2.mp3`: [Applause i](https://commons.wikimedia.org/wiki/File:Applause_i.ogg) and [Applause ii](https://commons.wikimedia.org/wiki/File:Applause_ii.ogg) by thore, public domain.
+
+The ball and whistle sounds (`audio/sfx-*.mp3`) are cut and level-matched from Wikimedia Commons recordings:
+
+- `sfx-smack1.mp3`, `sfx-smack2.mp3`: [Smack hits](https://commons.wikimedia.org/wiki/File:Smack_hits_(Gravity_Sound).wav), and `sfx-smack3.mp3`: [Smack 4](https://commons.wikimedia.org/wiki/File:Smack_4_(Gravity_Sound).wav), both by Gravity Sound, [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+- `sfx-whistle.mp3`: [Referee whistle blow, gymnasium](https://commons.wikimedia.org/wiki/File:218318_splicesound_referee-whistle-blow-gymnasium.wav) by SpliceSound, CC0.
 
 Fan project. Not affiliated with Nintendo, Game Freak or The Pokémon Company. Pokémon and its sprites belong to them.

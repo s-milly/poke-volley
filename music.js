@@ -1,7 +1,6 @@
 // ===================== music =====================
-// Original chiptune themes, played with Web Audio through the same context as the sound effects.
-// In the 6 v 6 arena the home club's town has its own theme (yours at home, the rival's on the road);
-// the mega bowl (Road to Glory semifinals) and championship night (the final) have their own, and so does each beach.
+// Music plays in the menus only: the title theme from a recording (FILE_SONGS), the Road to Glory hub theme as
+// chiptune played with Web Audio through the same context as the sound effects. Matches have no music.
 //
 // A song is in a key (root, a MIDI note) and a mode (scale). Melody strings are 8th notes, 8 per bar:
 // 1-7 are scale degrees in the middle octave, z x c v b n m the octave below, q w e r t y u the octave above,
@@ -13,66 +12,6 @@ const MODES = {
   harm: [0, 2, 3, 5, 7, 8, 11], lydian: [0, 2, 4, 6, 7, 9, 11], phryg: [0, 1, 3, 5, 7, 8, 10],
 };
 const SONGS = {
-  // Pallet: a gentle, homely tune
-  pallet: { root: 67, mode: 'major', bpm: 100, lead: 'pulse25', prog: [1, 4, 1, 5, 6, 4, 5, 1],
-    mel: '3-5-q-7- 6---4-6- 5-3-1-3- 2-3-2-m- q-7-6-3- 4-6-q-6- 7-6-5-2- 1---5-3-',
-    bass: 'R-F-O-F-', drums: ['k.......k.......', '........s.......', '....h.......h...'] },
-  // Viridian: a walk in the woods, a little rough round the edges
-  viridian: { root: 62, mode: 'mixo', bpm: 112, lead: 'pulse50', prog: [1, 7, 4, 1, 1, 7, 4, 5],
-    mel: '5-.5-6-q 7---.6-5 4-6-q-6- 5---.--- 5-.5-6-q w-q-7-6- q---6-4- 5-6-7---',
-    bass: 'R.RF.FO.', drums: ['k.....k.k.......', '....s.......s...', 'h.h.h.h.h.h.h.h.'] },
-  // Pewter: heavy, stomping, made of stone
-  pewter: { root: 52, mode: 'minor', bpm: 96, lead: 'pulse50', prog: [1, 6, 7, 1, 1, 6, 4, 5],
-    mel: '1-1-3-5- 6---5-3- 2-2-4-7- 1---.--- 5-5-6-q- 3---2-1- 4-3-2-1- m-1----.',
-    bass: 'R-R-R-FO', drums: ['k...k...k...k...', '....s.......s.s.', '..h...h...h...h.'] },
-  // Cerulean: breezy, by the water
-  cerulean: { root: 65, mode: 'lydian', bpm: 124, lead: 'pulse25', prog: [1, 2, 1, 2, 6, 5, 4, 5],
-    mel: '1-3-5-7- q---7-5- 2-4-6-q- w---q-6- 6-q-w-e- w-q-7-5- 4-5-6-q- 7---5---',
-    bass: 'R.FOR.FO', drums: ['k.......k.k.....', '....s.......s...', 'h.hhh.hhh.hhh.hh'] },
-  // Vermilion: an electric march, bright brass on the beat
-  vermilion: { root: 70, mode: 'major', bpm: 138, lead: 'pulse50', prog: [1, 5, 6, 4, 1, 5, 4, 5],
-    mel: '1-1-1-5- 7-.7-2-. 6-6-q-6- 4---.--- 1-1-1-5- 7-q-w-e- w-q-6-4- 5---.---',
-    bass: 'R.R.F.F.', drums: ['k.k.k.k.k.k.k.k.', '....s.......s.ss', 'h.h.h.h.h.h.h.h.'] },
-  // Lavender: slow and eerie, with a lot of space in it
-  lavender: { root: 57, mode: 'harm', bpm: 88, lead: 'pulse125', prog: [1, 4, 5, 1, 6, 4, 5, 5],
-    mel: '5---3-.- 4---6-.- 7---2-.- 1---.--- 3---q-.- 6---4-.- 2---m-.- m-------',
-    bass: 'R---F---', drums: ['k...............', '........s.......', '................'] },
-  // Celadon: soft and floral, a lilting dance
-  celadon: { root: 60, mode: 'major', bpm: 104, lead: 'tri', prog: [1, 3, 4, 1, 6, 2, 5, 1],
-    mel: '3--4-5-- 5--6-7-- q--7-6-- 5-----.- 6--5-6-- 4--3-4-- 2--3-2-- 1-----.-',
-    bass: 'R--F--O-', drums: ['k.....k.........', '........s.......', '..h..h..h..h..h.'] },
-  // Fuchsia: quick, sneaky, all staccato
-  fuchsia: { root: 64, mode: 'phryg', bpm: 132, lead: 'pulse125', prog: [1, 2, 1, 7, 1, 2, 6, 7],
-    mel: '1.2.3... 2.1.m... 1.3.5.6. 5.3.2... 5.6.5.3. 2.3.2.1. n.m.1.2. 3-2-1---',
-    bass: 'R.R.R.FO', drums: ['k..k..k.k..k..k.', '....s.......s...', 'hhhhhhhhhhhhhhhh'] },
-  // Saffron: mysterious, floating, a bit psychic
-  saffron: { root: 62, mode: 'lydian', bpm: 116, lead: 'pulse25', prog: [1, 2, 7, 1, 3, 2, 1, 2],
-    mel: '1-5-w-q- 2-6-e-w- 7-4-6-5- 1---.--- 3-7-r-e- 2-6-e-w- 1-5-w-q- 2---6---',
-    bass: 'R-F-R-F-', drums: ['k.......k.......', '....s.......s...', 'h...h...h...h...'] },
-  // Cinnabar: hot and driving
-  cinnabar: { root: 62, mode: 'minor', bpm: 150, lead: 'pulse50', prog: [1, 7, 6, 7, 1, 7, 6, 5],
-    mel: '1-3-5-q- 7-5-2-m- 6-1-3-6- 7---.--- 1-3-5-q- w-q-7-5- 6-5-4-3- 2---.---',
-    bass: 'RORORORO', drums: ['k.k...k.k.k...k.', '....s.......s...', 'h.h.h.h.h.h.h.h.'] },
-  // Mega bowl: a big anthem for the playoffs
-  bowl: { root: 62, mode: 'major', bpm: 128, lead: 'pulse50', prog: [4, 5, 3, 6, 4, 5, 1, 1],
-    mel: '6-5-4-q- 7-6-5-2- 3-5-7-5- 6---.--- 6-5-4-q- 7-q-w-5- q---.--- q-w-e---',
-    bass: 'R.ROR.RO', drums: ['k...k...k...k...', '....s.......s...', 'h.h.h.h.h.h.h.h.'] },
-  // Championship night: the final, tense and fast
-  night: { root: 60, mode: 'harm', bpm: 144, lead: 'pulse25', prog: [1, 6, 3, 7, 4, 5, 1, 5],
-    mel: '1-3-5-q- 6-5-3-1- 3-5-7-5- 7-2-m--- 4-6-q-w- 7-2-5-7- q-5-3-1- m-------',
-    bass: 'RRORRORO', drums: ['k..k..k.k..k..k.', '....s.......s...', 'hhhhhhhhhhhhhhhh'] },
-  // Beach bleachers: sunny, with a skip in the bass
-  beach: { root: 65, mode: 'major', bpm: 120, lead: 'pulse25', prog: [1, 4, 5, 1, 1, 4, 5, 1],
-    mel: '5.5.6.5- 6-q-6-4- 2.2.3.2- m-2-5--- 5.5.6.5- q-w-e-w- q-6-5-2- 1---.---',
-    bass: 'R..FR.F.', drums: ['k..k..k.k..k..k.', '....s.......s...', '..h...h...h...h.'] },
-  // Pro tour stadium: upbeat and polished
-  pro: { root: 69, mode: 'major', bpm: 132, lead: 'pulse50', prog: [1, 6, 4, 5, 1, 6, 4, 5],
-    mel: '1-3-5-3- q-6-3-1- 4-6-q-6- 5---.--- 1-3-5-3- q-w-q-6- 4-5-6-7- q---.---',
-    bass: 'R-ORR-OR', drums: ['k...k...k...k...', '....s.......s...', 'h.o.h.o.h.o.h.o.'] },
-  // Boardwalk: laid back, swinging
-  boardwalk: { root: 67, mode: 'mixo', bpm: 108, lead: 'tri', prog: [1, 4, 1, 7, 1, 4, 5, 1],
-    mel: '5--6-5-3 1---.--- 4--5-4-2 m------- 5--6-5-q 7--6-5-3 2--3-4-2 1---.---',
-    bass: 'R--F--O-', drums: ['k.....k.........', '....s.......s...', 'h..h.h..h..h.h..'] },
   // The title screen and the quick play menus: bright and heroic, 16 bars so it doesn't loop too soon
   title: { root: 60, mode: 'major', bpm: 120, lead: 'pulse25', prog: [1, 5, 6, 4, 1, 5, 4, 5, 6, 4, 1, 5, 6, 4, 5, 5],
     mel: '1-3-5-q- 7-5-2-5- 6-q-w-q- 6---4--- 3-5-q-e- w-7-5-7- q-6-4-6- 5------- e-w-q-6- q-6-4-q- w-q-5-3- 2-5-7-w- e-w-q-e- r-e-w-q- w---7-5- 7-w-5---',
@@ -82,7 +21,6 @@ const SONGS = {
     mel: '5-.3-5-q 7---4-2- 1-4-6-q- 5---.--- 6-q-6-3- 4-6-q-w- q-7-5-2- 5---.---',
     bass: 'R.ROR.FO', drums: ['k.....k.k.......', '....s.......s...', 'h.h.h.h.h.h.h.h.'] },
 };
-const MENU_SONGS = new Set(['title', 'hub']);
 
 const VOL = 0.15; // the music bus, under the hit sounds
 // Themes played from a recording instead of the chip engine. title-theme.mp3 is "Tram to Match Point", composed for
@@ -111,11 +49,7 @@ const Music = {
     const scr = document.querySelector('.screen:not([hidden])'), body = document.body.classList;
     if (body.contains('on-title') || body.contains('on-menu')) // the menus have their own themes
       return careerMatch || (scr && scr.id.startsWith('scr-rtg')) ? 'hub' : 'title';
-    if (typeof G === 'undefined' || !G || G.demo || G.phase === 'over' || $('#stage').hidden || !$('#pause').hidden) return null;
-    const v = settings.venue[settings.mode];
-    if (settings.mode === 2 || v === 'bowl' || v === 'night') return SONGS[v] ? v : 'beach';
-    const h = clubs && clubs[homeSide()], id = h && Object.keys(CLUBS).find(k => CLUBS[k] === h);
-    return SONGS[id] ? id : 'pallet';
+    return null; // no music during a match: the crowd and the ball carry it
   },
   compile(s) { // melody string to notes: { step (16th), semitones from the root, length in 16ths }
     const sc = MODES[s.mode], out = [];
@@ -211,10 +145,10 @@ const Music = {
       this.fileTick(want, now);
       return;
     }
-    if (want !== this.id || (want && !MENU_SONGS.has(want) && G !== this.game)) { // a new theme or a new match starts from the top
+    if (want !== this.id) { // a new theme or a new match starts from the top
       if (want) {
         const s = SONGS[want]; if (!s.notes) this.compile(s);
-        this.song = s; this.step = 0; this.pass = 0; this.next = now + 0.15; this.game = G;
+        this.song = s; this.step = 0; this.pass = 0; this.next = now + 0.15;
         this.bus.gain.cancelScheduledValues(now); this.bus.gain.setValueAtTime(0, now); this.bus.gain.linearRampToValueAtTime(VOL, now + 0.6);
       }
       this.id = want;

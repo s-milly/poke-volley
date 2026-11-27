@@ -170,23 +170,113 @@ function makeEntry(mon, captain) {
 const teamOvr = es => Math.round(es.reduce((a, e) => a + e.ovr, 0) / es.length);
 
 // ===================== audio =====================
+// The ball and the referee: recorded hand smacks (audio/sfx-smack*.mp3) shaped per touch, a recorded referee's
+// whistle, and synthesized thuds for the floor, the sand, the net and a dive. Until the recordings load, or if they
+// cannot, the same touches fall back to synthesized impacts. tone() is left for the menus' and meters' small beeps.
 const Sfx = {
-  ctx: null, muted: false,
-  init() { if (!this.ctx) { try { this.ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { this.muted = true; } } },
+  ctx: null, muted: false, buf: {}, noiseBuf: null,
+  init() {
+    if (this.ctx) return;
+    try { this.ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { this.muted = true; return; }
+    for (const n of ['smack1', 'smack2', 'smack3', 'whistle'])
+      fetch(`audio/sfx-${n}.mp3`).then(r => r.arrayBuffer()).then(a => this.ctx.decodeAudioData(a)).then(b => { this.buf[n] = b; }).catch(() => {});
+  },
+  quiet() { return this.muted || !this.ctx || (G && (G.demo || G.simFast)); }, // the title screen's background match is silent, and so is a fast-forward
   tone(freq, dur, type = 'triangle', vol = 0.06, slide = 0, delay = 0) {
-    if (this.muted || !this.ctx || (G && (G.demo || G.simFast))) return; // the title screen's background match is silent, and so is a fast-forward
+    if (this.quiet()) return;
     const c = this.ctx, t0 = c.currentTime + delay, o = c.createOscillator(), g = c.createGain();
     o.type = type; o.frequency.setValueAtTime(freq, t0);
     if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(40, freq + slide), t0 + dur);
     g.gain.setValueAtTime(vol, t0); g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
     o.connect(g).connect(c.destination); o.start(t0); o.stop(t0 + dur + 0.02);
   },
-  bump() { this.tone(520, 0.07); },
-  spike() { this.tone(240, 0.16, 'sawtooth', 0.07, -140); },
-  serve() { this.tone(400, 0.1, 'triangle', 0.06, 120); },
-  block() { this.tone(160, 0.14, 'square', 0.06, -60); },
-  whistle() { this.tone(1900, 0.22, 'sine', 0.04); },
-  point(good) { const n = good ? [523, 659, 784] : [392, 330, 262]; n.forEach((f, i) => this.tone(f, 0.14, 'triangle', 0.05, 0, i * 0.09)); },
+  sand() { return settings.mode === 2; },
+  noise() {
+    if (!this.noiseBuf) {
+      const c = this.ctx, b = c.createBuffer(1, c.sampleRate, c.sampleRate), d = b.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+      this.noiseBuf = b;
+    }
+    return this.noiseBuf;
+  },
+  // filtered noise: a slap, a thud, a scuff, a rattle
+  burst(dur, vol, type, freq, q = 0.8, delay = 0, trem = 0) {
+    const c = this.ctx, t = c.currentTime + delay, src = c.createBufferSource(), f = c.createBiquadFilter(), g = c.createGain();
+    src.buffer = this.noise(); f.type = type; f.frequency.value = freq; f.Q.value = q;
+    g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    if (trem) { const o = c.createOscillator(), og = c.createGain(); o.frequency.value = trem; og.gain.value = vol * 0.7; o.connect(og).connect(g.gain); o.start(t); o.stop(t + dur); }
+    src.connect(f).connect(g).connect(c.destination); src.start(t, Math.random() * 0.5); src.stop(t + dur + 0.02);
+  },
+  thump(f0, f1, dur, vol, delay = 0) { // the low body of an impact
+    const c = this.ctx, t = c.currentTime + delay, o = c.createOscillator(), g = c.createGain();
+    o.type = 'sine'; o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(f1, t + dur);
+    g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g).connect(c.destination); o.start(t); o.stop(t + dur + 0.02);
+  },
+  // a recorded smack, retuned and filtered for the touch; false if none is loaded yet
+  smack(vol, rate, lp, delay = 0) {
+    const names = ['smack1', 'smack2', 'smack3'].filter(n => this.buf[n]);
+    if (!names.length) return false;
+    const c = this.ctx, t = c.currentTime + delay, src = c.createBufferSource(), f = c.createBiquadFilter(), g = c.createGain();
+    src.buffer = this.buf[names[Math.floor(Math.random() * names.length)]];
+    src.playbackRate.value = rate * (0.96 + Math.random() * 0.08);
+    f.type = 'lowpass'; f.frequency.value = lp; g.gain.value = vol;
+    src.connect(f).connect(g).connect(c.destination); src.start(t);
+    return true;
+  },
+  hit(vol, rate, lp, body) { // a hand on the ball: the smack, or a synthesized slap until it loads, over a short thump
+    if (!this.smack(vol, rate, lp)) this.burst(0.05, vol * 0.5, 'bandpass', 1400 * rate, 0.9);
+    this.thump(body, body * 0.55, 0.07, vol * 0.35);
+  },
+  // the touches
+  bump(kind = 'pass') {
+    if (this.quiet()) return;
+    if (kind === 'set') this.hit(0.22, 1.15, 3200, 260);       // fingertips: light and short
+    else this.hit(0.3, 0.78, 1800, 170);                        // forearms: a duller thup
+  },
+  spike(special = false) {
+    if (this.quiet()) return;
+    this.hit(0.55, 1, 6000, 130);
+    if (special) this.thump(90, 40, 0.25, 0.12);
+  },
+  serve() { if (!this.quiet()) this.hit(0.42, 0.95, 5000, 150); },
+  block() {
+    if (this.quiet()) return;
+    this.hit(0.45, 0.85, 4000, 140);
+    this.smack(0.18, 0.7, 2000, 0.012);                         // the second hand
+  },
+  floor(hard = 0.5) { // the ball comes down: a slap on hardwood with a smaller bounce after, or a dull pff in the sand
+    if (this.quiet()) return;
+    const v = 0.25 + hard * 0.35;
+    if (this.sand()) { this.burst(0.18, v * 0.7, 'lowpass', 500, 0.7); this.thump(85, 45, 0.12, v * 0.5); return; }
+    if (!this.smack(v, 0.68, 2400)) this.burst(0.06, v * 0.6, 'bandpass', 900, 0.8);
+    this.thump(110, 60, 0.1, v * 0.5);
+    this.smack(v * 0.3, 0.72, 2000, 0.32) || this.burst(0.05, v * 0.2, 'bandpass', 900, 0.8, 0.32);
+  },
+  net() { // the ball into the net: the mesh rattles and the cable hums
+    if (this.quiet()) return;
+    this.burst(0.35, 0.12, 'bandpass', 1100, 1.2, 0, 22);
+    this.thump(120, 95, 0.4, 0.05);
+  },
+  dive() { // a body hits the floor: a skid on wood, a spray of sand
+    if (this.quiet()) return;
+    if (this.sand()) { this.burst(0.3, 0.16, 'lowpass', 900, 0.6); this.thump(70, 40, 0.15, 0.1); }
+    else { this.thump(90, 50, 0.12, 0.14); this.burst(0.18, 0.06, 'bandpass', 2600, 2.5, 0.04); }
+  },
+  whistle(long = false) {
+    if (this.quiet()) return;
+    const b = this.buf.whistle;
+    if (!b) { // a pea whistle: a high tone that warbles
+      const c = this.ctx, t = c.currentTime, o = c.createOscillator(), lfo = c.createOscillator(), lg = c.createGain(), g = c.createGain();
+      o.frequency.value = 2900; lfo.frequency.value = 30; lg.gain.value = 120; lfo.connect(lg).connect(o.frequency);
+      g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.05, t + 0.02); g.gain.setValueAtTime(0.05, t + (long ? 0.7 : 0.35)); g.gain.linearRampToValueAtTime(0, t + (long ? 0.8 : 0.42));
+      o.connect(g).connect(c.destination); o.start(t); lfo.start(t); o.stop(t + 0.9); lfo.stop(t + 0.9);
+      return;
+    }
+    const c = this.ctx, src = c.createBufferSource(), g = c.createGain();
+    src.buffer = b; g.gain.value = 0.17; src.connect(g).connect(c.destination); src.start(c.currentTime);
+  },
+  point(good) { const n = good ? [523, 659, 784] : [392, 330, 262]; n.forEach((f, i) => this.tone(f, 0.14, 'triangle', 0.05, 0, i * 0.09)); }, // menus only
 };
 
 // ===================== input =====================
@@ -782,7 +872,7 @@ function launchDive(p, dx, dz, side) {
   p.diveDir = [dx / d, dz / d]; p.vx = dx / d * v; p.vz = dz / d * v;
   p.dive = 0.36; p.squash = 0.8;
   dust(p.x, p.z, 5, '#e8d3a2');
-  Sfx.tone(300, 0.08, 'triangle', 0.04, -120);
+  Sfx.dive();
 }
 
 // ===================== timing meter =====================
@@ -949,7 +1039,7 @@ function startToss(sv) {
   const zc = sv.z + t * (SERVE_RUN + SERVE_DRIFT * sv.tUp + 0.3), xc = sv.x + 0.2, yc = sv.apex + sv.rr * 2 + 0.6;
   G.toss = { t0: G.time, C, fail, tj, r0, vRun: SERVE_RUN / (tj - r0), x0: b.x, y0: b.y, z0: b.z, xc, yc, zc,
     vy0: (yc - b.y) / C + 0.5 * GB * C, jumped: false };
-  sv.squash = 1.1; Sfx.tone(520, 0.05, 'triangle', 0.03, 160);
+  sv.squash = 1.1;
   return C;
 }
 // One frame of the toss: the ball on its lob, the server on the run-up and the jump.
@@ -1273,7 +1363,7 @@ function pass(p, incoming, fromOpp, q = null, dove = false, setTm = null) {
   }
   launchTo(tx, tz, ty, apexY);
   G.intended[s] = target;
-  Sfx.bump();
+  Sfx.bump(setTm ? 'set' : 'pass');
 }
 
 function over(p) {
@@ -1357,7 +1447,7 @@ function spike(p, q = null) {
       for (let i = 0; i < 16; i++) specialFx(b, true); // the hit throws out a burst of the move's particles
       G.shake = 0.35;
     }
-    Sfx.spike();
+    Sfx.spike(special);
     hitstop(special ? 0.32 : human && (q == null || q < 0.65) ? 0.07 : human ? 0.12 : 0.15, special ? TYPE_COLORS[p.mon.types[0]] : '#ffffff');
     burst(b.x, b.y, b.z, special ? TYPE_COLORS[p.mon.types[0]] : '#ffffff', special ? 22 : 10);
     return true;
@@ -1480,6 +1570,7 @@ function stepBall(h) {
     } else {
       b.z = Math.sign(pz || -1) * (BR + 0.02); b.vz *= -0.3; b.vx *= 0.6;
     }
+    if (G.netWobble < 0.5) Sfx.net();
     G.netWobble = 1; b.special = null; b.gs = 1; b.knuck = null; b.top = false;
   }
   for (const p of G.players) {
@@ -1523,6 +1614,7 @@ function awardAce() {
 
 function ballDown() {
   const b = G.ball;
+  Sfx.floor(clamp(-b.vy / 18, 0, 1));
   dust(b.x, b.z, 14, '#f3e2b5');
   const landSide = inCourt(b.x, b.z, 0) ? 0 : inCourt(b.x, b.z, 1) ? 1 : -1;
   G.rings.push({ x: b.x, z: b.z, t: 0, c: landSide === -1 ? '#ff6b6b' : '#ffffff' }); // a ring spreads where it lands
@@ -1586,7 +1678,7 @@ function awardPoint(w, label, sub, credit, key) {
     floatText('ROTATE', 0, 2.6, -toward(w) * HL * 0.5, TEAM_COLORS[w], 1.4, 30);
   }
   G.texts.push({ big: true, text: label, sub, color: TEAM_COLORS[w], t: 0, life: 1.6 });
-  Sfx.whistle(); Sfx.point(w === 0);
+  Sfx.whistle();
   const setWon = G.score[w] >= setTarget() && G.score[w] - G.score[1 - w] >= 2;
   Crowd.point(w, setWon, setWon && G.sets[w] + 1 >= setsToWin());
   if (setWon) {
