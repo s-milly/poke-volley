@@ -98,7 +98,8 @@ The overall rating (OVR) is a weighted average of the five. Body size comes from
 - `index.html`, `style.css`: menus, draft and result screens.
 - `game.js`: ratings, draft, 3D physics, computer players and the canvas renderer.
 - `audio/`: the crowd recordings (credits below).
-- `music.js`: original chiptune themes played with Web Audio: a title theme for the menus, a Road to Glory hub theme, one for each town club's arena (the home club's plays), plus the mega bowl, championship night and each beach. Also the crowd, from the recordings in `audio/`: a murmur that hushes for the serve, and a cheer when the home side scores.
+- `music.js`: the music and the crowd. The title screen and quick play menus play `audio/title-theme.mp3`, "Tram to Match Point", an original theme for this game that loops after its intro. The rest are original chiptune themes played with Web Audio: a Road to Glory hub theme, one for each town club's arena (the home club's plays), plus the mega bowl, championship night and each beach. Also the crowd, from the recordings in `audio/`: a murmur that hushes for the serve, and a cheer when the home side scores.
+- `music-src/title/`: the score of the title theme (`compose.py` writes it note by note with the music-skill plugin; its instruments are MuseScore's MS Basic General MIDI bank, MIT licensed, which asks no credit for music made with it).
 - `sprites/`, `sprites.js`: front and back sprites and their visible areas.
 - `fonts/`: the two pixel fonts and their licenses.
 - `data.js`: the 151 Pokémon (stats, types, height, weight, Pokédex color), generated from the PokeAPI data files.

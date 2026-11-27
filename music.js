@@ -85,6 +85,9 @@ const SONGS = {
 const MENU_SONGS = new Set(['title', 'hub']);
 
 const VOL = 0.15; // the music bus, under the hit sounds
+// Themes played from a recording instead of the chip engine. title-theme.mp3 is "Tram to Match Point", composed for
+// this game (its score is in music-src/title/); the file ends at the loop end, and the intro before loopStart plays once.
+const FILE_SONGS = { title: { url: 'audio/title-theme.mp3', loopStart: 8.275856, vol: 0.22 } };
 const Music = {
   bus: null, waves: {}, noise: null, song: null, id: null, game: null,
   step: 0, next: 0, pass: 0, playing: false,
@@ -173,12 +176,41 @@ const Music = {
       if (ch2 !== '.' && ch2 !== undefined) this.hit(ch2 === 'o' ? 'o' : k, t);
     }
   },
+  // a recorded theme: loaded the first time it is wanted, then looped from loopStart to the end of the file
+  fileTick(want, now) {
+    const f = FILE_SONGS[want], c = Sfx.ctx;
+    if (!f.buf) {
+      if (!f.loading) { f.loading = true; fetch(f.url).then(r => r.arrayBuffer()).then(a => c.decodeAudioData(a)).then(b => { f.buf = b; }).catch(() => { f.failed = true; }); }
+      return;
+    }
+    if (this.fileId === want) return;
+    this.stopFile(now);
+    const src = c.createBufferSource(), g = c.createGain();
+    src.buffer = f.buf; src.loop = true; src.loopStart = f.loopStart; src.loopEnd = f.buf.duration;
+    g.gain.setValueAtTime(0, now); g.gain.linearRampToValueAtTime(f.vol, now + 0.4);
+    src.connect(g).connect(c.destination); src.start(now + 0.05);
+    this.file = { src, g }; this.fileId = want;
+  },
+  stopFile(now) {
+    if (!this.file) return;
+    const { src, g } = this.file;
+    g.gain.cancelScheduledValues(now); g.gain.setTargetAtTime(0, now, 0.12); src.stop(now + 0.8);
+    this.file = null; this.fileId = null;
+  },
   tick() {
     if (!Sfx.ctx) return;
     const want = this.wanted();
     if (want && !this.init()) return;
     if (!this.bus) return;
     const c = Sfx.ctx, now = c.currentTime;
+    const file = want && FILE_SONGS[want] && !FILE_SONGS[want].failed;
+    if (!file && this.file) this.stopFile(now);
+    if (file) { // the chip engine rests while a recording plays
+      if (this.playing) { this.bus.gain.cancelScheduledValues(now); this.bus.gain.setTargetAtTime(0, now, 0.08); }
+      this.playing = false; this.id = 'file:' + want; // so the chip theme starts afresh if the file ever fails
+      this.fileTick(want, now);
+      return;
+    }
     if (want !== this.id || (want && !MENU_SONGS.has(want) && G !== this.game)) { // a new theme or a new match starts from the top
       if (want) {
         const s = SONGS[want]; if (!s.notes) this.compile(s);
