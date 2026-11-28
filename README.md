@@ -125,5 +125,6 @@ The ball and whistle sounds (`audio/sfx-*.mp3`) are cut and level-matched from W
 
 - `sfx-smack1.mp3`, `sfx-smack2.mp3`: [Smack hits](https://commons.wikimedia.org/wiki/File:Smack_hits_(Gravity_Sound).wav), and `sfx-smack3.mp3`: [Smack 4](https://commons.wikimedia.org/wiki/File:Smack_4_(Gravity_Sound).wav), both by Gravity Sound, [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
 - `sfx-whistle.mp3`: [Referee whistle blow, gymnasium](https://commons.wikimedia.org/wiki/File:218318_splicesound_referee-whistle-blow-gymnasium.wav) by SpliceSound, CC0.
+- `sfx-set.mp3`: an overhead hand pass from Epidemic Sound (Sports Field Volleyball Beach Ball Passing Shots, Overhead Hand Passing 01), used under the owner's Epidemic Sound licence.
 
 Fan project. Not affiliated with Nintendo, Game Freak or The Pokémon Company. Pokémon and its sprites belong to them.

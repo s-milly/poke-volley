@@ -178,7 +178,7 @@ const Sfx = {
   init() {
     if (this.ctx) return;
     try { this.ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { this.muted = true; return; }
-    for (const n of ['smack1', 'smack2', 'smack3', 'whistle'])
+    for (const n of ['smack1', 'smack2', 'smack3', 'whistle', 'set'])
       fetch(`audio/sfx-${n}.mp3`).then(r => r.arrayBuffer()).then(a => this.ctx.decodeAudioData(a)).then(b => { this.buf[n] = b; }).catch(() => {});
   },
   quiet() { return this.muted || !this.ctx || (G && (G.demo || G.simFast)); }, // the title screen's background match is silent, and so is a fast-forward
@@ -224,6 +224,13 @@ const Sfx = {
     src.connect(f).connect(g).connect(c.destination); src.start(t);
     return true;
   },
+  play(name, vol, delay = 0) { // a recording as it is, a touch retuned each time so repeats differ; false if not loaded
+    const b = this.buf[name]; if (!b) return false;
+    const c = this.ctx, src = c.createBufferSource(), g = c.createGain();
+    src.buffer = b; src.playbackRate.value = 0.97 + Math.random() * 0.06; g.gain.value = vol;
+    src.connect(g).connect(c.destination); src.start(c.currentTime + delay);
+    return true;
+  },
   hit(vol, rate, lp, body) { // a hand on the ball: the smack, or a synthesized slap until it loads, over a short thump
     if (!this.smack(vol, rate, lp)) this.burst(0.05, vol * 0.5, 'bandpass', 1400 * rate, 0.9);
     this.thump(body, body * 0.55, 0.07, vol * 0.35);
@@ -231,7 +238,7 @@ const Sfx = {
   // the touches
   bump(kind = 'pass') {
     if (this.quiet()) return;
-    if (kind === 'set') this.hit(0.22, 1.15, 3200, 260);       // fingertips: light and short
+    if (kind === 'set') { if (!this.play('set', 0.5)) this.hit(0.22, 1.15, 3200, 260); } // the recorded overhead set; a light slap until it loads
     else this.hit(0.3, 0.78, 1800, 170);                        // forearms: a duller thup
   },
   spike(special = false) {
@@ -1363,7 +1370,7 @@ function pass(p, incoming, fromOpp, q = null, dove = false, setTm = null) {
   }
   launchTo(tx, tz, ty, apexY);
   G.intended[s] = target;
-  Sfx.bump(setTm ? 'set' : 'pass');
+  Sfx.bump(setTm || (aiControlled(p) && G.touches[p.side] === 2) ? 'set' : 'pass'); // your set with E, or the computer's second touch
 }
 
 function over(p) {
