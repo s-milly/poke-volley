@@ -178,7 +178,7 @@ const Sfx = {
   init() {
     if (this.ctx) return;
     try { this.ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { this.muted = true; return; }
-    for (const n of ['smack1', 'smack2', 'smack3', 'whistle', 'set', 'spike'])
+    for (const n of ['smack1', 'smack2', 'smack3', 'whistle', 'set', 'spike', 'sand1', 'sand2', 'sand3', 'sand4'])
       fetch(`audio/sfx-${n}.mp3`).then(r => r.arrayBuffer()).then(a => this.ctx.decodeAudioData(a)).then(b => { this.buf[n] = b; }).catch(() => {});
   },
   quiet() { return this.muted || !this.ctx || (G && (G.demo || G.simFast)); }, // the title screen's background match is silent, and so is a fast-forward
@@ -255,7 +255,11 @@ const Sfx = {
   floor(hard = 0.5) { // the ball comes down: a slap on hardwood with a smaller bounce after, or a dull pff in the sand
     if (this.quiet()) return;
     const v = 0.25 + hard * 0.35;
-    if (this.sand()) { this.burst(0.18, v * 0.7, 'lowpass', 500, 0.7); this.thump(85, 45, 0.12, v * 0.5); return; }
+    if (this.sand()) { // one of four recorded thumps into the sand; a synthesized one until they load
+      const n = ['sand1', 'sand2', 'sand3', 'sand4'].filter(k => this.buf[k]);
+      if (!n.length || !this.play(n[Math.floor(Math.random() * n.length)], v * 1.4)) { this.burst(0.18, v * 0.7, 'lowpass', 500, 0.7); this.thump(85, 45, 0.12, v * 0.5); }
+      return;
+    }
     if (!this.smack(v, 0.68, 2400)) this.burst(0.06, v * 0.6, 'bandpass', 900, 0.8);
     this.thump(110, 60, 0.1, v * 0.5);
     this.smack(v * 0.3, 0.72, 2000, 0.32) || this.burst(0.05, v * 0.2, 'bandpass', 900, 0.8, 0.32);

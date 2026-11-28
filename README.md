@@ -127,5 +127,6 @@ The ball and whistle sounds (`audio/sfx-*.mp3`) are cut and level-matched from W
 - `sfx-whistle.mp3`: [Referee whistle blow, gymnasium](https://commons.wikimedia.org/wiki/File:218318_splicesound_referee-whistle-blow-gymnasium.wav) by SpliceSound, CC0.
 - `sfx-set.mp3`: an overhead hand pass from Epidemic Sound (Sports Field Volleyball Beach Ball Passing Shots, Overhead Hand Passing 01), used under the owner's Epidemic Sound licence.
 - `sfx-spike.mp3`: a smash from Epidemic Sound (Sports Field Volleyball Beach Ball Smashes), used under the owner's Epidemic Sound licence.
+- `sfx-sand1.mp3` to `sfx-sand4.mp3`: from Epidemic Sound (Sports Field Volleyball Beach Foot Stamp In Sand), used under the owner's Epidemic Sound licence.
 
 Fan project. Not affiliated with Nintendo, Game Freak or The Pokémon Company. Pokémon and its sprites belong to them.
