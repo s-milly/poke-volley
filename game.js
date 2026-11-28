@@ -173,12 +173,13 @@ const teamOvr = es => Math.round(es.reduce((a, e) => a + e.ovr, 0) / es.length);
 // The ball and the referee: recorded hand smacks (audio/sfx-smack*.mp3) shaped per touch, a recorded referee's
 // whistle, and synthesized thuds for the floor, the sand, the net and a dive. Until the recordings load, or if they
 // cannot, the same touches fall back to synthesized impacts. tone() is left for the menus' and meters' small beeps.
+const PASSES = ['pass1', 'pass2', 'pass3', 'pass4', 'pass5', 'pass6', 'pass7', 'pass8'];
 const Sfx = {
   ctx: null, muted: false, buf: {}, noiseBuf: null,
   init() {
     if (this.ctx) return;
     try { this.ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { this.muted = true; return; }
-    for (const n of ['smack1', 'smack2', 'smack3', 'whistle', 'set', 'spike', 'sand1', 'sand2', 'sand3', 'sand4'])
+    for (const n of ['smack1', 'smack2', 'smack3', 'whistle', 'set', 'spike', 'sand1', 'sand2', 'sand3', 'sand4', ...PASSES])
       fetch(`audio/sfx-${n}.mp3`).then(r => r.arrayBuffer()).then(a => this.ctx.decodeAudioData(a)).then(b => { this.buf[n] = b; }).catch(() => {});
   },
   quiet() { return this.muted || !this.ctx || (G && (G.demo || G.simFast)); }, // the title screen's background match is silent, and so is a fast-forward
@@ -239,7 +240,10 @@ const Sfx = {
   bump(kind = 'pass') {
     if (this.quiet()) return;
     if (kind === 'set') { if (!this.play('set', 0.5)) this.hit(0.22, 1.15, 3200, 260); } // the recorded overhead set; a light slap until it loads
-    else this.hit(0.3, 0.78, 1800, 170);                        // forearms: a duller thup
+    else { // forearms: one of eight recorded passes; a duller synthesized thup until they load
+      const n = PASSES.filter(k => this.buf[k]);
+      if (!n.length || !this.play(n[Math.floor(Math.random() * n.length)], 0.5)) this.hit(0.3, 0.78, 1800, 170);
+    }
   },
   spike(special = false) {
     if (this.quiet()) return;
