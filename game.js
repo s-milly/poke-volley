@@ -250,7 +250,7 @@ const Sfx = {
     if (!this.play('spike', 0.6)) this.hit(0.55, 1, 6000, 130); // the recorded smash; a synthesized one until it loads
     if (special) this.thump(90, 40, 0.25, 0.12);
   },
-  serve() { if (!this.quiet()) this.hit(0.42, 0.95, 5000, 150); },
+  serve() { if (!this.quiet() && !this.play('spike', 0.5)) this.hit(0.42, 0.95, 5000, 150); }, // the recorded smash, a touch softer than a spike
   block() {
     if (this.quiet()) return;
     this.hit(0.45, 0.85, 4000, 140);
