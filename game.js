@@ -178,7 +178,7 @@ const Sfx = {
   init() {
     if (this.ctx) return;
     try { this.ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { this.muted = true; return; }
-    for (const n of ['smack1', 'smack2', 'smack3', 'whistle', 'set'])
+    for (const n of ['smack1', 'smack2', 'smack3', 'whistle', 'set', 'spike'])
       fetch(`audio/sfx-${n}.mp3`).then(r => r.arrayBuffer()).then(a => this.ctx.decodeAudioData(a)).then(b => { this.buf[n] = b; }).catch(() => {});
   },
   quiet() { return this.muted || !this.ctx || (G && (G.demo || G.simFast)); }, // the title screen's background match is silent, and so is a fast-forward
@@ -243,7 +243,7 @@ const Sfx = {
   },
   spike(special = false) {
     if (this.quiet()) return;
-    this.hit(0.55, 1, 6000, 130);
+    if (!this.play('spike', 0.6)) this.hit(0.55, 1, 6000, 130); // the recorded smash; a synthesized one until it loads
     if (special) this.thump(90, 40, 0.25, 0.12);
   },
   serve() { if (!this.quiet()) this.hit(0.42, 0.95, 5000, 150); },
